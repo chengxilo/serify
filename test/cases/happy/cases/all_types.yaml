@@ -1,0 +1,398 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import:
+  - point.yaml
+  - tag.yaml
+
+fields:
+  - uint8: uint8
+  - uint16: uint16
+  - uint32: uint32
+  - uint64: uint64
+  - int8: int8
+  - int16: int16
+  - int32: int32
+  - int64: int64
+  - float32: float32
+  - float64: float64
+  - bool: bool
+  - string: string
+  - bytes: bytes
+  - list: list<string>
+  - optional: optional<string>
+  - array: array<uint32,4>
+  - struct: point
+  - map: map<string,uint32>
+  - map_struct: map<string,tag>
+  - status: "enum<pending, paid, shipped, delivered, cancelled>"
+
+# yaml-language-server: $schema=.schemas/all_types.schema.json
+formats:
+  - binary
+  - json
+
+cases:
+  - name: basic
+    data:
+      uint8: 42
+      uint16: 1024
+      uint32: 100000
+      uint64: 1
+      int8: -10
+      int16: -500
+      int32: -100000
+      int64: -9000000000000000000
+      float32: 3.14
+      float64: 2.718281828459045
+      bool: true
+      string: "Alice"
+      bytes: [0xde, 0xad, 0xbe, 0xef]
+      list: ["admin", "user"]
+      optional: "bio text"
+      array: [1, 2, 3, 4]
+      struct:
+        x: 10
+        y: -20
+        z: 30
+        name: "origin"
+      map:
+        math: 95
+        english: 87
+      map_struct:
+        urgent:
+          name: "fix now"
+          weight: 1
+        normal:
+          name: "later"
+          weight: 5
+      status: "pending"
+
+  - name: zero
+    data:
+      uint8: 0
+      uint16: 0
+      uint32: 0
+      uint64: 0
+      int8: 0
+      int16: 0
+      int32: 0
+      int64: 0
+      float32: 0.0
+      float64: 0.0
+      bool: false
+      string: ""
+      bytes: []
+      list: []
+      optional: null
+      array: [0, 0, 0, 0]
+      struct:
+        x: 0
+        y: 0
+        z: 0
+        name: ""
+      map: {}
+      map_struct: {}
+      status: "paid"
+
+  - name: boundary
+    data:
+      uint8: 255
+      uint16: 65535
+      uint32: 4294967295
+      uint64: 18446744073709551615
+      int8: -128
+      int16: -32768
+      int32: -2147483648
+      int64: -9223372036854775808
+      float32: -1.0
+      float64: -1234567890.5
+      bool: false
+      string: "おはようございます！"
+      bytes: [0xff]
+      list: ["أهلاً بك! كيف يمكنني مساعدتك اليوم؟", '\😭/']
+      optional: null
+      array: [4294967295, 0, 0, 0]
+      struct:
+        x: 2147483647
+        y: -2147483648
+        z: 0
+        name: ”"
+      map:
+        max: 4294967295
+      map_struct: {}
+      status: "shipped"
+
+  - name: large_collections
+    data:
+      uint8: 100
+      uint16: 200
+      uint32: 300
+      uint64: 400
+      int8: -1
+      int16: -2
+      int32: -3
+      int64: -4
+      float32: 0.0
+      float64: 0.0
+      bool: true
+      string: "CollectionUser"
+      bytes: [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+              0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+              0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+              0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f]
+      list: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+      optional: null
+      array: [100, 200, 300, 400]
+      struct:
+        x: 999
+        y: -999
+        z: 42
+        name: "collection"
+      map:
+        alpha: 1
+        bravo: 2
+        charlie: 3
+        delta: 4
+        echo: 5
+        foxtrot: 6
+        golf: 7
+        hotel: 8
+      map_struct:
+        one:
+          name: "label-one"
+          weight: 1
+        two:
+          name: "label-two"
+          weight: 2
+        three:
+          name: "label-three"
+          weight: 3
+        four:
+          name: "label-four"
+          weight: 4
+        five:
+          name: "label-five"
+          weight: 5
+      status: "delivered"
+
+  # Positive extremes. `boundary` covers the signed minima and the unsigned
+  # maxima; this covers the signed maxima, which sit one bit below the unsigned
+  # ones and catch sign-extension bugs in the reverse direction.
+  - name: signed_max
+    data:
+      uint8: 255
+      uint16: 65535
+      uint32: 4294967295
+      uint64: 9223372036854775808   # 2^63 — first value that overflows int64
+      int8: 127
+      int16: 32767
+      int32: 2147483647
+      int64: 9223372036854775807
+      float32: 1.0
+      float64: 1234567890.5
+      bool: true
+      string: "max"
+      bytes: [0x7f, 0x80]
+      list: ["max"]
+      optional: "set"
+      array: [2147483647, 2147483648, 4294967294, 4294967295]
+      struct:
+        x: 2147483647
+        y: 2147483647
+        z: -1
+        name: "max"
+      map:
+        signed_max: 2147483647
+        unsigned_max: 4294967295
+      map_struct:
+        max:
+          name: "max"
+          weight: 4294967295
+      status: "cancelled"
+
+  # Characters that every text encoder has to escape: quote, backslash, the
+  # C0 control range, and DEL. A worker that concatenates JSON by hand rather
+  # than escaping will diverge here.
+  - name: escapes
+    data:
+      uint8: 1
+      uint16: 2
+      uint32: 3
+      uint64: 4
+      int8: 5
+      int16: 6
+      int32: 7
+      int64: 8
+      float32: 1.5
+      float64: 2.5
+      bool: true
+      string: "quote:\" backslash:\\ newline:\n tab:\t cr:\r ctrl:\u0001 del:\u007f"
+      bytes: [0x22, 0x5c, 0x0a]
+      list: ["", "\"quoted\"", "trailing space ", "\ttabbed"]
+      optional: "back\\slash"
+      array: [0, 1, 2, 3]
+      struct:
+        x: 1
+        y: 2
+        z: 3
+        name: "name with \"quotes\" and \\slash"
+      map:
+        "key with spaces": 1
+        "key\twith\ttabs": 2
+      map_struct:
+        "key\"quoted":
+          name: "value\nnewline"
+          weight: 1
+      status: "pending"
+
+  # Go's encoding/json escapes <, >, & and U+2028/U+2029 by default; most other
+  # languages' encoders emit them raw. Any worker claiming byte-parity with Go's
+  # json has to reproduce that quirk, so pin it here.
+  - name: html_escapes
+    data:
+      uint8: 1
+      uint16: 2
+      uint32: 3
+      uint64: 4
+      int8: 5
+      int16: 6
+      int32: 7
+      int64: 8
+      float32: 1.0
+      float64: 1.0
+      bool: true
+      string: "a <b> & c"
+      bytes: [0x3c, 0x3e, 0x26]
+      list: ["<script>", "a & b", "\u2028line-sep", "\u2029para-sep"]
+      optional: "<tag/>"
+      array: [0, 1, 2, 3]
+      struct:
+        x: 1
+        y: 2
+        z: 3
+        name: "x < y && y > z"
+      map:
+        "<key>": 1
+        "a&b": 2
+      map_struct:
+        "<k>":
+          name: "<v>"
+          weight: 1
+      status: "paid"
+
+  # Multi-byte UTF-8 that survives a naive byte-length prefix but breaks a
+  # char-length one: ZWJ emoji sequences, combining marks, and RTL text.
+  - name: unicode
+    data:
+      uint8: 1
+      uint16: 2
+      uint32: 3
+      uint64: 4
+      int8: -5
+      int16: -6
+      int32: -7
+      int64: -8
+      float32: 0.5
+      float64: 0.25
+      bool: false
+      string: "👨‍👩‍👧‍👦 family ZWJ"
+      bytes: [0xf0, 0x9f, 0x92, 0xa9]
+      list: ["é combining", "שלום", "🇯🇵", "\uFEFFbom"]
+      optional: "🙂"
+      array: [1, 2, 3, 4]
+      struct:
+        x: 1
+        y: 2
+        z: 3
+        name: "Ω≈ç√∫"
+      map:
+        "日本語": 1
+        "emoji🔑": 2
+      map_struct:
+        "ключ":
+          name: "значение"
+          weight: 7
+      status: "shipped"
+
+  # Every byte value 0x00–0xFF. 256 is 1 mod 3, so the base64 encoding in the
+  # json format ends in two pad chars — the case that trips hand-rolled base64.
+  - name: bytes_all
+    data:
+      uint8: 0
+      uint16: 0
+      uint32: 0
+      uint64: 0
+      int8: 0
+      int16: 0
+      int32: 0
+      int64: 0
+      float32: 0.0
+      float64: 0.0
+      bool: false
+      string: ""
+      bytes: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+      list: []
+      optional: null
+      array: [0, 0, 0, 0]
+      struct:
+        x: 0
+        y: 0
+        z: 0
+        name: ""
+      map: {}
+      map_struct: {}
+      status: "delivered"
+
+  # `optional: ""` is a *present* empty string. A worker that conflates it with
+  # null (or with the zero value) produces the same decoded data but different
+  # bytes — exactly the class of bug serify exists to catch. Map keys are also
+  # laid out to force byte-wise, not locale-aware, key ordering.
+  - name: empty_vs_null
+    data:
+      uint8: 0
+      uint16: 0
+      uint32: 0
+      uint64: 0
+      int8: 0
+      int16: 0
+      int32: 0
+      int64: 0
+      float32: 0.0
+      float64: 0.0
+      bool: false
+      string: ""
+      bytes: []
+      list: ["", "", ""]
+      optional: ""
+      array: [0, 0, 0, 0]
+      struct:
+        x: 0
+        y: 0
+        z: 0
+        name: ""
+      map:
+        "": 0
+        "0": 1
+        "A": 2
+        "Z": 3
+        "_": 4
+        "a": 5
+        "z": 6
+        "~": 7
+      map_struct:
+        "":
+          name: ""
+          weight: 0
+      status: "cancelled"

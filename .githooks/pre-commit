@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Require a clean tree, check that .schemas/ is in sync with the schema: sections
+# it is generated from, and lint. The last two run over everything, every time:
+# working out which files a commit could have affected costs correctness and buys
+# back seconds.
+#
+# Enable with:  git config core.hooksPath .githooks
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+addlicense -c "Chengxi Luo" .
+
+if ! git diff --quiet; then
+	echo "pre-commit: unstaged changes; git add or git stash them first" >&2
+	git --no-pager diff --name-only >&2
+	exit 1
+fi
+
+scripts/gen-schemas.sh --check
+
+if ! command -v golangci-lint >/dev/null; then
+	# Skipping the lint silently would defeat the point of the hook.
+	echo "pre-commit: golangci-lint not found" >&2
+	exit 1
+fi
+golangci-lint run ./...

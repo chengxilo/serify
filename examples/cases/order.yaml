@@ -1,0 +1,188 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/order.schema.json
+# A placed order. Covers: uint8/uint16/uint64, int64, bool, string, deep
+# struct nesting (line_item → money), list<struct>, list<string>,
+# optional<struct>, optional<string>, map<string,struct>.
+
+import:
+  - address.yaml
+  - money.yaml
+  - line_item.yaml
+
+fields:
+  - order_id: uint64
+  - customer_id: uint64
+  - created_at: int64                  # unix seconds
+  - status: "enum<pending, paid, shipped, delivered, cancelled>"
+  - items: list<line_item>
+  - subtotal: money
+  - adjustments: map<string,money>     # e.g. tax, shipping, promo (negative)
+  - total: money
+  - shipping_address: address
+  - billing_address: optional<address> # null = same as shipping
+  - coupon_codes: list<string>
+  - tracking_number: optional<string>  # null until shipped
+
+# Both example workers implement only the binary format for order.
+formats:
+  - binary
+
+cases:
+  - name: paid
+    data:
+      order_id: 700419
+      customer_id: 90211054
+      created_at: 1751500800
+      status: "paid"
+      items:
+        - sku: "KB-750-BLK"
+          product_name: "Mechanical Keyboard (Black)"
+          quantity: 1
+          unit_price: { currency: "USD", amount_minor: 14999 }
+          discount_pct: 0
+          gift_wrap: false
+        - sku: "USB-C-2M"
+          product_name: "USB-C Cable 2m"
+          quantity: 3
+          unit_price: { currency: "USD", amount_minor: 1299 }
+          discount_pct: 10
+          gift_wrap: true
+      subtotal: { currency: "USD", amount_minor: 18506 }
+      adjustments:
+        tax: { currency: "USD", amount_minor: 2406 }
+        shipping: { currency: "USD", amount_minor: 899 }
+        promo: { currency: "USD", amount_minor: -2500 }
+      total: { currency: "USD", amount_minor: 19311 }
+      shipping_address:
+        recipient: "Dana Wong"
+        street: "312 Queen St W"
+        city: "Toronto"
+        country: "CA"
+        postal_code: "M5V 2A2"
+      billing_address:
+        recipient: "Dana Wong"
+        street: "88 Harbour St, Unit 3405"
+        city: "Toronto"
+        country: "CA"
+        postal_code: "M5J 0C3"
+      coupon_codes: ["SUMMER25"]
+      tracking_number: null
+
+  - name: shipped
+    data:
+      order_id: 700420
+      customer_id: 90211056
+      created_at: 1751587200
+      status: "shipped"
+      items:
+        - sku: "MON-27-4K"
+          product_name: "27\" 4K Monitor"
+          quantity: 1
+          unit_price: { currency: "USD", amount_minor: 44900 }
+          discount_pct: 0
+          gift_wrap: false
+      subtotal: { currency: "USD", amount_minor: 44900 }
+      adjustments:
+        tax: { currency: "USD", amount_minor: 5837 }
+      total: { currency: "USD", amount_minor: 50737 }
+      shipping_address:
+        recipient: "田中 健二"
+        street: "渋谷区道玄坂２丁目"
+        city: "東京"
+        country: "JP"
+        postal_code: "150-0043"
+      billing_address: null
+      coupon_codes: []
+      tracking_number: "1Z999AA10123456784"
+
+  - name: empty_draft
+    data:
+      order_id: 0
+      customer_id: 0
+      created_at: 0
+      status: "pending"
+      items: []
+      subtotal: { currency: "", amount_minor: 0 }
+      adjustments: {}
+      total: { currency: "", amount_minor: 0 }
+      shipping_address:
+        recipient: ""
+        street: ""
+        city: ""
+        country: ""
+        postal_code: ""
+      billing_address: null
+      coupon_codes: []
+      tracking_number: null
+
+  - name: refund
+    data:
+      order_id: 700421
+      customer_id: 90211054
+      created_at: 1751673600
+      status: "cancelled"
+      items:
+        - sku: "KB-750-BLK"
+          product_name: "Mechanical Keyboard (Black)"
+          quantity: 1
+          unit_price: { currency: "USD", amount_minor: 14999 }
+          discount_pct: 0
+          gift_wrap: false
+      subtotal: { currency: "USD", amount_minor: 14999 }
+      adjustments:
+        refund: { currency: "USD", amount_minor: -16948 }
+        tax: { currency: "USD", amount_minor: 1949 }
+      total: { currency: "USD", amount_minor: 0 }
+      shipping_address:
+        recipient: "Dana Wong"
+        street: "312 Queen St W"
+        city: "Toronto"
+        country: "CA"
+        postal_code: "M5V 2A2"
+      billing_address: null
+      coupon_codes: []
+      tracking_number: "1Z999AA10123456790"
+
+  - name: boundary
+    data:
+      order_id: 18446744073709551615     # max uint64
+      customer_id: 1
+      created_at: -9223372036854775808   # min int64
+      status: "pending"
+      items:
+        - sku: "BULK-PALLET"
+          product_name: "Warehouse pallet"
+          quantity: 65535                # max uint16
+          unit_price: { currency: "USD", amount_minor: 9223372036854775807 }  # max int64
+          discount_pct: 100
+          gift_wrap: true
+      subtotal: { currency: "USD", amount_minor: 9223372036854775807 }
+      adjustments: {}
+      total: { currency: "USD", amount_minor: -9223372036854775808 }
+      shipping_address:
+        recipient: "مَرْحَبًا☀️你好HelloПривет"
+        street: ""
+        city: ""
+        country: "SA"
+        postal_code: "00000"
+      billing_address:
+        recipient: ""
+        street: ""
+        city: ""
+        country: ""
+        postal_code: ""
+      coupon_codes: ["", "A", ""]
+      tracking_number: ""

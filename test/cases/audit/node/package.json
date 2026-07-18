@@ -1,0 +1,1 @@
+{"name":"audit-worker","version":"0.1.0","private":true,"dependencies":{"@chengxilo/serify":"file:../../../../lib/node"},"devDependencies":{"typescript":"^5.0.0","@types/node":"^20.0.0"}}

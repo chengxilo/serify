@@ -1,0 +1,120 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/ledger.schema.json
+# One on-chain settlement entry. Exists mainly to cover int128: token amounts
+# with 18 decimal places (wei-style base units) overflow int64 in practice.
+#
+# 64/128-bit values may be written bare or as quoted decimal strings — the
+# loader decodes them from the literal text with full precision either way.
+
+fields:
+  - entry_id: uint64
+  - block_number: uint64
+  - block_time: int64
+  - tx_hash: bytes                 # 32 bytes
+  - account: string
+  - asset: string                  # e.g. "ETH"
+  - amount_base_units: int128      # signed; negative = debit
+  - balance_after: int128
+  - confirmed: bool
+  - memo: optional<string>
+
+formats:
+  - binary
+
+cases:
+  - name: deposit
+    data:
+      entry_id: 55201
+      block_number: 19842771
+      block_time: 1751760000
+      tx_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      account: "0x9fc3de41a3f102371"
+      asset: "ETH"
+      amount_base_units: "2500000000000000000"        # 2.5 ETH in wei
+      balance_after: "7250000000000000000"
+      confirmed: true
+      memo: "invoice #4471"
+
+  - name: withdrawal
+    data:
+      entry_id: 55202
+      block_number: 19842802
+      block_time: 1751760372
+      tx_hash: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+      account: "0x9fc3de41a3f102371"
+      asset: "ETH"
+      amount_base_units: "-7250000000000000000"       # negative = debit
+      balance_after: "0"
+      confirmed: false
+      memo: null
+
+  - name: i128_boundaries
+    data:
+      entry_id: 55203
+      block_number: 18446744073709551615
+      block_time: 9223372036854775807
+      tx_hash: [0xff]
+      account: ""
+      asset: ""
+      amount_base_units: 170141183460469231731687303715884105727     # max int128, bare literal
+      balance_after: "-170141183460469231731687303715884105728"      # min int128, quoted form
+      confirmed: true
+      memo: ""
+
+  - name: genesis
+    data:
+      entry_id: 0
+      block_number: 0
+      block_time: 0
+      tx_hash: []
+      account: ""
+      asset: ""
+      amount_base_units: "0"
+      balance_after: "0"
+      confirmed: false
+      memo: null
+
+  # Strings must travel as UTF-8 bytes untouched: multi-byte CJK, emoji with
+  # ZWJ sequences, RTL text, and combining marks all have to survive
+  # byte-for-byte in every language.
+  - name: unicode_strings
+    data:
+      entry_id: 55204
+      block_number: 19842900
+      block_time: 1751761000
+      tx_hash: [0x00, 0xff]
+      account: "账户-Áccöunt-аккаунт"
+      asset: "🪙"
+      amount_base_units: "1"
+      balance_after: "1"
+      confirmed: true
+      memo: "family: 👨‍👩‍👧‍👦 rtl: مرحبا combining: é"
+
+  # Characters that commonly break naive serializers: quotes, backslashes,
+  # newlines/tabs, and HTML-special characters (JSON encoders often escape
+  # <, >, & differently per language).
+  - name: escape_strings
+    data:
+      entry_id: 55205
+      block_number: 19842901
+      block_time: 1751761060
+      tx_hash: [0x5c, 0x22]
+      account: "quote:\" backslash:\\ newline:\n tab:\t"
+      asset: "<a>&amp;</a>"
+      amount_base_units: "-1"
+      balance_after: "0"
+      confirmed: false
+      memo: "line1\nline2"

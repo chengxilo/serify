@@ -1,0 +1,24 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/reusable.schema.json
+# A postal address — reusable type (no cases), pulled in via `import:`.
+# postal_code is a string on purpose: real postal codes have leading zeros
+# and letters (e.g. "M5V 2T6", "01234").
+fields:
+  - recipient: string
+  - street: string
+  - city: string
+  - country: string      # ISO 3166-1 alpha-2, e.g. "CA"
+  - postal_code: string

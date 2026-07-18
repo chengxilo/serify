@@ -1,0 +1,79 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/notification.schema.json
+# A delivery notification. Exists to cover `oneof` — a value is exactly one
+# variant, and the three payload arities the type system allows all appear here:
+#
+#   silent            arity 0 — a unit variant, no payload
+#   sms: string       arity 1 — a scalar payload
+#   push: uint64      arity 1 — a payload whose wire form is a decimal string
+#   invoice: money    arity N — a struct payload carrying several fields
+#
+# Binary layout (the tag ordinal is the variant's position in the declaration,
+# which is the one thing every worker must agree on):
+#
+#   notification_id  u32 LE
+#   tag              u8   0=silent 1=sms 2=push 3=invoice
+#   payload          silent  : absent
+#                    sms     : u32 LE byte length + UTF-8 bytes
+#                    push    : u64 LE
+#                    invoice : u32 LE byte length + currency bytes, i64 LE amount_minor
+#   urgent           u8   0 or 1
+
+import:
+  - channel.yaml
+
+fields:
+  - notification_id: uint32
+  - channel: channel
+  - urgent: bool
+
+formats:
+  - binary
+
+cases:
+  # A unit variant: the tag alone, written bare.
+  - name: unit_variant
+    data:
+      notification_id: 1
+      channel: silent
+      urgent: false
+
+  # A scalar payload. Non-ASCII so the length prefix is bytes, not characters.
+  - name: scalar_payload
+    data:
+      notification_id: 2
+      channel:
+        sms: "+1-555-0142 ☎"
+      urgent: true
+
+  # A u64 payload past 2^53: it must survive as a decimal string on the wire,
+  # not as a JSON number.
+  - name: u64_payload
+    data:
+      notification_id: 3
+      channel:
+        push: "9007199254740993"
+      urgent: false
+
+  # A struct payload — the arity-N case, with a negative amount (a refund).
+  - name: struct_payload
+    data:
+      notification_id: 4
+      channel:
+        invoice:
+          currency: "USD"
+          amount_minor: -2500
+      urgent: true

@@ -1,0 +1,133 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/wrong.schema.json
+# `wrong` is a meta-test type: it drives deliberately-faulty workers to verify
+# that serify itself REPORTS disagreements correctly.
+#
+# The four bool fields are fault-injection directives that the worker reads.
+# When a directive is disabled (false) the worker drops its OWN language from
+# the `langs` list, so its bytes diverge from the other workers; serify must
+# flag the resulting byte-diff as FAIL. The directives must round-trip (they
+# ride in the serialized bytes) so the deserializer can read them back.
+# When all directives are enabled the worker round-trips faithfully and
+# byte-for-byte identically to the other reference workers.
+#
+# Corruption never errors, so nothing SKIPs. Expected outcome per (format F, case):
+#   serialize(F)   = F_serialize   ? PASS : FAIL (non-reference workers FAIL)
+#   deserialize(F) = !F_serialize || !F_deserialize ? FAIL : PASS
+# (Both directions must be enabled for clean round-trip; otherwise DataDiff
+# catches the corrupted round-tripped data against the original.)
+fields:
+  - binary_serialize: bool
+  - binary_deserialize: bool
+  - json_serialize: bool
+  - json_deserialize: bool
+  - langs: list<string>
+
+formats:
+  - binary
+  - json
+
+_langs: &langs
+  - cpp
+  - csharp
+  - elixir
+  - java
+  - node
+  - python
+  - rust
+  - go
+
+cases:
+  - name: happy_path
+    description: "Every format/operation succeeds; serify reports all PASS."
+    data:
+      binary_serialize: true
+      binary_deserialize: true
+      json_serialize: true
+      json_deserialize: true
+      langs: *langs
+
+  - name: binary_serialize_fail
+    description: "Binary serialize errors; binary deserialize is skipped (no reference bytes)."
+    data:
+      binary_serialize: false
+      binary_deserialize: true
+      json_serialize: true
+      json_deserialize: true
+      langs: *langs
+
+  - name: binary_deserialize_fail
+    description: "Binary serialize succeeds but binary deserialize errors."
+    data:
+      binary_serialize: true
+      binary_deserialize: false
+      json_serialize: true
+      json_deserialize: true
+      langs: *langs
+
+  - name: json_serialize_fail
+    description: "JSON serialize errors; JSON deserialize is skipped."
+    data:
+      binary_serialize: true
+      binary_deserialize: true
+      json_serialize: false
+      json_deserialize: true
+      langs: *langs
+
+  - name: json_deserialize_fail
+    description: "JSON serialize succeeds but JSON deserialize errors."
+    data:
+      binary_serialize: true
+      binary_deserialize: true
+      json_serialize: true
+      json_deserialize: false
+      langs: *langs
+
+  - name: binary_both_fail
+    description: "Both binary directions error; JSON unaffected."
+    data:
+      binary_serialize: false
+      binary_deserialize: false
+      json_serialize: true
+      json_deserialize: true
+      langs: *langs
+
+  - name: json_both_fail
+    description: "Both JSON directions error; binary unaffected."
+    data:
+      binary_serialize: true
+      binary_deserialize: true
+      json_serialize: false
+      json_deserialize: false
+      langs: *langs
+
+  - name: all_fail
+    description: "Every format/operation errors."
+    data:
+      binary_serialize: false
+      binary_deserialize: false
+      json_serialize: false
+      json_deserialize: false
+      langs: *langs
+
+  - name: mixed_directions
+    description: "Different failing direction per format (binary deser + json ser); the formats must stay independent."
+    data:
+      binary_serialize: true
+      binary_deserialize: false
+      json_serialize: false
+      json_deserialize: true
+      langs: *langs

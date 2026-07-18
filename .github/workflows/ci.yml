@@ -1,0 +1,181 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  build-serify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - run: go build -o serify ./cmd/serify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: serify
+          path: serify
+
+  test-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Build check
+        run: go build -buildvcs=false ./...
+      # gofmt keeps the Go tree uniform (it is already written that way, unlike
+      # the deliberately hand-aligned example workers in other languages), and
+      # `go vet` catches the printf-arg and lost-cancel classes of bug that
+      # compile fine and are invisible in review.
+      - name: gofmt + vet
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed on:"; echo "$unformatted"; exit 1
+          fi
+          go vet ./...
+      - name: Generated schemas in sync
+        run: scripts/gen-schemas.sh --check
+      # ./cmd/... is included deliberately: cmd/serify has tests (schema_test.go)
+      # that this job used to miss entirely.
+      - name: Runner + worker-lib unit tests
+        run: go test ./lib/... ./internal/... ./cmd/...
+
+  test-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install mypy pytest
+      - name: mypy strict (workerlib)
+        run: mypy --strict lib/python/serify.py
+      - name: Unit tests (workerlib)
+        working-directory: lib/python
+        run: pytest -q
+
+  test-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Unit tests (workerlib)
+        run: npm ci && npm test
+
+  test-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: rustfmt + clippy
+        run: |
+          cargo fmt --all --check
+          cargo clippy --all-targets --all-features -- -D warnings
+      - name: cargo test (workerlib)
+        working-directory: lib/rust
+        run: cargo test
+      # serify's derive is usable without the worker runtime, and that is how a
+      # consuming SDK takes the dependency (default-features = false). Nothing
+      # else in CI compiles that configuration, so a `worker`-gated item losing
+      # its #[cfg] breaks consumers while every job here stays green.
+      - name: Build without the worker feature
+        run: cargo build -p serify --no-default-features
+
+  # Cross-language binary byte-parity over the example workers. One cell per
+  # language: it builds examples/go (the reference) plus examples/<language> and
+  # requires that language to match. fail-fast:false makes the grid a per-language
+  # status map — a lagging example fails only its own cell.
+  conformance:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [rust, python, node, csharp, cpp, elixir, java, php]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Go is always needed: it runs the test and is the reference worker.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.language == 'rust'
+      - uses: actions/setup-python@v5
+        if: matrix.language == 'python'
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        if: matrix.language == 'node'
+        with:
+          node-version: '20'
+      - uses: actions/setup-dotnet@v4
+        if: matrix.language == 'csharp'
+        with:
+          dotnet-version: '8.0'
+      - uses: erlef/setup-beam@v1
+        if: matrix.language == 'elixir'
+        with:
+          elixir-version: '1.16'
+          otp-version: '26'
+      - uses: actions/setup-java@v4
+        if: matrix.language == 'java'
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: shivammathur/setup-php@v2
+        if: matrix.language == 'php'
+        with:
+          php-version: '8.2'
+          # PHP's int is 64-bit, so the example worker encodes int128 through GMP.
+          extensions: gmp
+      # cpp: g++ is preinstalled on ubuntu runners.
+
+      # No -run filter on purpose. It used to name TestExamples_AllLanguages,
+      # which does not exist: `go test -run` matching nothing prints
+      # "no tests to run" and exits 0, so this job spun up a whole toolchain and
+      # verified nothing while reporting green. SERIFY_REQUIRE makes a missing
+      # toolchain a hard failure rather than a silent skip.
+      - name: Binary parity (go ref vs ${{ matrix.language }})
+        env:
+          SERIFY_REQUIRE: go,${{ matrix.language }}
+        run: go test -count=1 -v ./examples/test/
+
+  # Integration meta-tests (wrong-worker detection, audit mode, CLI tests).
+  # Requires Go + Rust for the meta-fixture workers.
+  test-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Integration tests
+        run: go test -v ./test/...

@@ -1,0 +1,8 @@
+{
+  "name": "@chengxilo/serify",
+  "version": "0.1.0",
+  "private": true,
+  "description": "In-repo link target for the node worker library. The publish manifest lives at the repo root (Thrift-style); in-repo workers depend on this directory via file: and build it with `npx tsc -p node_modules/@chengxilo/serify`.",
+  "main": "dist/workerlib.js",
+  "types": "dist/workerlib.d.ts"
+}

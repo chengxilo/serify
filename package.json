@@ -1,0 +1,25 @@
+{
+  "name": "@chengxilo/serify",
+  "version": "0.1.0",
+  "description": "Cross-language serialization conformance worker library for Node.js / TypeScript",
+  "license": "Apache-2.0",
+  "author": "Chengxi Luo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chengxilo/serify.git"
+  },
+  "main": "./lib/node/dist/workerlib.js",
+  "types": "./lib/node/dist/workerlib.d.ts",
+  "files": [
+    "lib/node/dist/"
+  ],
+  "scripts": {
+    "build": "tsc -p lib/node",
+    "prepack": "npm run build",
+    "test": "npm run build && node --test lib/node/test/*.test.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

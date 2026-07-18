@@ -1,0 +1,30 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/reusable.schema.json
+# How a notification is delivered: exactly one of these variants. A `variants:`
+# section declares a sum: each entry is `tag: payload`, the payload types are
+# ordinary schema expressions, and an entry with no type is a unit variant.
+#
+# The tag ordinal is the variant's position here, which is the one thing every
+# worker must agree on. Referenced as a field (`channel: channel`) this is the
+# variant itself, not a struct wrapping one.
+import:
+  - money.yaml
+
+variants:
+  - silent:              # arity 0 — a unit variant, no payload
+  - sms: string          # arity 1 — a scalar payload
+  - push: uint64         # arity 1 — a payload whose wire form is a decimal string
+  - invoice: money       # arity N — a struct payload carrying several fields

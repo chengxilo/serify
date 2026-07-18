@@ -1,0 +1,77 @@
+# Binaries (compiled executables only, not source directories)
+/serify
+/serify.exe
+runner
+runner.exe
+**/worker
+**/worker.exe
+!/worker/
+# Elixir escript test workers (rebuilt by the harness)
+audit_worker
+is_worker
+wrong_worker
+
+# Go
+/vendor/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+*.js.map
+
+# Rust
+target/
+**/target/
+
+# .NET / C#
+bin/
+obj/
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+
+# act
+.act/
+
+# Design docs (internal, not shipped)
+design/
+
+# Claude Code internal
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Elixir
+_build/
+deps/
+# BEAM writes this on a VM crash (e.g. an Elixir worker dying mid-run)
+erl_crash.dump
+
+# Build cache markers
+.build_marker
+
+# Test artifacts
+*.test
+out.csv
+
+# maven-shade regenerates these on every build, stripping license headers
+dependency-reduced-pom.xml
+
+# Go example worker binary (rebuilt by go build ./...)
+/examples/go/example-go

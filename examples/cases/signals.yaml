@@ -1,0 +1,174 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/signals.schema.json
+# A capture from a multi-channel instrument. It is the all-nine regression guard
+# for the type-system corners that were silently mishandled per language: every
+# scalar as a `list<T>` element, two `array<T,N>` shapes, one `optional<scalar>`,
+# and one `enum`.
+#
+# That exhaustiveness is the point. `list<T>` used to accept only a subset of
+# `T`, and the subset differed per language — `serify validate` took all of them
+# because the runner's encoder is generic, so the gap only showed up once a
+# worker ran, and in three languages it showed up as silently wrong data rather
+# than an error. This type exists so that can never regress unnoticed: a library
+# that drops an element type — or mishandles an array length or a null optional —
+# fails here, byte-for-byte, in every language at once.
+
+fields:
+  - capture_id: uint64
+  - flags: list<bool>
+  - raw_frame: list<uint8>
+  - port_numbers: list<uint16>
+  - sample_counts: list<uint32>
+  - byte_totals: list<uint64>
+  - trim_offsets: list<int8>
+  - drift_deltas: list<int16>
+  - temperatures_c: list<int32>
+  - timestamps_ns: list<int64>
+  - counters: list<uint128>
+  - balances: list<int128>
+  - gains: list<float32>
+  - voltages: list<float64>
+  - channel_names: list<string>
+  - payloads: list<bytes>
+  # Two array<T,N> shapes. Every library used to carry an array as [uint32; 4]
+  # regardless of what the schema said, so `checksum` is the shape that happened
+  # to work and `window` is the one that could not exist: a non-4 length with a
+  # signed element type, which the old decoders truncated and refused.
+  - checksum: array<uint8,4>
+  - window: array<int16,3>
+  # An optional<scalar>. list<string> and optional<string> are already exercised
+  # by ledger; the numeric-optional path is different in the statically-typed
+  # bindings (a Go pointer arm, a Rust OptionScalar, an Elixir {:optional,_}
+  # clause, a C++ std::monostate null) and no all-nine type carried one, so this
+  # is the first cross-language byte check of it — present in two cases, null in two.
+  - dropped_frames: optional<uint32>
+  # An enum. On the wire it is just the variant *name* as a string; the worker
+  # maps it to an ordinal for its byte layout. Nothing else all-nine carries one
+  # (only `order`, which is Go-only), so this is the first cross-language check
+  # that every library routes an enum field through its string path correctly.
+  - mode: "enum<idle, active, fault, calibrating>"
+
+formats:
+  - binary
+
+cases:
+  # Ordinary values, and deliberately ragged lengths: a worker that reads a
+  # fixed count, or that carries one list's length into the next, fails here.
+  - name: typical
+    data:
+      capture_id: 90210
+      flags: [true, false, true]
+      raw_frame: [0, 127, 255]
+      port_numbers: [80, 443, 8080, 65535]
+      sample_counts: [1, 1000, 4294967295]
+      byte_totals: ["0", "18446744073709551615"]
+      trim_offsets: [-3, 0, 7]
+      drift_deltas: [-1000, 0, 1000]
+      temperatures_c: [-40, 0, 125]
+      timestamps_ns: ["1751760000000000000"]
+      counters: ["340282366920938463463374607431768211455"]
+      balances: ["-170141183460469231731687303715884105728", "0"]
+      gains: [1.5, -2.25]
+      voltages: [3.3, -12.0, 0.1]
+      channel_names: ["ch0", "ch1", "温度"]
+      payloads: ["dead", "", "beefcafe"]
+      checksum: [222, 173, 190, 239]
+      window: [-1000, 0, 1000]
+      dropped_frames: 42
+      mode: active
+
+  # Every list empty. The count prefix must still be written, so this catches a
+  # worker that skips the prefix when there is nothing to write.
+  - name: empty_lists
+    data:
+      capture_id: 0
+      flags: []
+      raw_frame: []
+      port_numbers: []
+      sample_counts: []
+      byte_totals: []
+      trim_offsets: []
+      drift_deltas: []
+      temperatures_c: []
+      timestamps_ns: []
+      counters: []
+      balances: []
+      gains: []
+      voltages: []
+      channel_names: []
+      payloads: []
+      checksum: [0, 0, 0, 0]
+      window: [0, 0, 0]
+      dropped_frames: null
+      mode: idle
+
+  # The extremes of every width, so a narrowing conversion or a sign error in
+  # any one element type is caught. int8/int16/uint16 are here because those are
+  # exactly the element types that used to be undecodable.
+  - name: width_boundaries
+    data:
+      capture_id: 18446744073709551615
+      flags: [false]
+      raw_frame: [0, 255]
+      port_numbers: [0, 65535]
+      sample_counts: [0, 4294967295]
+      byte_totals: ["0", "18446744073709551615"]
+      trim_offsets: [-128, 127]
+      drift_deltas: [-32768, 32767]
+      temperatures_c: [-2147483648, 2147483647]
+      timestamps_ns: ["-9223372036854775808", "9223372036854775807"]
+      counters: ["0", "340282366920938463463374607431768211455"]
+      balances: ["-170141183460469231731687303715884105728", "170141183460469231731687303715884105727"]
+      gains: [0.0, -0.0]
+      voltages: [0.0, -0.0]
+      channel_names: [""]
+      payloads: [""]
+      checksum: [0, 255, 0, 255]
+      window: [-32768, 32767, -1]
+      dropped_frames: 4294967295
+      mode: fault
+
+  # Single-element lists, plus the float magnitudes whose bit patterns a naive
+  # implementation is most likely to mangle: the largest finite value and the
+  # smallest normal one, at both widths.
+  #
+  # No infinities here, deliberately. The BEAM has no infinite float — Erlang's
+  # bitstring syntax refuses to write one — so a `.inf` in this data would be
+  # unrepresentable in the Elixir worker rather than merely awkward. Infinity
+  # and NaN are covered for *scalar* floats by telemetry.yaml, which only Go and
+  # Rust implement.
+  - name: float_extremes
+    data:
+      capture_id: 7
+      flags: [true]
+      raw_frame: [1]
+      port_numbers: [1]
+      sample_counts: [1]
+      byte_totals: ["1"]
+      trim_offsets: [-1]
+      drift_deltas: [-1]
+      temperatures_c: [-1]
+      timestamps_ns: ["-1"]
+      counters: ["1"]
+      balances: ["-1"]
+      gains: [3.4028235e38, -3.4028235e38, 1.1754944e-38]
+      voltages: [1.7976931348623157e308, -1.7976931348623157e308, 2.2250738585072014e-308]
+      channel_names: ["é\U0001f600"]
+      payloads: ["00ff00ff"]
+      checksum: [1, 2, 3, 4]
+      window: [1, -1, 0]
+      dropped_frames: 0
+      mode: calibrating

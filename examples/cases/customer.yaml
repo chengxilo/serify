@@ -1,0 +1,228 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/customer.schema.json
+# A store account. Covers: uint8/uint32/uint64, int64, float32, bool, string,
+# bytes, array<uint8,N>, optional<string>, struct (money), list<struct>
+# (address), list<string>, map<string,string>, map<string,struct> (address).
+
+# All reused types come in via import (there is no implicit registry).
+import:
+  - address.yaml
+  - money.yaml
+
+fields:
+  - customer_id: uint64
+  - email: string
+  - display_name: string
+  - age: uint8
+  - email_verified: bool
+  - fraud_score: float32          # 0.0 (clean) .. 1.0 (block)
+  - loyalty_points: uint32
+  - signup_ts: int64              # unix seconds
+  - avatar_sha256: bytes
+  - pin: array<uint8,4>
+  - referral_code: optional<string>
+  - store_credit: money
+  - shipping_addresses: list<address>
+  - address_book: map<string,address>   # label ("home", "work") → address
+  - wishlist_skus: list<string>
+  - preferences: map<string,string>
+
+# Serialization formats to test this type with. Each worker is re-initialized
+# once per format; workers that don't implement a format are skipped for it.
+formats:
+  - binary
+  - json
+
+cases:
+  - name: typical
+    data:
+      customer_id: 90211054
+      email: "dana.wong@example.com"
+      display_name: "Dana Wong"
+      age: 34
+      email_verified: true
+      fraud_score: 0.03
+      loyalty_points: 12850
+      signup_ts: 1735689600            # 2025-01-01T00:00:00Z
+      avatar_sha256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+      pin: [4, 9, 3, 1]
+      referral_code: "FRIEND-2025"
+      store_credit:
+        currency: "USD"
+        amount_minor: 2500
+      shipping_addresses:
+        - recipient: "Dana Wong"
+          street: "312 Queen St W"
+          city: "Toronto"
+          country: "CA"
+          postal_code: "M5V 2A2"
+        - recipient: "D. Wong (office)"
+          street: "1 University Ave, Floor 9"
+          city: "Toronto"
+          country: "CA"
+          postal_code: "M5J 2P1"
+      address_book:
+        home:
+          recipient: "Dana Wong"
+          street: "312 Queen St W"
+          city: "Toronto"
+          country: "CA"
+          postal_code: "M5V 2A2"
+        work:
+          recipient: "D. Wong (office)"
+          street: "1 University Ave, Floor 9"
+          city: "Toronto"
+          country: "CA"
+          postal_code: "M5J 2P1"
+      wishlist_skus: ["KB-750-BLK", "MON-27-4K"]
+      preferences:
+        theme: "dark"
+        locale: "en-CA"
+        newsletter: "weekly"
+
+  - name: new_account
+    data:
+      customer_id: 90211055
+      email: "new.user@example.com"
+      display_name: ""
+      age: 0
+      email_verified: false
+      fraud_score: 0.0
+      loyalty_points: 0
+      signup_ts: 1767225600            # 2026-01-01T00:00:00Z
+      avatar_sha256: []
+      pin: [0, 0, 0, 0]
+      referral_code: null
+      store_credit:
+        currency: "USD"
+        amount_minor: 0
+      shipping_addresses: []
+      address_book: {}
+      wishlist_skus: []
+      preferences: {}
+
+  - name: unicode
+    data:
+      customer_id: 90211056
+      email: "kenji@example.jp"
+      display_name: "健二🎮 (けんじ)"
+      age: 27
+      email_verified: true
+      fraud_score: 0.11
+      loyalty_points: 300
+      signup_ts: 1751328000
+      avatar_sha256: "deadbeef"
+      pin: [7, 7, 7, 7]
+      referral_code: "紹介コード"
+      store_credit:
+        currency: "JPY"
+        amount_minor: 1200
+      shipping_addresses:
+        - recipient: "田中 健二"
+          street: "渋谷区道玄坂２丁目"
+          city: "東京"
+          country: "JP"
+          postal_code: "150-0043"
+        - recipient: "مرحبا Привет"
+          street: "1 Mixed-Script Way"
+          city: "Zürich"
+          country: "CH"
+          postal_code: "8001"
+      address_book:
+        自宅:
+          recipient: "田中 健二"
+          street: "渋谷区道玄坂２丁目"
+          city: "東京"
+          country: "JP"
+          postal_code: "150-0043"
+        "🏢 office":
+          recipient: "مرحبا Привет"
+          street: "1 Mixed-Script Way"
+          city: "Zürich"
+          country: "CH"
+          postal_code: "8001"
+      wishlist_skus: ["ゲーム-01", "🎧-PRO"]
+      preferences:
+        言語: "日本語"
+        emoji: "✅"
+
+  - name: boundary
+    data:
+      customer_id: 18446744073709551615   # max uint64
+      email: ""
+      display_name: ""
+      age: 255                            # max uint8
+      email_verified: false
+      fraud_score: 3.4028234663852886e+38 # max float32
+      loyalty_points: 4294967295          # max uint32
+      signup_ts: -9223372036854775808     # min int64
+      avatar_sha256: [0xff]
+      pin: [255, 0, 255, 0]
+      referral_code: ""                   # present but empty != null
+      store_credit:
+        currency: "USD"
+        amount_minor: -9223372036854775808  # min int64: maximally in debt
+      shipping_addresses: []
+      address_book:
+        "":                               # empty key, empty struct fields
+          recipient: ""
+          street: ""
+          city: ""
+          country: ""
+          postal_code: ""
+      wishlist_skus: [""]
+      preferences:
+        "": ""
+
+  # Characters where JSON encoders diverge across languages. Go's encoding/json
+  # HTML-escapes <, > and & unless SetEscapeHTML(false) is set (the Go worker
+  # sets it), and escapes U+2028/U+2029 unconditionally — no other language's
+  # encoder does either by default. Ampersands in company names and angle
+  # brackets in user-supplied text are ordinary production data, so a worker
+  # that gets this wrong ships a real byte divergence.
+  - name: text_escapes
+    data:
+      customer_id: 77
+      email: "ops+a&b@example.com"
+      display_name: "Procter & Gamble <procurement>"
+      age: 40
+      email_verified: true
+      fraud_score: 0.5
+      loyalty_points: 1
+      signup_ts: 1735689600
+      avatar_sha256: [0x3c, 0x3e, 0x26]
+      pin: [1, 2, 3, 4]
+      referral_code: "A&W<2025>"
+      store_credit:
+        currency: "USD"
+        amount_minor: 1
+      shipping_addresses:
+        - recipient: "Marks & Spencer"
+          street: "1 <Main> St"
+          city: "Leeds"
+          country: "GB"
+          postal_code: "LS1 1AA"
+      address_book:
+        "work&home":
+          recipient: "R&D <team>"
+          street: "2 Elm & Oak"
+          city: "Leeds"
+          country: "GB"
+          postal_code: "LS1 1AB"
+      wishlist_skus: ["SKU-<1>", "SKU&2", "\u2028line-sep", "\u2029para-sep"]
+      preferences:
+        "note<key>": "a & b"
+        "html": "<script>alert(1)</script>"

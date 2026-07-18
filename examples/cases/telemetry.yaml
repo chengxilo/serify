@@ -1,0 +1,210 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/telemetry.schema.json
+# A package-tracker sensor reading. Covers the small/signed integers the
+# commerce types don't: int8/int16/int32, uint16, uint128 (IPv6 as one
+# integer), plus float32/float64 special values (NaN, ±Inf, -0.0, subnormals),
+# array<int16,N>, list<uint32>, map<string,uint64>, optional<float32>.
+#
+# NOTE: 128-bit values MUST be quoted — an unquoted YAML integer that
+# overflows uint64 silently degrades to float64 and loses precision.
+
+fields:
+  - device_id: uint64
+  - ipv6: uint128                     # device address as one 128-bit integer
+  - local_ip: array<uint8,4>          # IPv4 octets
+  - firmware: string
+  - boot_count: uint16
+  - rssi_dbm: int8                    # signal strength, always negative
+  - temperature_dc: int16             # deci-celsius: -400 = -40.0°C
+  - clock_drift_ms: int32
+  - battery_volts: float32
+  - latitude: float64
+  - longitude: float64
+  - humidity_pct: optional<float32>   # null = no humidity sensor
+  - accel_mg: array<int16,3>          # x/y/z in milli-g
+  - visible_cells: list<uint32>       # cell tower ids
+  - packet_counts: map<string,uint64> # per-interface counters
+  - gps_fix: bool
+  - signature: bytes                  # HMAC of the payload
+
+# Binary only: NaN/Inf have no JSON representation.
+formats:
+  - binary
+
+cases:
+  - name: nominal
+    data:
+      device_id: 4816033
+      ipv6: "42540766411282592856903984951653826561"   # 2001:db8::1
+      local_ip: [192, 168, 4, 21]
+      firmware: "tracker-fw 2.7.1"
+      boot_count: 12
+      rssi_dbm: -67
+      temperature_dc: 218          # 21.8°C
+      clock_drift_ms: -125
+      battery_volts: 3.87
+      latitude: 43.6532
+      longitude: -79.3832
+      humidity_pct: 41.5
+      accel_mg: [-12, 8, 1002]
+      visible_cells: [310410, 310411, 302220]
+      packet_counts:
+        lte: 18234
+        wifi: 921
+      gps_fix: true
+      signature: "8f3a1c0d9b2e4f6a8c1d3e5f7a9b0c2d"
+
+  - name: zero
+    data:
+      device_id: 0
+      ipv6: "0"
+      local_ip: [0, 0, 0, 0]
+      firmware: ""
+      boot_count: 0
+      rssi_dbm: 0
+      temperature_dc: 0
+      clock_drift_ms: 0
+      battery_volts: 0.0
+      latitude: 0.0
+      longitude: 0.0
+      humidity_pct: null
+      accel_mg: [0, 0, 0]
+      visible_cells: []
+      packet_counts: {}
+      gps_fix: false
+      signature: []
+
+  - name: int_boundaries
+    data:
+      device_id: 18446744073709551615                    # max uint64
+      ipv6: "340282366920938463463374607431768211455"    # max uint128
+      local_ip: [255, 255, 255, 255]
+      firmware: "fw"
+      boot_count: 65535            # max uint16
+      rssi_dbm: -128               # min int8
+      temperature_dc: -32768       # min int16
+      clock_drift_ms: -2147483648  # min int32
+      battery_volts: 0.0
+      latitude: 0.0
+      longitude: 0.0
+      humidity_pct: null
+      accel_mg: [-32768, 32767, -1]   # min/max int16
+      visible_cells: [4294967295]     # max uint32
+      packet_counts:
+        lte: 18446744073709551615     # max uint64
+      gps_fix: true
+      signature: [0x00, 0xff]
+
+  - name: int_boundaries_high
+    data:
+      device_id: 1
+      ipv6: "1"
+      local_ip: [1, 2, 3, 4]
+      firmware: "fw"
+      boot_count: 1
+      rssi_dbm: 127                # max int8
+      temperature_dc: 32767        # max int16
+      clock_drift_ms: 2147483647   # max int32
+      battery_volts: 4.2
+      latitude: 90.0
+      longitude: 180.0
+      humidity_pct: 100.0
+      accel_mg: [1, -1, 0]
+      visible_cells: [0]
+      packet_counts:
+        lte: 1
+      gps_fix: true
+      signature: [0x01]
+
+  - name: float_extremes
+    data:
+      device_id: 2
+      ipv6: "2"
+      local_ip: [10, 0, 0, 2]
+      firmware: "fw"
+      boot_count: 2
+      rssi_dbm: -80
+      temperature_dc: 0
+      clock_drift_ms: 0
+      battery_volts: 3.4028234663852886e+38   # max float32
+      latitude: 1.7976931348623157e+308       # max float64
+      longitude: 5.0e-324                     # min subnormal float64
+      humidity_pct: 1.401298464324817e-45     # min subnormal float32
+      accel_mg: [0, 0, 0]
+      visible_cells: []
+      packet_counts: {}
+      gps_fix: false
+      signature: []
+
+  - name: float_nan
+    data:
+      device_id: 3
+      ipv6: "3"
+      local_ip: [10, 0, 0, 3]
+      firmware: "fw"
+      boot_count: 3
+      rssi_dbm: -80
+      temperature_dc: 0
+      clock_drift_ms: 0
+      battery_volts: .nan
+      latitude: .nan               # no fix: position undefined
+      longitude: .nan
+      humidity_pct: null
+      accel_mg: [0, 0, 0]
+      visible_cells: []
+      packet_counts: {}
+      gps_fix: false
+      signature: []
+
+  - name: float_inf
+    data:
+      device_id: 4
+      ipv6: "4"
+      local_ip: [10, 0, 0, 4]
+      firmware: "fw"
+      boot_count: 4
+      rssi_dbm: -80
+      temperature_dc: 0
+      clock_drift_ms: 0
+      battery_volts: .inf
+      latitude: .inf
+      longitude: -.inf
+      humidity_pct: -.inf
+      accel_mg: [0, 0, 0]
+      visible_cells: []
+      packet_counts: {}
+      gps_fix: false
+      signature: []
+
+  - name: float_neg_zero
+    data:
+      device_id: 5
+      ipv6: "5"
+      local_ip: [10, 0, 0, 5]
+      firmware: "fw"
+      boot_count: 5
+      rssi_dbm: -80
+      temperature_dc: 0
+      clock_drift_ms: 0
+      battery_volts: -0.0
+      latitude: -0.0
+      longitude: -0.0
+      humidity_pct: -0.0
+      accel_mg: [0, 0, 0]
+      visible_cells: []
+      packet_counts: {}
+      gps_fix: false
+      signature: []

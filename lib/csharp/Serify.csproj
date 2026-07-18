@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>WorkerLib</AssemblyName>
+    <RootNamespace>Serify</RootNamespace>
+    <PackageId>Serify</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Chengxi Luo</Authors>
+    <Description>Cross-language serialization conformance worker library for C# / .NET</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/chengxilo/serify</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.*" />
+  </ItemGroup>
+</Project>
