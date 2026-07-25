@@ -18,9 +18,11 @@
 package compare
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strings"
 
@@ -48,7 +50,13 @@ func HexDiff(expected, got string) string {
 
 // DataDiff compares two decoded data maps field by field.
 // Returns a description of differences, or "" if equal.
-func DataDiff(expected, got map[string]any, fieldOrder []string) string {
+//
+// Fields named in floatFields hold a float32/float64 value in its wire form —
+// IEEE-754 little-endian hex. For those, two values that both decode to NaN are
+// treated as equal: all NaNs are the same value, so the bit pattern is not
+// significant under a value (semantic) comparison. Pass nil to compare every
+// field verbatim (byte-exact), which is what the bytes oracle's other rounds do.
+func DataDiff(expected, got map[string]any, fieldOrder []string, floatFields map[string]bool) string {
 	if len(fieldOrder) == 0 {
 		// fallback: compare all keys in expected (sorted for stable output)
 		fieldOrder = slices.Sorted(maps.Keys(expected))
@@ -58,6 +66,10 @@ func DataDiff(expected, got map[string]any, fieldOrder []string) string {
 	for _, k := range fieldOrder {
 		ev := expected[k]
 		gv := got[k]
+
+		if floatFields[k] && bothNaNHex(ev, gv) {
+			continue // both NaN → equal by value, whatever the bit pattern
+		}
 
 		// cmp.Diff output is plain text (no ANSI codes); callers that render
 		// to a terminal can colorize lines by their - / + prefix.
@@ -72,6 +84,31 @@ func DataDiff(expected, got map[string]any, fieldOrder []string) string {
 		}
 	}
 	return strings.Join(diffs, "\n")
+}
+
+// bothNaNHex reports whether a and b are both float32/float64 wire hex strings
+// (4 or 8 bytes, little-endian) that decode to NaN.
+func bothNaNHex(a, b any) bool {
+	return isNaNHex(a) && isNaNHex(b)
+}
+
+func isNaNHex(v any) bool {
+	s, ok := v.(string)
+	if !ok {
+		return false
+	}
+	raw, err := hex.DecodeString(s)
+	if err != nil {
+		return false
+	}
+	switch len(raw) {
+	case 4:
+		return math.IsNaN(float64(math.Float32frombits(binary.LittleEndian.Uint32(raw))))
+	case 8:
+		return math.IsNaN(math.Float64frombits(binary.LittleEndian.Uint64(raw)))
+	default:
+		return false
+	}
 }
 
 // contextWindow is the number of bytes on each side of the first divergence

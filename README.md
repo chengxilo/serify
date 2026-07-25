@@ -306,7 +306,6 @@ cycle-safe; a single file may import several others.
 
 ### Sum types: `variants:`
 
-A type file declares either a `fields:` (a record) or a `variants:` (a **sum**).
 Under `variants:` each entry is `tag: payload`, a value is *exactly one* of them,
 and an entry with no type is a unit variant. The section name is the whole
 declaration — there is no separate flag.

@@ -127,11 +127,50 @@ func TestColorizeDiff(t *testing.T) {
 func TestDataDiff_PlainText(t *testing.T) {
 	a := map[string]any{"x": 1, "y": "hello"}
 	b := map[string]any{"x": 2, "y": "hello"}
-	diff := DataDiff(a, b, []string{"x", "y"})
+	diff := DataDiff(a, b, []string{"x", "y"}, nil)
 	if diff == "" {
 		t.Fatal("expected non-empty diff")
 	}
 	if strings.Contains(diff, "\x1b[") {
 		t.Errorf("DataDiff must contain no ANSI escapes:\n%s", diff)
+	}
+}
+
+// For a float field, two different NaN bit patterns are equal by value; for a
+// non-float field the same hex strings must still diff (bit-exact).
+func TestDataDiff_NaNFloatEquality(t *testing.T) {
+	qNaN32 := "0000c07f" // 0x7fc00000, quiet NaN
+	sNaN32 := "0100807f" // 0x7f800001, a different NaN bit pattern
+	qNaN64 := "000000000000f87f"
+
+	// float field: different NaN encodings compare equal.
+	if diff := DataDiff(
+		map[string]any{"f": qNaN32}, map[string]any{"f": sNaN32},
+		[]string{"f"}, map[string]bool{"f": true},
+	); diff != "" {
+		t.Errorf("float NaN field: want equal, got diff:\n%s", diff)
+	}
+	if diff := DataDiff(
+		map[string]any{"d": qNaN64}, map[string]any{"d": "0000000000f0ff7f"},
+		[]string{"d"}, map[string]bool{"d": true},
+	); diff != "" {
+		t.Errorf("float64 NaN field: want equal, got diff:\n%s", diff)
+	}
+
+	// Same strings, but NOT declared a float field → must still diff (a bytes
+	// field must stay bit-exact).
+	if diff := DataDiff(
+		map[string]any{"b": qNaN32}, map[string]any{"b": sNaN32},
+		[]string{"b"}, nil,
+	); diff == "" {
+		t.Error("non-float field: want diff on differing bytes, got equal")
+	}
+
+	// A real value difference in a float field is still caught (1.0 vs 2.0).
+	if diff := DataDiff(
+		map[string]any{"f": "0000803f"}, map[string]any{"f": "00000040"},
+		[]string{"f"}, map[string]bool{"f": true},
+	); diff == "" {
+		t.Error("float field 1.0 vs 2.0: want diff, got equal")
 	}
 }

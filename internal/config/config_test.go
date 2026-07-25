@@ -317,3 +317,46 @@ func TestParseType_UnknownStillErrors(t *testing.T) {
 		}
 	}
 }
+
+// A _formats.yaml may mix bare names (oracle defaults to bytes) with
+// {name, oracle} mappings; LoadSuite exposes the resolution via OracleFor.
+func TestFormatSpecOracle(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "_formats.yaml"),
+		"formats:\n  - binary\n  - name: json\n    oracle: semantic\n")
+	mustWrite(t, filepath.Join(dir, "t.yaml"),
+		"fields:\n  - x: uint32\nformats: [binary, json]\ncases:\n  - name: c1\n    data:\n      x: 1\n")
+
+	set, err := LoadSuite(dir)
+	if err != nil {
+		t.Fatalf("LoadSuite: %v", err)
+	}
+	if got := set.OracleFor("binary"); got != OracleBytes {
+		t.Errorf("OracleFor(binary) = %q, want %q (bare name defaults to bytes)", got, OracleBytes)
+	}
+	if got := set.OracleFor("json"); got != OracleSemantic {
+		t.Errorf("OracleFor(json) = %q, want %q", got, OracleSemantic)
+	}
+	if got := set.OracleFor("unlisted"); got != OracleBytes {
+		t.Errorf("OracleFor(unlisted) = %q, want %q (default)", got, OracleBytes)
+	}
+}
+
+func TestFormatSpecOracle_Invalid(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "_formats.yaml"),
+		"formats:\n  - name: binary\n    oracle: bogus\n")
+	mustWrite(t, filepath.Join(dir, "t.yaml"),
+		"fields:\n  - x: uint32\nformats: [binary]\ncases:\n  - name: c1\n    data:\n      x: 1\n")
+	if _, err := LoadSuite(dir); err == nil || !strings.Contains(err.Error(), "unknown oracle") {
+		t.Fatalf("LoadSuite error = %v, want unknown oracle", err)
+	}
+}
+
+// With no _formats.yaml at all, every format resolves to bytes.
+func TestOracleFor_NoRegistry(t *testing.T) {
+	set := &CasesSet{}
+	if got := set.OracleFor("binary"); got != OracleBytes {
+		t.Errorf("OracleFor without registry = %q, want %q", got, OracleBytes)
+	}
+}

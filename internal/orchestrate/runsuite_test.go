@@ -16,6 +16,7 @@ package orchestrate
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -24,6 +25,26 @@ import (
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/worker"
 )
+
+// stubScript builds a stub worker that serializes to a fixed hex and
+// deserializes to fixed data — both parameterized so a test can make two workers
+// disagree on bytes while agreeing on the decoded value. deserData must already
+// carry shell-escaped quotes (e.g. `{\"x\":1}`).
+func stubScript(serHex, deserData string) string {
+	return fmt.Sprintf(`#!/bin/sh
+while read line; do
+  op=$(echo "$line" | sed 's/.*"op":"\([^"]*\)".*/\1/')
+  id=$(echo "$line" | sed 's/.*"id":"\([^"]*\)".*/\1/')
+  case "$op" in
+    ping) echo '{"op":"ping","protocol_version":2,"status":"OK"}' ;;
+    bind) echo '{"op":"bind","status":"OK"}' ;;
+    serialize) echo "{\"id\":\"$id\",\"op\":\"serialize\",\"status\":\"OK\",\"hex\":\"%s\"}" ;;
+    deserialize) echo "{\"id\":\"$id\",\"op\":\"deserialize\",\"status\":\"OK\",\"data\":%s}" ;;
+    exit) exit 0 ;;
+  esac
+done
+`, serHex, deserData)
+}
 
 // stubWorkerScript is a minimal shell worker: it answers ping and bind with OK,
 // serialize with fixed hex, and deserialize with the fixed data {"x":1}.
@@ -254,5 +275,55 @@ func TestRunSuite_CancelledContextReturnsPromptly(t *testing.T) {
 		// 30s timeout.
 	case <-time.After(10 * time.Second):
 		t.Fatal("RunSuite did not return promptly with a cancelled context")
+	}
+}
+
+// TestRunSuite_SemanticOracle_ByteDivergence pins the core of the oracle switch:
+// two workers that emit different bytes but decode to the same value must FAIL
+// under the bytes oracle and PASS under the semantic oracle.
+func TestRunSuite_SemanticOracle_ByteDivergence(t *testing.T) {
+	id := config.TestIDFmt("thing", "binary", "basic")
+
+	run := func(t *testing.T, oracle string) report.Result {
+		workers := map[string]*worker.Worker{
+			"ref":   startStubWorker(t, "ref", stubScript("aaaa", `{\"x\":1}`)),
+			"other": startStubWorker(t, "other", stubScript("bbbb", `{\"x\":1}`)),
+		}
+		set := testCasesSet()
+		set.Oracles = map[string]string{"binary": oracle}
+		rep := newTestReport(set, []string{"ref", "other"})
+		if err := RunSuite(context.Background(), set, workers, rep, Options{TimeoutSec: 5}); err != nil {
+			t.Fatalf("RunSuite: %v", err)
+		}
+		return rep.Results[id]["other"][report.OpSerialize]
+	}
+
+	if got := run(t, config.OracleBytes); got.Status != report.StatusFail {
+		t.Errorf("bytes oracle: other serialize = %q (%s), want FAIL on byte divergence",
+			got.Status, got.Detail)
+	}
+	if got := run(t, config.OracleSemantic); got.Status != report.StatusPass {
+		t.Errorf("semantic oracle: other serialize = %q (%s), want PASS (decodes to same value)",
+			got.Status, got.Detail)
+	}
+}
+
+// TestRunSuite_SemanticOracle_ValueMismatchFails: when the reference decodes a
+// candidate's bytes to a different value, the semantic oracle must FAIL.
+func TestRunSuite_SemanticOracle_ValueMismatchFails(t *testing.T) {
+	workers := map[string]*worker.Worker{
+		"ref":   startStubWorker(t, "ref", stubScript("aaaa", `{\"x\":2}`)),
+		"other": startStubWorker(t, "other", stubScript("bbbb", `{\"x\":1}`)),
+	}
+	set := testCasesSet()
+	set.Oracles = map[string]string{"binary": config.OracleSemantic}
+	rep := newTestReport(set, []string{"ref", "other"})
+	if err := RunSuite(context.Background(), set, workers, rep, Options{TimeoutSec: 5}); err != nil {
+		t.Fatalf("RunSuite: %v", err)
+	}
+	id := config.TestIDFmt("thing", "binary", "basic")
+	if got := rep.Results[id]["other"][report.OpSerialize]; got.Status != report.StatusFail {
+		t.Errorf("semantic oracle: other serialize = %q (%s), want FAIL on value mismatch",
+			got.Status, got.Detail)
 	}
 }

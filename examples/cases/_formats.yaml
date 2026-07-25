@@ -16,6 +16,17 @@
 # this list; `serify schema` enforces it and bakes it into the generated
 # schemas as the enum. Add new worker-supported formats here first.
 # (The "_" prefix keeps this file out of case-file loading.)
+#
+# A bare name uses the byte-for-byte (`bytes`) oracle — the default. To compare a
+# non-canonical format by decoded value instead (the reference deserializes each
+# worker's bytes; map/field order is then free), use the object form:
+#
+#   formats:
+#     - binary                 # oracle: bytes (default)
+#     - name: wire_json
+#       oracle: semantic
+#
+# See docs/protocol.md § Comparison oracles.
 formats:
   - binary
   - json

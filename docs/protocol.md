@@ -324,6 +324,41 @@ own byte encoding.
 - **Bytes**: Encoded as hex. Common mistake: storing bytes in the wire format
   without hex-decoding first.
 
+## Comparison oracles
+
+How a worker's serialize output is judged is a property of the **format**, declared
+in the suite's optional `<cases>/_formats.yaml` registry. Each format picks one of
+two oracles; the default is `bytes`.
+
+```yaml
+# _formats.yaml
+formats:
+  - binary            # bare name ⇒ oracle: bytes
+  - name: wire_json   # object form opts into a different oracle
+    oracle: semantic
+```
+
+| Oracle | How the verdict is reached | Use it for |
+|--------|----------------------------|------------|
+| `bytes` (default) | The worker's serialized bytes are compared **byte-for-byte** against the reference worker's. | Canonical/deterministic formats, where the exact wire layout is the contract (a wire protocol whose bytes are hashed, signed, framed, or stored). |
+| `semantic` | The reference worker **deserializes the worker's bytes** and the decoded value is compared to the expected case data (order-insensitive for maps). | Non-canonical formats whose serialization is deliberately unordered (e.g. protobuf: map-entry and field order unspecified), where byte comparison would raise false positives. |
+
+Under `semantic`, the two directions together give full conformance: the reference
+decodes each worker's output (checks the worker's **serializer**), and each worker
+decodes the reference's output (checks its **deserializer** — the deserialize round
+below). No byte equality is required.
+
+### Map collation (bytes oracle)
+
+Because a `map<K,V>` value is unordered, byte-parity across languages is only
+possible if every worker emits entries in one key-derived order. Under the `bytes`
+oracle the contract is **ascending by the key's UTF-8 bytes** (equivalently, Unicode
+code-point order). Watch the trap in UTF-16 languages (JavaScript, Java, C#): their
+native string sort orders by UTF-16 code unit, which places astral-plane keys
+(≥ U+10000) *before* keys in U+E000–U+FFFF — the opposite of UTF-8 order. Sort on the
+UTF-8 bytes, not the native string comparator. Under the `semantic` oracle map order
+does not matter, so sorting is the worker author's free choice.
+
 ## Type system
 
 The canonical type names used in the `type` field of schema entries:

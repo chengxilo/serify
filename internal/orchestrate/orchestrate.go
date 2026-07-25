@@ -31,6 +31,7 @@ import (
 	"github.com/chengxilo/serify/internal/config"
 	"github.com/chengxilo/serify/internal/protocol"
 	"github.com/chengxilo/serify/internal/report"
+	"github.com/chengxilo/serify/internal/typekind"
 	"github.com/chengxilo/serify/internal/worker"
 )
 
@@ -40,6 +41,10 @@ type Options struct {
 	TimeoutSec int
 	KnownFails map[string]map[string]string // lang → testID → reason
 	Audit      bool
+	// Oracle is the comparison strategy for the format currently under test
+	// (config.OracleBytes or config.OracleSemantic). RunSuite sets it per format
+	// before calling Run; empty is treated as OracleBytes.
+	Oracle string
 }
 
 // RunSuite tests every type in the set against the workers, across each of the
@@ -58,7 +63,10 @@ func RunSuite(
 	var firstErr error
 	for _, ty := range set.Types {
 		for _, format := range ty.Formats {
-			if err := runTypeFormat(ctx, set, ty, format, workers, rep, opts); err != nil {
+			// Resolve the comparison oracle for this format (defaults to bytes).
+			fmtOpts := opts
+			fmtOpts.Oracle = set.OracleFor(format)
+			if err := runTypeFormat(ctx, set, ty, format, workers, rep, fmtOpts); err != nil {
 				if firstErr == nil {
 					firstErr = err
 				}
@@ -169,8 +177,14 @@ func Run(
 	langs := OrderedLangs(workers, refLang)
 
 	fieldNames := make([]string, len(cases.Schema))
+	// floatFields carry their value as IEEE-754 hex on the wire; DataDiff treats
+	// two NaN encodings as equal for them (see compare.DataDiff).
+	floatFields := make(map[string]bool)
 	for i, f := range cases.Schema {
 		fieldNames[i] = f.Name
+		if f.Type.Base == typekind.Float32 || f.Type.Base == typekind.Float64 {
+			floatFields[f.Name] = true
+		}
 	}
 
 	var firstErr error
@@ -296,7 +310,20 @@ func Run(
 				continue
 			}
 
-			status, detail := verdict(compare.HexDiff(refHex, hexResults[lang]), reason, known)
+			var diff string
+			switch opts.Oracle {
+			case config.OracleSemantic:
+				// Semantic oracle: the reference deserializes the candidate's
+				// bytes and we compare the decoded value, not the bytes — so map
+				// entry order and other non-canonical wire freedom do not fail.
+				// This checks the candidate's serializer; Round 2 checks its
+				// deserializer, giving bidirectional semantic conformance.
+				diff = semanticSerializeDiff(ctx, workers[refLang], tc.Name, lang,
+					hexResults[lang], encoded, fieldNames, floatFields, opts.TimeoutSec)
+			default: // OracleBytes (also the empty default)
+				diff = compare.HexDiff(refHex, hexResults[lang])
+			}
+			status, detail := verdict(diff, reason, known)
 			rep.Add(report.Result{
 				TestID: tc.Name, Language: lang, Operation: report.OpSerialize,
 				Status: status, Detail: detail,
@@ -344,7 +371,7 @@ func Run(
 				if resp != nil && resp.Status == protocol.StatusOK {
 					reason, known := opts.KnownFails[lang][tc.Name]
 					status, detail = verdict(
-						compare.DataDiff(encoded, resp.Data, fieldNames), reason, known)
+						compare.DataDiff(encoded, resp.Data, fieldNames, floatFields), reason, known)
 				}
 
 				rep.Add(report.Result{
@@ -381,7 +408,7 @@ func Run(
 
 		// -- Round 3: Full Matrix (optional) ----------------------------
 		if opts.FullMatrix {
-			if err := runMatrix(ctx, tc, encoded, fieldNames, langs, workers, hexResults, rep, opts); err != nil {
+			if err := runMatrix(ctx, tc, encoded, fieldNames, floatFields, langs, workers, hexResults, rep, opts); err != nil {
 				return err
 			}
 		}
@@ -394,6 +421,7 @@ func runMatrix(
 	tc config.TestCase,
 	encoded map[string]any,
 	fieldNames []string,
+	floatFields map[string]bool,
 	langs []string,
 	workers map[string]*worker.Worker,
 	hexResults map[string]string,
@@ -424,7 +452,7 @@ func runMatrix(
 				}, opts.TimeoutSec)
 				status, detail := resolveResult(dstLang, tc.Name, resp, err, opts.KnownFails)
 				if status == report.StatusPass && resp != nil {
-					diff := compare.DataDiff(encoded, resp.Data, fieldNames)
+					diff := compare.DataDiff(encoded, resp.Data, fieldNames, floatFields)
 					if diff != "" {
 						status = report.StatusFail
 						detail = diff
@@ -442,6 +470,38 @@ func runMatrix(
 		}
 	}
 	return g.Wait()
+}
+
+// semanticSerializeDiff implements the semantic serialize oracle: it asks the
+// reference worker to deserialize a candidate's serialized bytes and diffs the
+// decoded value against the expected case data (order-insensitive for maps). A
+// non-empty return means the candidate's output did not decode to the right
+// value — or the reference could not decode it at all; "" means it conformed.
+func semanticSerializeDiff(
+	ctx context.Context,
+	ref *worker.Worker,
+	testID, srcLang, srcHex string,
+	encoded map[string]any,
+	fieldNames []string,
+	floatFields map[string]bool,
+	timeoutSec int,
+) string {
+	resp, err := ref.Send(ctx, protocol.DeserializeRequest{
+		ID:  fmt.Sprintf("%s/semantic-%s", testID, srcLang),
+		Op:  "deserialize",
+		Hex: srcHex,
+	}, timeoutSec)
+	if err != nil {
+		return fmt.Sprintf("reference could not deserialize %s output: %v", srcLang, err)
+	}
+	if resp == nil || resp.Status != protocol.StatusOK {
+		detail := "reference could not deserialize " + srcLang + " output"
+		if resp != nil && resp.Error != "" {
+			detail += ": " + resp.Error
+		}
+		return detail
+	}
+	return compare.DataDiff(encoded, resp.Data, fieldNames, floatFields)
 }
 
 // verdict turns one comparison outcome into a status, honouring known failures.
