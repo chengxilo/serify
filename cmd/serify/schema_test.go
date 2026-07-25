@@ -20,6 +20,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSchemaGen_FileLevelStructure(t *testing.T) {
@@ -38,62 +41,40 @@ cases:
       name: "Alice"
 `)
 
-	if err := runSchemaGen(dir); err != nil {
-		t.Fatalf("runSchemaGen: %v", err)
-	}
+	require.NoError(t, runSchemaGen(dir), "runSchemaGen")
 
 	// Verify .schemas/ was created.
 	sd := filepath.Join(dir, ".schemas")
-	if _, err := os.Stat(sd); os.IsNotExist(err) {
-		t.Fatalf(".schemas/ not created")
-	}
+	require.DirExists(t, sd, ".schemas/ not created")
 
 	// Verify defs.schema.json exists and has required definitions.
 	defsB, err := os.ReadFile(filepath.Join(sd, "defs.schema.json"))
-	if err != nil {
-		t.Fatalf("defs.schema.json: %v", err)
-	}
+	require.NoError(t, err, "defs.schema.json")
 	var defs map[string]any
-	if err := json.Unmarshal(defsB, &defs); err != nil {
-		t.Fatalf("unmarshal defs.schema.json: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(defsB, &defs), "unmarshal defs.schema.json")
 	d := defs["definitions"].(map[string]any)
 	for _, name := range []string{"uint8", "uint64", "int64", "uint128", "int128", "bytes", "fieldsSection"} {
-		if _, ok := d[name]; !ok {
-			t.Errorf("missing definition %q", name)
-		}
+		assert.Contains(t, d, name, "missing definition %q", name)
 	}
 	// formats is per-file (enum of the file's own declared formats), so it
 	// must not be a shared definition.
-	if _, ok := d["formatsSection"]; ok {
-		t.Error("formatsSection must not be in defs: formats are per-file, generated from the user's formats list")
-	}
+	assert.NotContains(t, d, "formatsSection", "formatsSection must not be in defs: formats are per-file, generated from the user's formats list")
 
 	// Verify person.schema.json is a file-level schema.
 	personB, err := os.ReadFile(filepath.Join(sd, "person.schema.json"))
-	if err != nil {
-		t.Fatalf("person.schema.json: %v", err)
-	}
+	require.NoError(t, err, "person.schema.json")
 	var person map[string]any
-	if err := json.Unmarshal(personB, &person); err != nil {
-		t.Fatalf("unmarshal person.schema.json: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(personB, &person), "unmarshal person.schema.json")
 
-	if person["type"] != "object" {
-		t.Error("top-level schema must be object")
-	}
+	assert.Equal(t, "object", person["type"], "top-level schema must be object")
 	props := person["properties"].(map[string]any)
 	for _, k := range []string{"import", "fields", "formats", "cases"} {
-		if _, ok := props[k]; !ok {
-			t.Errorf("top-level properties missing %q", k)
-		}
+		assert.Contains(t, props, k, "top-level properties missing %q", k)
 	}
 
 	// The formats enum is generated from the file's own formats: list.
 	fitems := props["formats"].(map[string]any)["items"].(map[string]any)
-	if enum, ok := fitems["enum"].([]any); !ok || len(enum) != 1 || enum[0] != "binary" {
-		t.Errorf("formats items = %v, want enum [binary] from the declared formats", fitems)
-	}
+	assert.Equal(t, []any{"binary"}, fitems["enum"], "formats items = %v, want enum [binary] from the declared formats", fitems)
 	req := person["required"].([]any)
 	foundFormats, foundCases := false, false
 	for _, r := range req {
@@ -104,41 +85,28 @@ cases:
 			foundCases = true
 		}
 	}
-	if !foundFormats || !foundCases {
-		t.Error("top-level required missing formats/cases")
-	}
+	assert.True(t, foundFormats, "top-level required missing formats")
+	assert.True(t, foundCases, "top-level required missing cases")
 	// schema/variants are required as a pair of alternatives, not outright: a
 	// type file declares exactly one of the two.
-	if oneOf, ok := person["oneOf"].([]any); !ok || len(oneOf) != 2 {
-		t.Errorf("expected a two-branch oneOf for schema/variants, got %v", person["oneOf"])
-	}
+	assert.Len(t, person["oneOf"], 2, "expected a two-branch oneOf for schema/variants, got %v", person["oneOf"])
 
 	// Verify the data schema inside cases has the correct fields.
 	casesProp := props["cases"].(map[string]any)
 	casesItems := casesProp["items"].(map[string]any)
 	casesProps := casesItems["properties"].(map[string]any)
 	for _, k := range []string{"name", "description", "data"} {
-		if _, ok := casesProps[k]; !ok {
-			t.Errorf("case item missing %q", k)
-		}
+		assert.Contains(t, casesProps, k, "case item missing %q", k)
 	}
 	dataSchema := casesProps["data"].(map[string]any)
 	dataProps := dataSchema["properties"].(map[string]any)
-	if _, ok := dataProps["id"]; !ok {
-		t.Error("data missing 'id' field")
-	}
-	if _, ok := dataProps["name"]; !ok {
-		t.Error("data missing 'name' field")
-	}
+	assert.Contains(t, dataProps, "id", "data missing 'id' field")
+	assert.Contains(t, dataProps, "name", "data missing 'name' field")
 
 	// Verify modeline in YAML.
 	yamlB, err := os.ReadFile(filepath.Join(dir, "person.yaml"))
-	if err != nil {
-		t.Fatalf("read person.yaml: %v", err)
-	}
-	if !strings.Contains(string(yamlB), "# yaml-language-server: $schema=.schemas/person.schema.json") {
-		t.Error("missing modeline for person.yaml")
-	}
+	require.NoError(t, err, "read person.yaml")
+	assert.Contains(t, string(yamlB), "# yaml-language-server: $schema=.schemas/person.schema.json", "missing modeline for person.yaml")
 }
 
 func TestSchemaGen_FormatsRegistry(t *testing.T) {
@@ -160,41 +128,25 @@ cases:
       id: 1
 `)
 
-	if err := runSchemaGen(dir); err != nil {
-		t.Fatalf("runSchemaGen: %v", err)
-	}
+	require.NoError(t, runSchemaGen(dir), "runSchemaGen")
 
 	// The registry becomes the shared formatsSection enum in defs.
 	defsB, err := os.ReadFile(filepath.Join(dir, ".schemas", "defs.schema.json"))
-	if err != nil {
-		t.Fatalf("defs.schema.json: %v", err)
-	}
+	require.NoError(t, err, "defs.schema.json")
 	var defs map[string]any
-	if err := json.Unmarshal(defsB, &defs); err != nil {
-		t.Fatalf("unmarshal defs.schema.json: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(defsB, &defs), "unmarshal defs.schema.json")
 	fs, ok := defs["definitions"].(map[string]any)["formatsSection"].(map[string]any)
-	if !ok {
-		t.Fatal("defs missing formatsSection despite _formats.yaml registry")
-	}
+	require.True(t, ok, "defs missing formatsSection despite _formats.yaml registry")
 	enum := fs["items"].(map[string]any)["enum"].([]any)
-	if len(enum) != 2 || enum[0] != "binary" || enum[1] != "json" {
-		t.Errorf("registry enum = %v, want [binary json]", enum)
-	}
+	assert.Equal(t, []any{"binary", "json"}, enum, "registry enum = %v, want [binary json]", enum)
 
 	// The per-file schema refs the shared definition instead of self-enumerating.
 	personB, err := os.ReadFile(filepath.Join(dir, ".schemas", "person.schema.json"))
-	if err != nil {
-		t.Fatalf("person.schema.json: %v", err)
-	}
+	require.NoError(t, err, "person.schema.json")
 	var person map[string]any
-	if err := json.Unmarshal(personB, &person); err != nil {
-		t.Fatalf("unmarshal person.schema.json: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(personB, &person), "unmarshal person.schema.json")
 	f := person["properties"].(map[string]any)["formats"].(map[string]any)
-	if f["$ref"] != "defs.schema.json#/definitions/formatsSection" {
-		t.Errorf("formats = %v, want $ref to defs formatsSection", f)
-	}
+	assert.Equal(t, "defs.schema.json#/definitions/formatsSection", f["$ref"], "formats = %v, want $ref to defs formatsSection", f)
 }
 
 func TestSchemaGen_FormatsRegistryViolation(t *testing.T) {
@@ -216,12 +168,9 @@ cases:
 `)
 
 	err := runSchemaGen(dir)
-	if err == nil {
-		t.Fatal("expected error for format not in _formats.yaml")
-	}
-	if !strings.Contains(err.Error(), `"xml"`) || !strings.Contains(err.Error(), "_formats.yaml") {
-		t.Errorf("error should name the format and the registry, got: %v", err)
-	}
+	require.Error(t, err, "expected error for format not in _formats.yaml")
+	assert.Contains(t, err.Error(), `"xml"`, "error should name the format and the registry, got: %v", err)
+	assert.Contains(t, err.Error(), "_formats.yaml", "error should name the format and the registry, got: %v", err)
 }
 
 func TestSchemaGen_ReusableType(t *testing.T) {
@@ -233,38 +182,23 @@ fields:
   - zip: uint32
 `)
 
-	if err := runSchemaGen(dir); err != nil {
-		t.Fatalf("runSchemaGen: %v", err)
-	}
+	require.NoError(t, runSchemaGen(dir), "runSchemaGen")
 
 	// Reusable type must point to reusable.schema.json.
 	yamlB, err := os.ReadFile(filepath.Join(dir, "addr.yaml"))
-	if err != nil {
-		t.Fatalf("read addr.yaml: %v", err)
-	}
-	if !strings.Contains(string(yamlB), "# yaml-language-server: $schema=.schemas/reusable.schema.json") {
-		t.Error("reusable type must use reusable.schema.json")
-	}
+	require.NoError(t, err, "read addr.yaml")
+	assert.Contains(t, string(yamlB), "# yaml-language-server: $schema=.schemas/reusable.schema.json", "reusable type must use reusable.schema.json")
 
 	// reusable.schema.json must exist and NOT require formats/cases.
 	rb, err := os.ReadFile(filepath.Join(dir, ".schemas", "reusable.schema.json"))
-	if err != nil {
-		t.Fatalf("reusable.schema.json: %v", err)
-	}
+	require.NoError(t, err, "reusable.schema.json")
 	var reusable map[string]any
-	if err := json.Unmarshal(rb, &reusable); err != nil {
-		t.Fatalf("unmarshal reusable.schema.json: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(rb, &reusable), "unmarshal reusable.schema.json")
 	if req, ok := reusable["required"].([]any); ok {
-		for _, r := range req {
-			if r.(string) == "formats" || r.(string) == "cases" {
-				t.Error("reusable schema must not require formats or cases")
-			}
-		}
+		assert.NotContains(t, req, "formats", "reusable schema must not require formats")
+		assert.NotContains(t, req, "cases", "reusable schema must not require cases")
 	}
-	if oneOf, ok := reusable["oneOf"].([]any); !ok || len(oneOf) != 2 {
-		t.Errorf("expected a two-branch oneOf for schema/variants, got %v", reusable["oneOf"])
-	}
+	assert.Len(t, reusable["oneOf"], 2, "expected a two-branch oneOf for schema/variants, got %v", reusable["oneOf"])
 }
 
 func TestSchemaGen_ModelineUpdate(t *testing.T) {
@@ -282,26 +216,16 @@ cases:
     data:
       id: 1
 `)
-	if err := runSchemaGen(dir); err != nil {
-		t.Fatalf("first run: %v", err)
-	}
+	require.NoError(t, runSchemaGen(dir), "first run")
 
 	yamlB, _ := os.ReadFile(filepath.Join(dir, "rec.yaml"))
-	if strings.Contains(string(yamlB), "old.schema.json") {
-		t.Error("stale modeline must be replaced")
-	}
-	if !strings.Contains(string(yamlB), "rec.schema.json") {
-		t.Error("current modeline must be present")
-	}
+	assert.NotContains(t, string(yamlB), "old.schema.json", "stale modeline must be replaced")
+	assert.Contains(t, string(yamlB), "rec.schema.json", "current modeline must be present")
 
 	// Second run with correct modeline already present — must be idempotent.
-	if err := runSchemaGen(dir); err != nil {
-		t.Fatalf("second run: %v", err)
-	}
+	require.NoError(t, runSchemaGen(dir), "second run")
 	yamlB2, _ := os.ReadFile(filepath.Join(dir, "rec.yaml"))
-	if strings.Count(string(yamlB2), "# yaml-language-server:") != 1 {
-		t.Error("modeline must not be duplicated")
-	}
+	assert.Equal(t, 1, strings.Count(string(yamlB2), "# yaml-language-server:"), "modeline must not be duplicated")
 }
 
 func TestSchemaGen_AllTypeForms(t *testing.T) {
@@ -354,18 +278,12 @@ cases:
       arr: [1, 2, 3, 4]
       mp: {}
 `)
-	if err := runSchemaGen(dir); err != nil {
-		t.Fatalf("runSchemaGen: %v", err)
-	}
+	require.NoError(t, runSchemaGen(dir), "runSchemaGen")
 
 	schemaB, err := os.ReadFile(filepath.Join(dir, ".schemas", "all.schema.json"))
-	if err != nil {
-		t.Fatalf("all.schema.json: %v", err)
-	}
+	require.NoError(t, err, "all.schema.json")
 	var schema map[string]any
-	if err := json.Unmarshal(schemaB, &schema); err != nil {
-		t.Fatalf("unmarshal all.schema.json: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(schemaB, &schema), "unmarshal all.schema.json")
 
 	// Drill into the data schema props.
 	c := schema["properties"].(map[string]any)["cases"].(map[string]any)
@@ -387,38 +305,32 @@ cases:
 		"mp":   {},
 	}
 	for field, expect := range checks {
-		f, ok := props[field]
-		if !ok {
-			t.Errorf("field %q missing from data schema", field)
+		if !assert.Contains(t, props, field, "field %q missing from data schema", field) {
 			continue
 		}
+		f := props[field]
 		fm := f.(map[string]any)
-		if expect.hasRef && fm["$ref"] == nil {
-			t.Errorf("field %q: expected $ref, got %v", field, fm)
+		if expect.hasRef {
+			assert.NotNil(t, fm["$ref"], "field %q: expected $ref, got %v", field, fm)
 		}
-		if expect.hasAnyOf && fm["anyOf"] == nil {
-			t.Errorf("field %q: expected anyOf, got %v", field, fm)
+		if expect.hasAnyOf {
+			assert.NotNil(t, fm["anyOf"], "field %q: expected anyOf, got %v", field, fm)
 		}
 	}
 
 	// arr must have minItems/maxItems.
 	arrF := props["arr"].(map[string]any)
-	if arrF["minItems"] != 4.0 || arrF["maxItems"] != 4.0 {
-		t.Errorf("array: expected minItems=4, maxItems=4, got %v", arrF)
-	}
+	assert.Equal(t, float64(4), arrF["minItems"], "array: expected minItems=4, maxItems=4, got %v", arrF)
+	assert.Equal(t, float64(4), arrF["maxItems"], "array: expected minItems=4, maxItems=4, got %v", arrF)
 }
 
 func TestSchemaGen_RejectsEmptyDir(t *testing.T) {
 	dir := t.TempDir()
 	err := runSchemaGen(dir)
-	if err == nil {
-		t.Error("expected error for empty directory")
-	}
+	assert.Error(t, err, "expected error for empty directory")
 }
 
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(strings.TrimLeft(content, "\n")), 0644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(strings.TrimLeft(content, "\n")), 0644))
 }

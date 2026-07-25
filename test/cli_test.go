@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/chengxilo/serify/internal/language"
 	"github.com/chengxilo/serify/internal/report"
@@ -35,9 +36,7 @@ import (
 func TestCLI_Run(t *testing.T) {
 	requireWorkers(t, happy.langs...)
 	out, code := testutil.RunSerify(t, happy.runArgs("go", happy.CasePath())...)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0\n%s", code, out)
-	}
+	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 	t.Log(out)
 	assert.Contains(t, out, "Suite:", "run")
 	assert.Contains(t, out, "case id", "run") // table header
@@ -66,9 +65,7 @@ func TestCLI_Run_AllLanguages(t *testing.T) {
 	args := []string{"run", "--ref", "go", "--cases", happy.CasePath(), "--csv", csv, "--no-build"}
 	args = append(args, paths...)
 	out, code := testutil.RunSerify(t, args...)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (langs: %s)\n%s", code, strings.Join(langs, ", "), out)
-	}
+	require.Equal(t, 0, code, "exit code = %d, want 0 (langs: %s)\n%s", code, strings.Join(langs, ", "), out)
 
 	cases := []string{
 		"basic", "zero", "boundary", "large_collections", "signed_max",
@@ -93,9 +90,7 @@ func TestCLI_RunCSVAndTable(t *testing.T) {
 
 	csv := filepath.Join(t.TempDir(), "out.csv")
 	out, code := testutil.RunSerify(t, happy.runArgs("rust", happy.CasePath(), "--csv", csv)...)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0\n%s", code, out)
-	}
+	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 	assert.Contains(t, out, "Wrote results to", "run --csv")
 
 	// Verify CSV via the grid helpers (structured, not raw substring checks).
@@ -104,15 +99,13 @@ func TestCLI_RunCSVAndTable(t *testing.T) {
 	assertCell(t, grid, "all_types/json/basic", "rust", "serialize", "PASS")
 
 	tableOut, code := testutil.RunSerify(t, "table", csv)
-	if code != 0 {
-		t.Fatalf("serify table exit = %d, want 0\n%s", code, tableOut)
-	}
+	require.Equal(t, 0, code, "serify table exit = %d, want 0\n%s", code, tableOut)
 	assert.Contains(t, tableOut, "case id", "table")
 	assert.Contains(t, tableOut, "all_types/basic", "table")
 }
 
 // TestCLI_RunWithoutRef: `run` without --ref exits non-zero with a clear message
-// that --ref is required. (The old late-check message "reference language \"\"
+// that --ref is required. (The old late-check message "reference language \"\""
 // not among provided workers" has been replaced by an early validate() check.)
 func TestCLI_RunWithoutRef(t *testing.T) {
 	requireWorkers(t, happy.langs...)
@@ -123,9 +116,7 @@ func TestCLI_RunWithoutRef(t *testing.T) {
 			"--no-build",
 		},
 		happy.WorkerPaths())...)
-	if code == 0 {
-		t.Fatalf("expected non-zero exit, got 0\n%s", out)
-	}
+	require.NotEqual(t, 0, code, "expected non-zero exit, got 0\n%s", out)
 	assert.Contains(t, out, "--ref is required and must name one of the worker languages", "ref-missing")
 }
 
@@ -139,9 +130,7 @@ func TestCLI_CasesMustDeclareFormats(t *testing.T) {
 			"--no-build",
 		},
 		invalidSchema.WorkerPaths())...)
-	if code == 0 {
-		t.Fatalf("expected non-zero exit, got 0\n%s", out)
-	}
+	require.NotEqual(t, 0, code, "expected non-zero exit, got 0\n%s", out)
 	assert.Contains(t, out, "must declare at least one format", "no-formats")
 }
 
@@ -149,9 +138,7 @@ func TestCLI_CasesMustDeclareFormats(t *testing.T) {
 func TestCLI_TableMissingFile(t *testing.T) {
 	out, code := testutil.RunSerify(t,
 		"table", filepath.Join(t.TempDir(), "nope.csv"))
-	if code == 0 {
-		t.Fatalf("expected non-zero exit, got 0\n%s", out)
-	}
+	require.NotEqual(t, 0, code, "expected non-zero exit, got 0\n%s", out)
 	assert.Contains(t, out, "open", "table-missing")
 }
 
@@ -159,9 +146,7 @@ func TestCLI_TableMissingFile(t *testing.T) {
 func TestCLI_Run_JUnit(t *testing.T) {
 	requireWorkers(t, happy.langs...)
 	out, code := testutil.RunSerify(t, happy.runArgs("go", happy.CasePath(), "--output", "junit")...)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0\n%s", code, out)
-	}
+	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 	assert.Contains(t, out, "<testsuites>", "junit")
 	assert.Contains(t, out, "<testcase", "junit")
 }

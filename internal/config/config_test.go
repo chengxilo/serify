@@ -17,17 +17,16 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
 func TestImport(t *testing.T) {
@@ -43,26 +42,22 @@ func TestImport(t *testing.T) {
 		"import:\n  - label.yaml\n  - buyer.yaml\nfields:\n  - tag: label\n  - who: buyer\n")
 
 	cf, err := LoadCases(filepath.Join(dir, "order.yaml"))
-	if err != nil {
-		t.Fatalf("LoadCases: %v", err)
-	}
+	require.NoError(t, err, "LoadCases: %v", err)
 	byName := map[string]FieldType{}
 	for _, f := range cf.Schema {
 		byName[f.Name] = f.Type
 	}
 
 	// tag <- imported registry (_labels.yaml)
-	if tag := byName["tag"]; tag.Base != "struct" || len(tag.Fields) != 2 {
-		t.Errorf("imported Label not resolved: %+v", tag)
-	}
+	tag := byName["tag"]
+	assert.Equal(t, "struct", tag.Base, "imported Label not resolved: %+v", tag)
+	assert.Len(t, tag.Fields, 2, "imported Label not resolved: %+v", tag)
 	// who <- imported per-type file (buyer); buyer.home <- auto-loaded Address
 	who := byName["who"]
-	if who.Base != "struct" || len(who.Fields) != 2 {
-		t.Fatalf("imported buyer not resolved: %+v", who)
-	}
-	if who.Fields[1].Name != "home" || who.Fields[1].Type.Base != "struct" {
-		t.Errorf("buyer.home (cross-ref to Address) not resolved: %+v", who.Fields[1])
-	}
+	require.Equal(t, "struct", who.Base, "imported buyer not resolved: %+v", who)
+	require.Len(t, who.Fields, 2, "imported buyer not resolved: %+v", who)
+	assert.Equal(t, "home", who.Fields[1].Name, "buyer.home (cross-ref to Address) not resolved: %+v", who.Fields[1])
+	assert.Equal(t, "struct", who.Fields[1].Type.Base, "buyer.home (cross-ref to Address) not resolved: %+v", who.Fields[1])
 }
 
 func TestSchemaResolver(t *testing.T) {
@@ -83,24 +78,21 @@ func TestSchemaResolver(t *testing.T) {
 	}
 	for in, want := range cases {
 		ft, err := r.typeOf(in)
-		if err != nil {
-			t.Errorf("typeOf(%q): %v", in, err)
+		if !assert.NoError(t, err, "typeOf(%q): %v", in, err) {
 			continue
 		}
-		if got := ft.String(); got != want {
-			t.Errorf("typeOf(%q) = %q, want %q", in, got, want)
-		}
+		assert.Equal(t, want, ft.String(), "typeOf(%q) = %q, want %q", in, ft.String(), want)
 	}
 
 	// The named type's fields are inlined.
 	pt, _ := r.typeOf("Point")
-	if len(pt.Fields) != 2 || pt.Fields[0].Name != "x" || pt.Fields[0].Type.Base != "int32" {
-		t.Errorf("named type not resolved: %+v", pt.Fields)
+	if assert.Len(t, pt.Fields, 2, "named type not resolved: %+v", pt.Fields) {
+		assert.Equal(t, "x", pt.Fields[0].Name, "named type not resolved: %+v", pt.Fields)
+		assert.Equal(t, "int32", pt.Fields[0].Type.Base, "named type not resolved: %+v", pt.Fields)
 	}
 
-	if _, err := r.typeOf("nope"); err == nil {
-		t.Error("expected error for unknown type")
-	}
+	_, err := r.typeOf("nope")
+	assert.Error(t, err, "expected error for unknown type")
 }
 
 // A transparent named type is a newtype: referenced as a field it contributes
@@ -117,12 +109,8 @@ func TestSchemaResolver_Transparent(t *testing.T) {
 	})
 
 	ft, err := r.typeOf("wire_name")
-	if err != nil {
-		t.Fatalf("typeOf(wire_name): %v", err)
-	}
-	if ft.Base != typekind.String {
-		t.Errorf("transparent field ref = %q, want a bare string", ft.String())
-	}
+	require.NoError(t, err, "typeOf(wire_name): %v", err)
+	assert.Equal(t, typekind.String, ft.Base, "transparent field ref = %q, want a bare string", ft.String())
 }
 
 // A `variants:` type's entries are variants, and an entry with no type is a unit
@@ -143,29 +131,20 @@ func TestSchemaResolver_Sum(t *testing.T) {
 
 	// Referenced as a field: the sum itself, no wrapping struct.
 	ft, err := r.typeOf("identifier")
-	if err != nil {
-		t.Fatalf("typeOf(identifier): %v", err)
-	}
-	if ft.Base != typekind.Sum {
-		t.Fatalf("sum field ref = %q, want a bare sum", ft.String())
-	}
-	if len(ft.Variants) != 3 {
-		t.Fatalf("variants = %d, want 3", len(ft.Variants))
-	}
-	if ft.Variants[0].Name != "numeric" || ft.Variants[0].Type.Base != typekind.Uint32 {
-		t.Errorf("variant[0] = %+v, want numeric: uint32", ft.Variants[0])
-	}
-	if ft.Variants[2].Name != "unset" || ft.Variants[2].Type != nil {
-		t.Errorf("variant[2] = %+v, want the unit variant `unset`", ft.Variants[2])
-	}
+	require.NoError(t, err, "typeOf(identifier): %v", err)
+	require.Equal(t, typekind.Sum, ft.Base, "sum field ref = %q, want a bare sum", ft.String())
+	require.Len(t, ft.Variants, 3, "variants = %d, want 3", len(ft.Variants))
+	assert.Equal(t, "numeric", ft.Variants[0].Name, "variant[0] = %+v, want numeric: uint32", ft.Variants[0])
+	assert.Equal(t, typekind.Uint32, ft.Variants[0].Type.Base, "variant[0] = %+v, want numeric: uint32", ft.Variants[0])
+	assert.Equal(t, "unset", ft.Variants[2].Name, "variant[2] = %+v, want the unit variant `unset`", ft.Variants[2])
+	assert.Nil(t, ft.Variants[2].Type, "variant[2] = %+v, want the unit variant `unset`", ft.Variants[2])
 
 	// As the type under test: the sum carried under `value`.
 	standalone, err := r.sumSchema(named["identifier"].fields)
-	if err != nil {
-		t.Fatalf("sumSchema: %v", err)
-	}
-	if len(standalone) != 1 || standalone[0].Name != "value" || standalone[0].Type.Base != typekind.Sum {
-		t.Errorf("sum standalone = %+v, want a {value: sum} record", standalone)
+	require.NoError(t, err, "sumSchema: %v", err)
+	if assert.Len(t, standalone, 1, "sum standalone = %+v, want a {value: sum} record", standalone) {
+		assert.Equal(t, "value", standalone[0].Name, "sum standalone = %+v, want a {value: sum} record", standalone)
+		assert.Equal(t, typekind.Sum, standalone[0].Type.Base, "sum standalone = %+v, want a {value: sum} record", standalone)
 	}
 }
 
@@ -174,12 +153,8 @@ func TestSchemaResolver_Sum(t *testing.T) {
 func TestSchemaResolver_SumExpressionRejected(t *testing.T) {
 	r := newSchemaResolver(map[string]rawType{})
 	_, err := r.typeOf("sum<a: uint32, b>")
-	if err == nil {
-		t.Fatal("expected the sum type expression to be rejected")
-	}
-	if !strings.Contains(err.Error(), "variants:") {
-		t.Errorf("error should point at `variants:`: %v", err)
-	}
+	require.Error(t, err, "expected the sum type expression to be rejected")
+	assert.Contains(t, err.Error(), "variants:", "error should point at `variants:`: %v", err)
 }
 
 // A `fields:` entry with no type is a missing type; the same entry under
@@ -189,15 +164,9 @@ func TestCheckSections_UntypedEntry(t *testing.T) {
 	fs := []rawTypeField{{name: "x", typ: "uint32"}, {name: "oops"}}
 
 	err := checkSections("t.yaml", entries, nil, fs, false)
-	if err == nil {
-		t.Fatal("expected an error for a schema field with no type")
-	}
-	if !strings.Contains(err.Error(), "variants:") {
-		t.Errorf("error should point at `variants:`: %v", err)
-	}
-	if err := checkSections("t.yaml", nil, entries, fs, false); err != nil {
-		t.Errorf("the same entries are legal under variants: %v", err)
-	}
+	require.Error(t, err, "expected an error for a schema field with no type")
+	assert.Contains(t, err.Error(), "variants:", "error should point at `variants:`: %v", err)
+	assert.NoError(t, checkSections("t.yaml", nil, entries, fs, false), "the same entries are legal under variants")
 }
 
 // A type is a record or a sum, never both and never neither.
@@ -205,57 +174,38 @@ func TestCheckSections_ExactlyOneSection(t *testing.T) {
 	entries := []map[string]string{{"a": "uint32"}}
 	fs := []rawTypeField{{name: "a", typ: "uint32"}}
 
-	if err := checkSections("t.yaml", entries, entries, fs, false); err == nil {
-		t.Error("expected both sections at once to be rejected")
-	}
-	if err := checkSections("t.yaml", nil, nil, nil, false); err == nil {
-		t.Error("expected a file with neither section to be rejected")
-	}
+	assert.Error(t, checkSections("t.yaml", entries, entries, fs, false), "expected both sections at once to be rejected")
+	assert.Error(t, checkSections("t.yaml", nil, nil, nil, false), "expected a file with neither section to be rejected")
 	// transparent modifies a record; a sum is already inlined at the reference.
-	if err := checkSections("t.yaml", nil, entries, fs, true); err == nil {
-		t.Error("expected transparent on a sum to be rejected")
-	}
+	assert.Error(t, checkSections("t.yaml", nil, entries, fs, true), "expected transparent on a sum to be rejected")
 }
 
 // An unknown top-level key is an error: YAML drops what it does not recognise, so
 // a misspelled section would silently read as an empty type.
 func TestCheckKeys(t *testing.T) {
-	if err := checkKeys("t.yaml", []byte("variants:\n  - a: uint32\n")); err != nil {
-		t.Errorf("known keys must pass: %v", err)
-	}
+	assert.NoError(t, checkKeys("t.yaml", []byte("variants:\n  - a: uint32\n")), "known keys must pass")
 	// The keys this replaced (schema:, and the earlier sum:), and a plain typo.
 	for _, src := range []string{"schema:\n  - a: uint32\n", "sum: true\nfields:\n  - a: uint32\n", "feilds:\n  - a: uint32\n"} {
 		err := checkKeys("t.yaml", []byte(src))
-		if err == nil {
-			t.Errorf("expected an unknown-key error for %q", src)
+		if !assert.Error(t, err, "expected an unknown-key error for %q", src) {
 			continue
 		}
-		if !strings.Contains(err.Error(), "unknown key") {
-			t.Errorf("error should name the problem: %v", err)
-		}
+		assert.Contains(t, err.Error(), "unknown key", "error should name the problem: %v", err)
 	}
 	// Underscore keys are scratch space (YAML anchors) and stay legal.
-	if err := checkKeys("t.yaml", []byte("_anchors: x\nvariants:\n  - a: uint32\n")); err != nil {
-		t.Errorf("underscore keys must pass: %v", err)
-	}
+	assert.NoError(t, checkKeys("t.yaml", []byte("_anchors: x\nvariants:\n  - a: uint32\n")), "underscore keys must pass")
 }
 
 func TestLoadSuite_Directory(t *testing.T) {
 	set, err := LoadSuite(filepath.Join("..", "..", "examples", "cases"))
-	if err != nil {
-		t.Fatalf("LoadSuite: %v", err)
-	}
+	require.NoError(t, err, "LoadSuite: %v", err)
 	byName := map[string]*CasesFile{}
 	for _, ty := range set.Types {
 		byName[ty.Name] = ty
 	}
-	if _, ok := byName["customer"]; !ok {
-		t.Fatal("missing type customer")
-	}
-	order, ok := byName["order"]
-	if !ok {
-		t.Fatal("missing type order")
-	}
+	require.Contains(t, byName, "customer", "missing type customer")
+	require.Contains(t, byName, "order", "missing type order")
+	order := byName["order"]
 
 	// The shared `address` struct must be resolved into both types via `ref:`.
 	for _, ty := range []string{"customer", "order"} {
@@ -266,17 +216,11 @@ func TestLoadSuite_Directory(t *testing.T) {
 				addr = &ft
 			}
 		}
-		if addr == nil {
-			t.Fatalf("type %q: no struct field using shared address", ty)
-		}
-		if len(addr.Fields) < 2 {
-			t.Errorf("type %q: shared address not resolved (got %d fields): %+v", ty, len(addr.Fields), addr.Fields)
-		}
+		require.NotNil(t, addr, "type %q: no struct field using shared address", ty)
+		assert.GreaterOrEqual(t, len(addr.Fields), 2, "type %q: shared address not resolved (got %d fields): %+v", ty, len(addr.Fields), addr.Fields)
 	}
 
-	if len(order.Cases) == 0 {
-		t.Error("order has no cases")
-	}
+	assert.NotEmpty(t, order.Cases, "order has no cases")
 }
 
 func TestParseType_Aliases(t *testing.T) {
@@ -299,22 +243,18 @@ func TestParseType_Aliases(t *testing.T) {
 	}
 	for in, want := range cases {
 		ft, err := ParseType(in)
-		if err != nil {
-			t.Errorf("ParseType(%q): unexpected error %v", in, err)
+		if !assert.NoError(t, err, "ParseType(%q): unexpected error %v", in, err) {
 			continue
 		}
-		if got := ft.String(); got != want {
-			t.Errorf("ParseType(%q).String() = %q, want %q", in, got, want)
-		}
+		assert.Equal(t, want, ft.String(), "ParseType(%q).String() = %q, want %q", in, ft.String(), want)
 	}
 }
 
 func TestParseType_UnknownStillErrors(t *testing.T) {
 	// The short forms (u8, f32, …) were removed and must now error.
 	for _, in := range []string{"uint", "u33", "nope", "u8", "u64", "i32", "f32", "f64"} {
-		if _, err := ParseType(in); err == nil {
-			t.Errorf("ParseType(%q): expected error, got nil", in)
-		}
+		_, err := ParseType(in)
+		assert.Error(t, err, "ParseType(%q): expected error, got nil", in)
 	}
 }
 
@@ -328,18 +268,13 @@ func TestFormatSpecOracle(t *testing.T) {
 		"fields:\n  - x: uint32\nformats: [binary, json]\ncases:\n  - name: c1\n    data:\n      x: 1\n")
 
 	set, err := LoadSuite(dir)
-	if err != nil {
-		t.Fatalf("LoadSuite: %v", err)
-	}
-	if got := set.OracleFor("binary"); got != OracleBytes {
-		t.Errorf("OracleFor(binary) = %q, want %q (bare name defaults to bytes)", got, OracleBytes)
-	}
-	if got := set.OracleFor("json"); got != OracleSemantic {
-		t.Errorf("OracleFor(json) = %q, want %q", got, OracleSemantic)
-	}
-	if got := set.OracleFor("unlisted"); got != OracleBytes {
-		t.Errorf("OracleFor(unlisted) = %q, want %q (default)", got, OracleBytes)
-	}
+	require.NoError(t, err, "LoadSuite: %v", err)
+	got := set.OracleFor("binary")
+	assert.Equal(t, OracleBytes, got, "OracleFor(binary) = %q, want %q (bare name defaults to bytes)", got, OracleBytes)
+	got = set.OracleFor("json")
+	assert.Equal(t, OracleSemantic, got, "OracleFor(json) = %q, want %q", got, OracleSemantic)
+	got = set.OracleFor("unlisted")
+	assert.Equal(t, OracleBytes, got, "OracleFor(unlisted) = %q, want %q (default)", got, OracleBytes)
 }
 
 func TestFormatSpecOracle_Invalid(t *testing.T) {
@@ -348,15 +283,14 @@ func TestFormatSpecOracle_Invalid(t *testing.T) {
 		"formats:\n  - name: binary\n    oracle: bogus\n")
 	mustWrite(t, filepath.Join(dir, "t.yaml"),
 		"fields:\n  - x: uint32\nformats: [binary]\ncases:\n  - name: c1\n    data:\n      x: 1\n")
-	if _, err := LoadSuite(dir); err == nil || !strings.Contains(err.Error(), "unknown oracle") {
-		t.Fatalf("LoadSuite error = %v, want unknown oracle", err)
-	}
+	_, err := LoadSuite(dir)
+	require.Error(t, err, "LoadSuite error = %v, want unknown oracle", err)
+	assert.Contains(t, err.Error(), "unknown oracle", "LoadSuite error = %v, want unknown oracle", err)
 }
 
 // With no _formats.yaml at all, every format resolves to bytes.
 func TestOracleFor_NoRegistry(t *testing.T) {
 	set := &CasesSet{}
-	if got := set.OracleFor("binary"); got != OracleBytes {
-		t.Errorf("OracleFor without registry = %q, want %q", got, OracleBytes)
-	}
+	got := set.OracleFor("binary")
+	assert.Equal(t, OracleBytes, got, "OracleFor without registry = %q, want %q", got, OracleBytes)
 }

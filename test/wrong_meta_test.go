@@ -29,6 +29,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/chengxilo/serify/internal/language"
 	"github.com/chengxilo/serify/internal/testutil"
 
@@ -41,9 +43,7 @@ func loadWrongType(t *testing.T) *config.CasesFile {
 	cf, err := config.LoadCases(
 		filepath.Join(
 			testutil.RepoRoot(), "test", "cases", "wrong", "cases", "wrong.yaml"))
-	if err != nil {
-		t.Fatalf("load wrong.yaml: %v", err)
-	}
+	require.NoError(t, err, "load wrong.yaml")
 	return cf
 }
 
@@ -51,13 +51,9 @@ func loadWrongType(t *testing.T) *config.CasesFile {
 func caseFlag(t *testing.T, data map[string]any, key string) bool {
 	t.Helper()
 	v, ok := data[key]
-	if !ok {
-		t.Fatalf("case data missing %q", key)
-	}
+	require.True(t, ok, "case data missing %q", key)
 	b, ok := v.(bool)
-	if !ok {
-		t.Fatalf("case field %q is %T, want bool", key, v)
-	}
+	require.True(t, ok, "case field %q is %T, want bool", key, v)
 	return b
 }
 
@@ -70,7 +66,7 @@ func formatFlags(t *testing.T, data map[string]any, format string) (bool, bool) 
 	case "json":
 		return caseFlag(t, data, "json_serialize"), caseFlag(t, data, "json_deserialize")
 	default:
-		t.Fatalf("unexpected format %q", format)
+		require.Fail(t, "unexpected format", "format %q", format)
 		return false, false
 	}
 }
@@ -96,9 +92,7 @@ func TestWrongWorkerErrorsAreReported(t *testing.T) {
 	csv := filepath.Join(t.TempDir(), "out.csv")
 	out, code := testutil.RunSerify(t, wrong.runArgs(language.Go, wrong.CasePath(), "--csv", csv)...)
 	// Injected faults must surface as a non-zero CLI exit.
-	if code != 1 {
-		t.Fatalf("serify exit = %d, want 1 (injected faults must fail the run)\n%s", code, out)
-	}
+	require.Equal(t, 1, code, "serify exit = %d, want 1 (injected faults must fail the run)\n%s", code, out)
 
 	grid := readResultGrid(t, csv)
 
@@ -135,7 +129,5 @@ func TestWrongWorkerErrorsAreReported(t *testing.T) {
 	// worker that silently passed everything would masquerade as correct. This
 	// holds only because every case's langs contains both go and rust (each worker
 	// drops its own name, so the output diverges).
-	if expectedFails == 0 {
-		t.Fatal("vacuous test: no failures expected (does every case's langs include go and rust?)")
-	}
+	require.Greater(t, expectedFails, 0, "vacuous test: no failures expected (does every case's langs include go and rust?)")
 }

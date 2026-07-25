@@ -37,6 +37,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/chengxilo/serify/internal/language"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
@@ -48,9 +51,7 @@ func TestAuditWarningsAreReported(t *testing.T) {
 	csv := filepath.Join(t.TempDir(), "out.csv")
 	out, code := testutil.RunSerify(t, audit.runArgs(language.Go, audit.CasePath(), "--csv", csv, "--audit")...)
 
-	if code != 0 {
-		t.Fatalf("serify exit = %d, want 0 (audit warnings are advisory)\n%s", code, out)
-	}
+	require.Equal(t, 0, code, "serify exit = %d, want 0 (audit warnings are advisory)\n%s", code, out)
 
 	grid := readResultGrid(t, csv)
 
@@ -189,7 +190,8 @@ func assertNoAuditRow(t *testing.T, grid resultGrid, id, lang string) {
 	if ok {
 		for _, op := range auditOps {
 			if rec, exists := byOp[op]; exists {
-				t.Errorf("[%s / %s / %s] unexpected audit row: %s %s", id, lang, op, rec.Status, rec.Detail)
+				assert.Fail(t, "unexpected audit row",
+					"[%s / %s / %s] unexpected audit row: %s %s", id, lang, op, rec.Status, rec.Detail)
 			}
 		}
 	}
@@ -198,28 +200,16 @@ func assertNoAuditRow(t *testing.T, grid resultGrid, id, lang string) {
 func assertAuditCell(t *testing.T, grid resultGrid, id, lang, op, wantDetail string) {
 	t.Helper()
 	rec, ok := grid[id][lang][op]
-	if !ok {
-		t.Errorf("[%s / %s / %s] expected audit row, not found", id, lang, op)
+	if !assert.True(t, ok, "[%s / %s / %s] expected audit row, not found", id, lang, op) {
 		return
 	}
 	if wantDetail == "SKIP" {
-		if rec.Status != string(report.StatusSkip) {
-			t.Errorf("[%s / %s / %s] status = %s, want SKIP (detail: %s)", id, lang, op, rec.Status, rec.Detail)
-		}
+		assert.Equal(t, string(report.StatusSkip), rec.Status,
+			"[%s / %s / %s] status = %s, want SKIP (detail: %s)", id, lang, op, rec.Status, rec.Detail)
 		return
 	}
-	if rec.Status != string(report.StatusWarn) {
-		t.Errorf(
-			"[%s / %s / %s] status = %s, want %s (detail: %s)",
-			id,
-			lang,
-			op,
-			rec.Status,
-			report.StatusWarn,
-			rec.Detail,
-		)
-	}
-	if rec.Detail != wantDetail {
-		t.Errorf("[%s / %s / %s] detail = %q, want %q", id, lang, op, rec.Detail, wantDetail)
-	}
+	assert.Equal(t, string(report.StatusWarn), rec.Status,
+		"[%s / %s / %s] status = %s, want %s (detail: %s)", id, lang, op, rec.Status, report.StatusWarn, rec.Detail)
+	assert.Equal(t, wantDetail, rec.Detail,
+		"[%s / %s / %s] detail = %q, want %q", id, lang, op, rec.Detail, wantDetail)
 }

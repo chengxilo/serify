@@ -16,7 +16,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"strconv"
@@ -26,6 +25,8 @@ import (
 
 	"github.com/chengxilo/serify/internal/config"
 	"github.com/chengxilo/serify/internal/protocol"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // writeStubScript writes a minimal serify stub-worker shell script to a temp
@@ -73,18 +74,13 @@ func writeStubScript() string {
 func writeScript(t *testing.T, pattern, script string) string {
 	t.Helper()
 	f, err := os.CreateTemp(t.TempDir(), pattern)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString(script); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(f.Name(), 0755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	_, err = f.WriteString(script)
+	require.NoError(t, err)
+	err = f.Close()
+	require.NoError(t, err)
+	err = os.Chmod(f.Name(), 0755)
+	require.NoError(t, err)
 	return f.Name()
 }
 
@@ -102,14 +98,10 @@ func TestStart_HandshakeSuccess(t *testing.T) {
 	info := newStubInfo()
 
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
-	if w.Language != "stub" {
-		t.Errorf("Language = %q, want %q", w.Language, "stub")
-	}
+	assert.Equal(t, "stub", w.Language, "Language = %q, want %q", w.Language, "stub")
 }
 
 // Startup must not bind a type: ping names none, so a worker that would skip
@@ -127,37 +119,25 @@ func TestStart_BindsNoTypeOrFormat(t *testing.T) {
 	info := StartInfo{Dir: t.TempDir(), RunCmd: writeScript(t, "skips-all-*.sh", script), Language: "skipper"}
 
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed even though the worker only skips types: %v", err)
-	}
+	require.NoError(t, err, "Start failed even though the worker only skips types: %v", err)
 	defer func() { _ = w.Stop() }()
 
 	// The skip surfaces at Bind, where it is a recorded skip rather than a
 	// startup failure.
 	err = w.Bind(context.Background(), nil, "user", "binary", 3, false)
-	if !errors.Is(err, ErrTypeNotSupported) {
-		t.Errorf("Bind error = %v, want ErrTypeNotSupported", err)
-	}
+	assert.ErrorIs(t, err, ErrTypeNotSupported, "Bind error = %v, want ErrTypeNotSupported", err)
 }
 
 func TestSend_SerializeOK(t *testing.T) {
 	info := newStubInfo()
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
 	resp, err := w.Send(context.Background(), protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{"x": 1}}, 3)
-	if err != nil {
-		t.Fatalf("Send failed: %v", err)
-	}
-	if resp.Status != protocol.StatusOK {
-		t.Errorf("Status = %q, want OK", resp.Status)
-	}
-	if resp.Hex == "" {
-		t.Error("expected non-empty hex")
-	}
+	require.NoError(t, err, "Send failed: %v", err)
+	assert.Equal(t, protocol.StatusOK, resp.Status, "Status = %q, want OK", resp.Status)
+	assert.NotEmpty(t, resp.Hex, "expected non-empty hex")
 }
 
 func TestSend_ResponseIDMismatch(t *testing.T) {
@@ -167,18 +147,13 @@ func TestSend_ResponseIDMismatch(t *testing.T) {
 		"  echo '{\"id\":\"wrong\",\"op\":\"serialize\",\"status\":\"OK\",\"hex\":\"aa\"}'\n" +
 		"done\n"
 	f, err := os.CreateTemp(t.TempDir(), "mismatch-*.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString(script); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(f.Name(), 0755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	_, err = f.WriteString(script)
+	require.NoError(t, err)
+	err = f.Close()
+	require.NoError(t, err)
+	err = os.Chmod(f.Name(), 0755)
+	require.NoError(t, err)
 
 	cmd := exec.Command(f.Name())
 	stdin, _ := cmd.StdinPipe()
@@ -195,11 +170,9 @@ func TestSend_ResponseIDMismatch(t *testing.T) {
 	}
 
 	_, err = w.Send(context.Background(), protocol.SerializeRequest{ID: "correct", Op: "serialize", Data: map[string]any{}}, 2)
-	if err == nil {
-		t.Error("expected error for response ID mismatch")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "id mismatch") {
-		t.Errorf("error should mention id mismatch: %v", err)
+	assert.Error(t, err, "expected error for response ID mismatch")
+	if err != nil {
+		assert.Contains(t, strings.ToLower(err.Error()), "id mismatch", "error should mention id mismatch: %v", err)
 	}
 }
 
@@ -229,15 +202,9 @@ func TestSend_WrongOpSameID(t *testing.T) {
 
 	_, err := w.Send(context.Background(),
 		protocol.DeserializeRequest{ID: "c1", Op: "deserialize", Hex: "aa"}, 2)
-	if err == nil {
-		t.Fatal("expected an error for a serialize response to a deserialize request")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "op mismatch") {
-		t.Errorf("error should mention op mismatch: %v", err)
-	}
-	if !w.dead {
-		t.Error("worker should be marked dead: the stream is desynced")
-	}
+	require.Error(t, err, "expected an error for a serialize response to a deserialize request")
+	assert.Contains(t, strings.ToLower(err.Error()), "op mismatch", "error should mention op mismatch: %v", err)
+	assert.True(t, w.dead, "worker should be marked dead: the stream is desynced")
 }
 
 func TestSend_Timeout(t *testing.T) {
@@ -256,12 +223,8 @@ func TestSend_Timeout(t *testing.T) {
 	}
 
 	_, err := w.Send(context.Background(), protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{}}, 1)
-	if err == nil {
-		t.Error("expected timeout error")
-	}
-	if !w.dead {
-		t.Error("worker should be marked dead after timeout")
-	}
+	assert.Error(t, err, "expected timeout error")
+	assert.True(t, w.dead, "worker should be marked dead after timeout")
 }
 
 func TestSend_CrashMidRequest(t *testing.T) {
@@ -279,9 +242,7 @@ func TestSend_CrashMidRequest(t *testing.T) {
 	}
 
 	_, err := w.Send(context.Background(), protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{}}, 2)
-	if err == nil {
-		t.Error("expected error from crashed worker")
-	}
+	assert.Error(t, err, "expected error from crashed worker")
 }
 
 func TestBind_TimeoutMarksWorkerDead(t *testing.T) {
@@ -298,24 +259,16 @@ func TestBind_TimeoutMarksWorkerDead(t *testing.T) {
 		Language: "hang",
 	}
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
 	err = w.Bind(context.Background(), []config.Field{{Name: "y", Type: config.FieldType{Base: "string"}}}, "order", "binary", 1, false)
-	if err == nil {
-		t.Fatal("expected timeout error from hung bind")
-	}
-	if !w.dead {
-		t.Error("worker should be marked dead after bind timeout")
-	}
+	require.Error(t, err, "expected timeout error from hung bind")
+	assert.True(t, w.dead, "worker should be marked dead after bind timeout")
 	// A subsequent Bind must refuse immediately instead of racing the
 	// abandoned reader.
 	err = w.Bind(context.Background(), []config.Field{{Name: "y", Type: config.FieldType{Base: "string"}}}, "order", "binary", 1, false)
-	if err == nil || !strings.Contains(err.Error(), "dead") {
-		t.Errorf("second bind should fail fast with a dead-worker error, got: %v", err)
-	}
+	assert.ErrorContains(t, err, "dead", "second bind should fail fast with a dead-worker error, got: %v", err)
 }
 
 func TestSend_ContextCancelInterruptsWait(t *testing.T) {
@@ -341,92 +294,62 @@ func TestSend_ContextCancelInterruptsWait(t *testing.T) {
 
 	start := time.Now()
 	_, err := w.Send(ctx, protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{}}, 30)
-	if err == nil {
-		t.Fatal("expected error from cancelled context")
-	}
-	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Errorf("Send took %v; cancellation should interrupt the wait well before the 30s timeout", elapsed)
-	}
-	if !w.dead {
-		t.Error("worker should be marked dead after a cancelled in-flight request")
-	}
+	require.Error(t, err, "expected error from cancelled context")
+	elapsed := time.Since(start)
+	assert.Less(t, elapsed, 5*time.Second, "Send took %v; cancellation should interrupt the wait well before the 30s timeout", elapsed)
+	assert.True(t, w.dead, "worker should be marked dead after a cancelled in-flight request")
 }
 
 func TestBind_Success(t *testing.T) {
 	info := newStubInfo()
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
 	err = w.Bind(context.Background(), []config.Field{{Name: "y", Type: config.FieldType{Base: "string"}}}, "order", "binary", 3, false)
-	if err != nil {
-		t.Fatalf("Bind failed: %v", err)
-	}
+	require.NoError(t, err, "Bind failed: %v", err)
 }
 
 func TestBind_WorkerDead(t *testing.T) {
 	info := newStubInfo()
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	if err := w.Stop(); err != nil {
-		t.Fatalf("Stop failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
+	err = w.Stop()
+	require.NoError(t, err, "Stop failed: %v", err)
 
 	err = w.Bind(context.Background(), []config.Field{}, "order", "binary", 3, false)
-	if err == nil {
-		t.Error("expected error from dead worker")
-	}
+	assert.Error(t, err, "expected error from dead worker")
 }
 
 func TestStderr_ReturnsSlice(t *testing.T) {
 	info := newStubInfo()
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
 	lines := w.Stderr()
-	if lines == nil {
-		t.Error("Stderr() should return a slice, not nil")
-	}
+	assert.NotNil(t, lines, "Stderr() should return a slice, not nil")
 }
 
 // Binding an init still requires both halves; only ping may name neither.
 func TestBind_RequiresNonEmptyType(t *testing.T) {
 	w, err := Start(context.Background(), newStubInfo(), 3)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
 	err = w.Bind(context.Background(), nil, "", "binary", 3, false)
-	if err == nil {
-		t.Fatal("expected error for empty type in bind")
-	}
-	if !strings.Contains(err.Error(), "type") {
-		t.Errorf("error should reference 'type': %v", err)
-	}
+	require.Error(t, err, "expected error for empty type in bind")
+	assert.ErrorContains(t, err, "type", "error should reference 'type': %v", err)
 }
 
 func TestBind_RequiresNonEmptyFormat(t *testing.T) {
 	w, err := Start(context.Background(), newStubInfo(), 3)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
 	err = w.Bind(context.Background(), nil, "user", "", 3, false)
-	if err == nil {
-		t.Fatal("expected error for empty format in bind")
-	}
-	if !strings.Contains(err.Error(), "format") {
-		t.Errorf("error should reference 'format': %v", err)
-	}
+	require.Error(t, err, "expected error for empty format in bind")
+	assert.ErrorContains(t, err, "format", "error should reference 'format': %v", err)
 }
 
 func TestStart_BadCommand(t *testing.T) {
@@ -436,74 +359,51 @@ func TestStart_BadCommand(t *testing.T) {
 		Language: "bad",
 	}
 	_, err := Start(context.Background(), info, 2)
-	if err == nil {
-		t.Error("expected error for non-existent worker binary")
-	}
+	assert.Error(t, err, "expected error for non-existent worker binary")
 }
 
 func TestLanguage(t *testing.T) {
 	info := newStubInfo()
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
-	if w.Language != "stub" {
-		t.Errorf("Language = %q, want stub", w.Language)
-	}
+	assert.Equal(t, "stub", w.Language, "Language = %q, want stub", w.Language)
 }
 
 func TestSend_DeserializeOK(t *testing.T) {
 	info := newStubInfo()
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
 	resp, err := w.Send(context.Background(), protocol.DeserializeRequest{ID: "t2", Op: "deserialize", Hex: "aabb"}, 3)
-	if err != nil {
-		t.Fatalf("Send failed: %v", err)
-	}
-	if resp.Status != protocol.StatusOK {
-		t.Errorf("Status = %q, want OK", resp.Status)
-	}
-	if resp.Data == nil {
-		t.Error("expected non-nil data")
-	}
+	require.NoError(t, err, "Send failed: %v", err)
+	assert.Equal(t, protocol.StatusOK, resp.Status, "Status = %q, want OK", resp.Status)
+	assert.NotNil(t, resp.Data, "expected non-nil data")
 }
 
 func TestSend_DeadWorker(t *testing.T) {
 	info := newStubInfo()
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	if err := w.Stop(); err != nil {
-		t.Fatalf("Stop failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
+	err = w.Stop()
+	require.NoError(t, err, "Stop failed: %v", err)
 
 	_, err = w.Send(context.Background(), protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{}}, 2)
-	if err == nil {
-		t.Error("expected error from dead worker")
-	}
+	assert.Error(t, err, "expected error from dead worker")
 }
 
 func TestStop_Idempotent(t *testing.T) {
 	info := newStubInfo()
 	w, err := Start(context.Background(), info, 5)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
+	require.NoError(t, err, "Start failed: %v", err)
 
-	if err := w.Stop(); err != nil {
-		t.Fatalf("First Stop failed: %v", err)
-	}
+	err = w.Stop()
+	require.NoError(t, err, "First Stop failed: %v", err)
 	// Second Stop should succeed (idempotent).
-	if err := w.Stop(); err != nil {
-		t.Fatalf("Second Stop failed: %v", err)
-	}
+	err = w.Stop()
+	require.NoError(t, err, "Second Stop failed: %v", err)
 }
 
 func TestPing_VersionMismatch(t *testing.T) {
@@ -514,17 +414,11 @@ func TestPing_VersionMismatch(t *testing.T) {
 		Language: "oldver",
 	}
 	_, err := Start(context.Background(), info, 3)
-	if err == nil {
-		t.Fatal("expected an error for a worker speaking another protocol version")
-	}
-	if !strings.Contains(err.Error(), "protocol version mismatch") {
-		t.Errorf("error should name the mismatch: %v", err)
-	}
+	require.Error(t, err, "expected an error for a worker speaking another protocol version")
+	assert.ErrorContains(t, err, "protocol version mismatch", "error should name the mismatch: %v", err)
 	// Both numbers belong in the message: neither alone tells you what to rebuild.
-	if !strings.Contains(err.Error(), "99") ||
-		!strings.Contains(err.Error(), strconv.Itoa(protocol.ProtocolVersion)) {
-		t.Errorf("error should report both versions: %v", err)
-	}
+	assert.Contains(t, err.Error(), "99", "error should report both versions: %v", err)
+	assert.Contains(t, err.Error(), strconv.Itoa(protocol.ProtocolVersion), "error should report both versions: %v", err)
 }
 
 func TestPing_MissingVersion(t *testing.T) {
@@ -535,10 +429,6 @@ func TestPing_MissingVersion(t *testing.T) {
 		Language: "nover",
 	}
 	_, err := Start(context.Background(), info, 3)
-	if err == nil {
-		t.Fatal("expected an error when ping omits protocol_version")
-	}
-	if !strings.Contains(err.Error(), "protocol_version") {
-		t.Errorf("error should name the missing field: %v", err)
-	}
+	require.Error(t, err, "expected an error when ping omits protocol_version")
+	assert.ErrorContains(t, err, "protocol_version", "error should name the missing field: %v", err)
 }

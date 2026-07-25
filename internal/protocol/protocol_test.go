@@ -22,6 +22,8 @@ import (
 
 	"github.com/chengxilo/serify/internal/config"
 	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func field(name, base string) config.Field {
@@ -37,18 +39,10 @@ func TestEncodeData_Scalars(t *testing.T) {
 	data := map[string]any{"name": "alice", "age": 30, "active": true}
 
 	out, err := EncodeData(data, schema)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out["name"] != "alice" {
-		t.Errorf("name = %v", out["name"])
-	}
-	if out["age"] != 30 {
-		t.Errorf("age = %v", out["age"])
-	}
-	if out["active"] != true {
-		t.Errorf("active = %v", out["active"])
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "alice", out["name"], "name = %v", out["name"])
+	assert.Equal(t, 30, out["age"], "age = %v", out["age"])
+	assert.Equal(t, true, out["active"], "active = %v", out["active"])
 }
 
 func TestEncodeData_Float32(t *testing.T) {
@@ -56,17 +50,13 @@ func TestEncodeData_Float32(t *testing.T) {
 	data := map[string]any{"val": 1.5}
 
 	out, err := EncodeData(data, schema)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	var expected [4]byte
 	binary.LittleEndian.PutUint32(expected[:], math.Float32bits(1.5))
 	want := hex.EncodeToString(expected[:])
 
-	if out["val"] != want {
-		t.Errorf("got %v, want %s", out["val"], want)
-	}
+	assert.Equal(t, want, out["val"], "got %v, want %s", out["val"], want)
 }
 
 func TestEncodeData_Float64(t *testing.T) {
@@ -74,17 +64,13 @@ func TestEncodeData_Float64(t *testing.T) {
 	data := map[string]any{"val": 3.14}
 
 	out, err := EncodeData(data, schema)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	var expected [8]byte
 	binary.LittleEndian.PutUint64(expected[:], math.Float64bits(3.14))
 	want := hex.EncodeToString(expected[:])
 
-	if out["val"] != want {
-		t.Errorf("got %v, want %s", out["val"], want)
-	}
+	assert.Equal(t, want, out["val"], "got %v, want %s", out["val"], want)
 }
 
 func TestEncodeData_BigInts(t *testing.T) {
@@ -94,12 +80,8 @@ func TestEncodeData_BigInts(t *testing.T) {
 			data := map[string]any{"n": 12345}
 
 			out, err := EncodeData(data, schema)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if out["n"] != "12345" {
-				t.Errorf("got %v, want %q", out["n"], "12345")
-			}
+			require.NoError(t, err)
+			assert.Equal(t, "12345", out["n"], "got %v, want %q", out["n"], "12345")
 		})
 	}
 }
@@ -110,23 +92,15 @@ func TestEncodeData_Bytes(t *testing.T) {
 	t.Run("array", func(t *testing.T) {
 		data := map[string]any{"data": []any{0xde, 0xad}}
 		out, err := EncodeData(data, schema)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if out["data"] != "dead" {
-			t.Errorf("got %v, want %q", out["data"], "dead")
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "dead", out["data"], "got %v, want %q", out["data"], "dead")
 	})
 
 	t.Run("hex_string", func(t *testing.T) {
 		data := map[string]any{"data": "beef"}
 		out, err := EncodeData(data, schema)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if out["data"] != "beef" {
-			t.Errorf("got %v, want %q", out["data"], "beef")
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "beef", out["data"], "got %v, want %q", out["data"], "beef")
 	})
 }
 
@@ -138,22 +112,14 @@ func TestEncodeData_Optional(t *testing.T) {
 
 	t.Run("nil", func(t *testing.T) {
 		out, err := EncodeData(map[string]any{"opt": nil}, schema)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if out["opt"] != nil {
-			t.Errorf("got %v, want nil", out["opt"])
-		}
+		require.NoError(t, err)
+		assert.Nil(t, out["opt"], "got %v, want nil", out["opt"])
 	})
 
 	t.Run("present", func(t *testing.T) {
 		out, err := EncodeData(map[string]any{"opt": "hello"}, schema)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if out["opt"] != "hello" {
-			t.Errorf("got %v, want %q", out["opt"], "hello")
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "hello", out["opt"], "got %v, want %q", out["opt"], "hello")
 	})
 }
 
@@ -165,13 +131,9 @@ func TestEncodeData_List(t *testing.T) {
 	data := map[string]any{"nums": []any{1, 2, 3}}
 
 	out, err := EncodeData(data, schema)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	arr := out["nums"].([]any)
-	if len(arr) != 3 || arr[0] != "1" || arr[1] != "2" || arr[2] != "3" {
-		t.Errorf("got %v", arr)
-	}
+	assert.Equal(t, []any{"1", "2", "3"}, arr, "got %v", arr)
 }
 
 func TestEncodeData_Array(t *testing.T) {
@@ -182,13 +144,9 @@ func TestEncodeData_Array(t *testing.T) {
 	data := map[string]any{"pair": []any{"a", "b"}}
 
 	out, err := EncodeData(data, schema)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	arr := out["pair"].([]any)
-	if len(arr) != 2 || arr[0] != "a" || arr[1] != "b" {
-		t.Errorf("got %v", arr)
-	}
+	assert.Equal(t, []any{"a", "b"}, arr, "got %v", arr)
 }
 
 func TestEncodeData_ArrayLengthMismatch(t *testing.T) {
@@ -199,9 +157,7 @@ func TestEncodeData_ArrayLengthMismatch(t *testing.T) {
 	data := map[string]any{"pair": []any{"a"}}
 
 	_, err := EncodeData(data, schema)
-	if err == nil {
-		t.Fatal("expected error for array length mismatch")
-	}
+	require.Error(t, err, "expected error for array length mismatch")
 }
 
 func TestEncodeData_Map(t *testing.T) {
@@ -216,13 +172,9 @@ func TestEncodeData_Map(t *testing.T) {
 	data := map[string]any{"kv": map[string]any{"x": 42}}
 
 	out, err := EncodeData(data, schema)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	m := out["kv"].(map[string]any)
-	if m["x"] != "42" {
-		t.Errorf("got %v", m["x"])
-	}
+	assert.Equal(t, "42", m["x"], "got %v", m["x"])
 }
 
 func TestEncodeData_Struct(t *testing.T) {
@@ -239,13 +191,10 @@ func TestEncodeData_Struct(t *testing.T) {
 	data := map[string]any{"addr": map[string]any{"city": "NYC", "zip": 10001}}
 
 	out, err := EncodeData(data, schema)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	addr := out["addr"].(map[string]any)
-	if addr["city"] != "NYC" || addr["zip"] != 10001 {
-		t.Errorf("got %v", addr)
-	}
+	assert.Equal(t, "NYC", addr["city"], "got %v", addr)
+	assert.Equal(t, 10001, addr["zip"], "got %v", addr)
 }
 
 func TestEncodeData_UnknownField(t *testing.T) {
@@ -253,7 +202,5 @@ func TestEncodeData_UnknownField(t *testing.T) {
 	data := map[string]any{"unknown": "val"}
 
 	_, err := EncodeData(data, schema)
-	if err == nil {
-		t.Fatal("expected error for unknown field")
-	}
+	require.Error(t, err, "expected error for unknown field")
 }

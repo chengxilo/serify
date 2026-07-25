@@ -22,6 +22,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/chengxilo/serify/internal/language"
 	"github.com/chengxilo/serify/internal/testutil"
 )
@@ -96,6 +98,6 @@ func skipUnless(t *testing.T, lang string) {
 func requireLang(t *testing.T, lang string) {
 	t.Helper()
 	if reason, ok := missingLang[lang]; ok {
-		t.Fatalf("required toolchain %s unavailable: %s", lang, reason)
+		require.Fail(t, fmt.Sprintf("required toolchain %s unavailable: %s", lang, reason))
 	}
 }

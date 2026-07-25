@@ -18,6 +18,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type simpleMsg struct {
@@ -48,38 +51,30 @@ func TestBuildSerializer_SimpleStruct(t *testing.T) {
 	ser, _, err := buildSerializer(&simpleMsg{}, func(m *simpleMsg) ([]byte, error) {
 		return encodeSimple(m), nil
 	}, nil)
-	if err != nil {
-		t.Fatalf("buildSerializer: %v", err)
-	}
+	require.NoError(t, err, "buildSerializer: %v", err)
 	fm := NewFieldMap()
 	fm.SetU32("x", 0xDEAD)
 	fm.SetString("y", "hello")
 
 	b, err := ser(fm)
-	if err != nil {
-		t.Fatalf("serialize: %v", err)
-	}
+	require.NoError(t, err, "serialize: %v", err)
 	if len(b) < 4 || binary.LittleEndian.Uint32(b[:4]) != 0xDEAD {
-		t.Errorf("x: got %v", b)
+		assert.Equal(t, uint32(0xDEAD), binary.LittleEndian.Uint32(b[:4]), "x: got %v", b)
 	}
 }
 
 func TestBuildDeserializer_InPlace(t *testing.T) {
 	des, err := parseDeserializer(&simpleMsg{}, decodeSimple, nil)
-	if err != nil {
-		t.Fatalf("buildDeserializer: %v", err)
-	}
+	require.NoError(t, err, "buildDeserializer: %v", err)
 
 	b := encodeSimple(&simpleMsg{X: 0xBEEF, Y: "world"})
 	fm, err := des(b)
-	if err != nil {
-		t.Fatalf("deserialize: %v", err)
-	}
+	require.NoError(t, err, "deserialize: %v", err)
 	if v, _ := fm.GetU32("x"); v != 0xBEEF {
-		t.Errorf("x: 0x%X", v)
+		assert.Equal(t, uint32(0xBEEF), v, "x: 0x%X", v)
 	}
 	if v, _ := fm.GetString("y"); v != "world" {
-		t.Errorf("y: %q", v)
+		assert.Equal(t, "world", v, "y: %q", v)
 	}
 }
 
@@ -89,20 +84,16 @@ func TestBuildDeserializer_Factory(t *testing.T) {
 		return m, decodeSimple(m, b)
 	}
 	des, err := parseDeserializer(&simpleMsg{}, fromB, nil)
-	if err != nil {
-		t.Fatalf("buildDeserializer: %v", err)
-	}
+	require.NoError(t, err, "buildDeserializer: %v", err)
 
 	b := encodeSimple(&simpleMsg{X: 55, Y: "factory"})
 	fm, err := des(b)
-	if err != nil {
-		t.Fatalf("deserialize: %v", err)
-	}
+	require.NoError(t, err, "deserialize: %v", err)
 	if v, _ := fm.GetU32("x"); v != 55 {
-		t.Errorf("x: %d", v)
+		assert.Equal(t, uint32(55), v, "x: %d", v)
 	}
 	if v, _ := fm.GetString("y"); v != "factory" {
-		t.Errorf("y: %q", v)
+		assert.Equal(t, "factory", v, "y: %q", v)
 	}
 }
 
@@ -121,7 +112,7 @@ func TestBuildSerializer_BadSignature(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := buildSerializer(&simpleMsg{}, tc.fn, nil)
 			if err == nil {
-				t.Errorf("expected error for %q", tc.name)
+				assert.Error(t, err, "expected error for %q", tc.name)
 			}
 		})
 	}
@@ -141,7 +132,7 @@ func TestBuildDeserializer_BadSignature(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parseDeserializer(&simpleMsg{}, tc.fn, nil)
 			if err == nil {
-				t.Errorf("expected error for %q", tc.name)
+				assert.Error(t, err, "expected error for %q", tc.name)
 			}
 		})
 	}

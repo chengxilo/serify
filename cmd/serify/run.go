@@ -200,10 +200,8 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 		}
 	}
 
-	if code := rep.ExitCode(); code != 0 {
-		return exitError{
-			code: code,
-		}
+	if !rep.Success() {
+		return errors.New("test failed")
 	}
 	return nil
 }

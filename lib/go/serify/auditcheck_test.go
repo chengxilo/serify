@@ -15,10 +15,12 @@
 package serify
 
 import (
-	"bytes"
 	"math"
 	"testing"
 	"unsafe"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDetectZeroCopy_BytesAliasing(t *testing.T) {
@@ -28,9 +30,7 @@ func TestDetectZeroCopy_BytesAliasing(t *testing.T) {
 	fm.SetBytes("payload", aliased)
 
 	got := DetectZeroCopy(fm, buf)
-	if len(got) != 1 || got[0] != "payload" {
-		t.Errorf("expected [payload], got %v", got)
-	}
+	assert.Equal(t, []string{"payload"}, got, "expected [payload], got %v", got)
 }
 
 func TestDetectZeroCopy_BytesIndependent(t *testing.T) {
@@ -41,9 +41,7 @@ func TestDetectZeroCopy_BytesIndependent(t *testing.T) {
 	fm.SetBytes("payload", independent)
 
 	got := DetectZeroCopy(fm, buf)
-	if len(got) != 0 {
-		t.Errorf("expected no aliasing, got %v", got)
-	}
+	assert.Empty(t, got, "expected no aliasing, got %v", got)
 }
 
 func TestDetectZeroCopy_StringAliasing(t *testing.T) {
@@ -53,9 +51,7 @@ func TestDetectZeroCopy_StringAliasing(t *testing.T) {
 	fm.SetString("tag", s)
 
 	got := DetectZeroCopy(fm, buf)
-	if len(got) != 1 || got[0] != "tag" {
-		t.Errorf("expected [tag], got %v", got)
-	}
+	assert.Equal(t, []string{"tag"}, got, "expected [tag], got %v", got)
 }
 
 func TestDetectZeroCopy_StringCopied(t *testing.T) {
@@ -65,9 +61,7 @@ func TestDetectZeroCopy_StringCopied(t *testing.T) {
 	fm.SetString("tag", s)
 
 	got := DetectZeroCopy(fm, buf)
-	if len(got) != 0 {
-		t.Errorf("expected no aliasing, got %v", got)
-	}
+	assert.Empty(t, got, "expected no aliasing, got %v", got)
 }
 
 func TestDetectZeroCopy_Nested(t *testing.T) {
@@ -79,9 +73,7 @@ func TestDetectZeroCopy_Nested(t *testing.T) {
 	fm.SetStruct("address", nested)
 
 	got := DetectZeroCopy(fm, buf)
-	if len(got) != 1 || got[0] != "street" {
-		t.Errorf("expected [street], got %v", got)
-	}
+	assert.Equal(t, []string{"street"}, got, "expected [street], got %v", got)
 }
 
 func TestDetectZeroCopy_EmptyBuffer(t *testing.T) {
@@ -89,13 +81,9 @@ func TestDetectZeroCopy_EmptyBuffer(t *testing.T) {
 	fm.SetBytes("payload", []byte{0x01})
 
 	got := DetectZeroCopy(fm, nil)
-	if got != nil {
-		t.Errorf("expected nil for nil buffer, got %v", got)
-	}
+	assert.Nil(t, got, "expected nil for nil buffer, got %v", got)
 	got = DetectZeroCopy(fm, []byte{})
-	if got != nil {
-		t.Errorf("expected nil for empty buffer, got %v", got)
-	}
+	assert.Nil(t, got, "expected nil for empty buffer, got %v", got)
 }
 
 func TestDetectZeroCopy_Restores(t *testing.T) {
@@ -107,26 +95,18 @@ func TestDetectZeroCopy_Restores(t *testing.T) {
 	DetectZeroCopy(fm, buf)
 
 	got, err := fm.GetBytes("payload")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, []byte{0x02, 0x03}) {
-		t.Errorf("expected [0x02, 0x03] restored, got %v", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, []byte{0x02, 0x03}, got, "expected [0x02, 0x03] restored, got %v", got)
 }
 
 func TestDetectInputMutation(t *testing.T) {
 	before := []byte{0x01, 0x02, 0x03}
 
 	// Identical → no mutation
-	if DetectInputMutation(before, []byte{0x01, 0x02, 0x03}) {
-		t.Error("expected no mutation for identical buffers")
-	}
+	assert.False(t, DetectInputMutation(before, []byte{0x01, 0x02, 0x03}), "expected no mutation for identical buffers")
 
 	// Different → mutation
-	if !DetectInputMutation(before, []byte{0x01, 0xFF, 0x03}) {
-		t.Error("expected mutation detected for different buffers")
-	}
+	assert.True(t, DetectInputMutation(before, []byte{0x01, 0xFF, 0x03}), "expected mutation detected for different buffers")
 }
 
 func TestCompareFieldMaps_Equal(t *testing.T) {
@@ -139,9 +119,7 @@ func TestCompareFieldMaps_Equal(t *testing.T) {
 	fm2.SetBytes("payload", []byte{0x01, 0x02})
 
 	diffs := CompareFieldMaps(fm1, fm2)
-	if len(diffs) != 0 {
-		t.Errorf("expected no diffs, got %v", diffs)
-	}
+	assert.Empty(t, diffs, "expected no diffs, got %v", diffs)
 }
 
 func TestCompareFieldMaps_ByteDiff(t *testing.T) {
@@ -152,9 +130,7 @@ func TestCompareFieldMaps_ByteDiff(t *testing.T) {
 	fm2.SetBytes("payload", []byte{0xFF, 0x02, 0x03})
 
 	diffs := CompareFieldMaps(fm1, fm2)
-	if len(diffs) != 1 || diffs[0] != "payload" {
-		t.Errorf("expected [payload], got %v", diffs)
-	}
+	assert.Equal(t, []string{"payload"}, diffs, "expected [payload], got %v", diffs)
 }
 
 func TestCompareFieldMaps_ScalarDiff(t *testing.T) {
@@ -165,9 +141,7 @@ func TestCompareFieldMaps_ScalarDiff(t *testing.T) {
 	fm2.SetU64("value", 99)
 
 	diffs := CompareFieldMaps(fm1, fm2)
-	if len(diffs) != 1 || diffs[0] != "value" {
-		t.Errorf("expected [value], got %v", diffs)
-	}
+	assert.Equal(t, []string{"value"}, diffs, "expected [value], got %v", diffs)
 }
 
 // TestCompareFieldMaps_NaN pins that two bit-identical NaN payloads compare
@@ -182,25 +156,20 @@ func TestCompareFieldMaps_NaN(t *testing.T) {
 	same1.SetF64("v", nan)
 	same2 := NewFieldMap()
 	same2.SetF64("v", nan)
-	if diffs := CompareFieldMaps(same1, same2); len(diffs) != 0 {
-		t.Errorf("two NaN values must compare equal, got diffs %v", diffs)
-	}
+	assert.Empty(t, CompareFieldMaps(same1, same2), "two NaN values must compare equal")
 
 	// float32 NaN too.
 	f1 := NewFieldMap()
 	f1.SetF32("v", float32(math.NaN()))
 	f2 := NewFieldMap()
 	f2.SetF32("v", float32(math.NaN()))
-	if diffs := CompareFieldMaps(f1, f2); len(diffs) != 0 {
-		t.Errorf("two float32 NaN values must compare equal, got diffs %v", diffs)
-	}
+	assert.Empty(t, CompareFieldMaps(f1, f2), "two float32 NaN values must compare equal")
 
 	// A real change is still a diff — the fix must not blind the comparison.
 	changed := NewFieldMap()
 	changed.SetF64("v", 1.5)
-	if diffs := CompareFieldMaps(same1, changed); len(diffs) != 1 || diffs[0] != "v" {
-		t.Errorf("NaN vs 1.5 must diff, got %v", diffs)
-	}
+	diffs := CompareFieldMaps(same1, changed)
+	assert.Equal(t, []string{"v"}, diffs, "NaN vs 1.5 must diff, got %v", diffs)
 }
 
 func TestSnapshotFieldMap_DeepCopy(t *testing.T) {
@@ -217,11 +186,7 @@ func TestSnapshotFieldMap_DeepCopy(t *testing.T) {
 
 	// Snapshot should be unchanged
 	got, _ := snap.GetBytes("payload")
-	if !bytes.Equal(got, []byte{0x01, 0x02, 0x03}) {
-		t.Errorf("expected [0x01, 0x02, 0x03], got %v", got)
-	}
+	assert.Equal(t, []byte{0x01, 0x02, 0x03}, got, "expected [0x01, 0x02, 0x03], got %v", got)
 	gotStr, _ := snap.GetString("tag")
-	if gotStr != "hello" {
-		t.Errorf("expected hello, got %v", gotStr)
-	}
+	assert.Equal(t, "hello", gotStr, "expected hello, got %v", gotStr)
 }

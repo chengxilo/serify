@@ -16,9 +16,10 @@ package report
 
 import (
 	"bytes"
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // sampleReport builds a small report: two languages, one case in two formats,
@@ -41,33 +42,24 @@ func sampleReport() *Report {
 // write/read unchanged — i.e. the CSV is a faithful dump of the run data.
 func TestRecordsCSVRoundTrip(t *testing.T) {
 	recs, err := sampleReport().Records()
-	if err != nil {
-		t.Fatalf("failed to get records from report: %v", err)
-	}
-	if len(recs) != 8 { // 2 formats × 2 langs × 2 ops
-		t.Fatalf("expected 8 records, got %d", len(recs))
-	}
+	require.NoError(t, err, "failed to get records from report: %v", err)
+	require.Len(t, recs, 8, "expected 8 records, got %d", len(recs))
 
 	var buf bytes.Buffer
-	if err := WriteCSV(&buf, recs); err != nil {
-		t.Fatalf("WriteCSV: %v", err)
-	}
+	err = WriteCSV(&buf, recs)
+	require.NoError(t, err, "WriteCSV: %v", err)
 	got, err := ReadCSV(&buf)
-	if err != nil {
-		t.Fatalf("ReadCSV: %v", err)
-	}
-	if !reflect.DeepEqual(recs, got) {
-		t.Errorf("round-trip mismatch:\n want %+v\n got  %+v", recs, got)
-	}
+	require.NoError(t, err, "ReadCSV: %v", err)
+	assert.Equal(t, recs, got, "round-trip mismatch")
 }
 
 // TestRecordsSplitFields checks a record is split into type/format/case.
 func TestRecordsSplitFields(t *testing.T) {
 	recs, _ := sampleReport().Records()
 	r0 := recs[0]
-	if r0.Type != "user" || r0.Format != "binary" || r0.Case != "basic" {
-		t.Errorf("bad split: %+v", r0)
-	}
+	assert.Equal(t, "user", r0.Type, "bad split: %+v", r0)
+	assert.Equal(t, "binary", r0.Format, "bad split: %+v", r0)
+	assert.Equal(t, "basic", r0.Case, "bad split: %+v", r0)
 }
 
 // TestRenderTableFromRecords confirms the table renders from records and shows
@@ -75,14 +67,11 @@ func TestRecordsSplitFields(t *testing.T) {
 func TestRenderTableFromRecords(t *testing.T) {
 	records, _ := sampleReport().Records()
 	var buf bytes.Buffer
-	if err := RenderTable(&buf, records); err != nil {
-		t.Fatalf("RenderTable: %v", err)
-	}
+	err := RenderTable(&buf, records)
+	require.NoError(t, err, "RenderTable: %v", err)
 	out := buf.String()
 	for _, want := range []string{"case id", "format", "operation", "user/basic", "binary", "json"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("table missing %q\n%s", want, out)
-		}
+		assert.Contains(t, out, want, "table missing %q\n%s", want, out)
 	}
 }
 
@@ -106,14 +95,7 @@ func TestUnimplementedTypes(t *testing.T) {
 
 	got := r.unimplementedTypes()
 	want := []string{"order", "telemetry"}
-	if len(got) != len(want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("got %v, want %v", got, want)
-		}
-	}
+	require.Equal(t, want, got, "got %v, want %v", got, want)
 }
 
 // A type with a FAIL is implemented — it ran and disagreed, which is the
@@ -121,7 +103,6 @@ func TestUnimplementedTypes(t *testing.T) {
 func TestUnimplementedTypes_FailureCounts(t *testing.T) {
 	r := New([]string{"go"}, nil, "table")
 	r.Add(Result{TestID: "wrong/binary/x", Language: "go", Operation: OpSerialize, Status: StatusFail})
-	if got := r.unimplementedTypes(); len(got) != 0 {
-		t.Errorf("a failing type is implemented, got %v", got)
-	}
+	got := r.unimplementedTypes()
+	assert.Empty(t, got, "a failing type is implemented, got %v", got)
 }

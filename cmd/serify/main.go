@@ -16,17 +16,12 @@ package main
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/signal"
 	"syscall"
 )
 
 var version = "0.1.0"
-
-type exitError struct{ code int }
-
-func (e exitError) Error() string { return "" }
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -37,10 +32,6 @@ func main() {
 
 	cancel()
 	if err != nil {
-		var ee exitError
-		if errors.As(err, &ee) {
-			os.Exit(ee.code)
-		}
 		os.Exit(1)
 	}
 }

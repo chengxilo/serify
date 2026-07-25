@@ -27,6 +27,8 @@ import (
 	"github.com/chengxilo/serify/internal/config"
 	"github.com/chengxilo/serify/internal/protocol"
 	"github.com/chengxilo/serify/internal/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func exchange(t *testing.T, suite Suite, messages ...string) []map[string]any {
@@ -43,7 +45,7 @@ func exchange(t *testing.T, suite Suite, messages ...string) []map[string]any {
 		}
 		var m map[string]any
 		if err := json.Unmarshal([]byte(line), &m); err != nil {
-			t.Fatalf("bad JSON response %q: %v", line, err)
+			require.NoError(t, err, "bad JSON response %q: %v", line, err)
 		}
 		responses = append(responses, m)
 	}
@@ -53,10 +55,10 @@ func exchange(t *testing.T, suite Suite, messages ...string) []map[string]any {
 func mustStatus(t *testing.T, resp map[string]any, wantOp string) {
 	t.Helper()
 	if resp["op"] != wantOp {
-		t.Errorf("op: got %v want %v", resp["op"], wantOp)
+		assert.Equal(t, wantOp, resp["op"], "op: got %v want %v", resp["op"], wantOp)
 	}
 	if resp["status"] != "OK" {
-		t.Errorf("status: got %v want %v (error: %v)", resp["status"], "OK", resp["error"])
+		assert.Equal(t, "OK", resp["status"], "status: got %v want %v (error: %v)", resp["status"], "OK", resp["error"])
 	}
 }
 
@@ -289,12 +291,8 @@ func TestRun_Init(t *testing.T) {
 	resps := exchange(t, u64Suite(),
 		`{"op":"bind","schema":`+u64Schema+`,"type":"u64rec","format":"binary"}`,
 	)
-	if len(resps) != 1 {
-		t.Fatalf("expected 1 response, got %d", len(resps))
-	}
-	if resps[0]["op"] != "bind" {
-		t.Errorf("op: %v", resps[0]["op"])
-	}
+	require.Len(t, resps, 1, "expected 1 response, got %d", len(resps))
+	assert.Equal(t, "bind", resps[0]["op"])
 }
 
 func TestRun_UnknownOp(t *testing.T) {
@@ -304,15 +302,9 @@ func TestRun_UnknownOp(t *testing.T) {
 		`{"op":"bind","schema":`+u64Schema+`,"type":"u64rec","format":"binary"}`,
 		`{"op":"bogus","id":"x"}`,
 	)
-	if len(resps) != 2 {
-		t.Fatalf("expected 2 responses (bind + unknown-op error), got %d: %v", len(resps), resps)
-	}
-	if resps[1]["status"] != "ERROR" {
-		t.Errorf("status: %v, want ERROR", resps[1]["status"])
-	}
-	if resps[1]["id"] != "x" {
-		t.Errorf("id: %v, want x", resps[1]["id"])
-	}
+	require.Len(t, resps, 2, "expected 2 responses (bind + unknown-op error), got %d: %v", len(resps), resps)
+	assert.Equal(t, "ERROR", resps[1]["status"], "status: %v, want ERROR", resps[1]["status"])
+	assert.Equal(t, "x", resps[1]["id"], "id: %v, want x", resps[1]["id"])
 }
 
 func TestRun_RoundTrip_U64(t *testing.T) {
@@ -321,9 +313,7 @@ func TestRun_RoundTrip_U64(t *testing.T) {
 		`{"op":"serialize","id":"s1","data":{"user_id":"42"}}`,
 		`{"op":"serialize","id":"s2","data":{"user_id":"18446744073709551615"}}`,
 	)
-	if len(resps) != 3 {
-		t.Fatalf("expected 3 responses, got %d", len(resps))
-	}
+	require.Len(t, resps, 3, "expected 3 responses, got %d", len(resps))
 	mustStatus(t, resps[1], "serialize")
 	mustStatus(t, resps[2], "serialize")
 
@@ -339,13 +329,9 @@ func TestRun_RoundTrip_U64(t *testing.T) {
 	mustStatus(t, resps2[2], "deserialize")
 
 	data1 := resps2[1]["data"].(map[string]any)
-	if data1["user_id"] != "42" {
-		t.Errorf("user_id: got %v", data1["user_id"])
-	}
+	assert.Equal(t, "42", data1["user_id"], "user_id: got %v", data1["user_id"])
 	data2 := resps2[2]["data"].(map[string]any)
-	if data2["user_id"] != "18446744073709551615" {
-		t.Errorf("user_id max: got %v", data2["user_id"])
-	}
+	assert.Equal(t, "18446744073709551615", data2["user_id"], "user_id max: got %v", data2["user_id"])
 }
 
 func TestRun_FullSchema_RoundTrip(t *testing.T) {
@@ -356,9 +342,7 @@ func TestRun_FullSchema_RoundTrip(t *testing.T) {
 		`{"op":"bind","schema":`+fullSchema+`,"type":"record","format":"binary"}`,
 		`{"op":"serialize","id":"s1","data":{"user_id":"1","username":"Alice","score":"3e440000","active":true,"metadata":"deadbeef","tags":["admin","user"],"profile":"bio","counts":[1,2,3,4],"address":{"street":"Main St","zip":10001}}}`,
 	)
-	if len(resps) != 2 {
-		t.Fatalf("expected 2 responses, got %d: %v", len(resps), resps)
-	}
+	require.Len(t, resps, 2, "expected 2 responses, got %d: %v", len(resps), resps)
 	mustStatus(t, resps[1], "serialize")
 
 	hexVal := resps[1]["hex"].(string)
@@ -369,23 +353,18 @@ func TestRun_FullSchema_RoundTrip(t *testing.T) {
 	)
 	mustStatus(t, resps2[1], "deserialize")
 	data := resps2[1]["data"].(map[string]any)
-	if data["user_id"] != "1" {
-		t.Errorf("user_id: got %v", data["user_id"])
-	}
-	if data["username"] != "Alice" {
-		t.Errorf("username: got %v", data["username"])
-	}
-	if data["active"] != true {
-		t.Errorf("active: got %v", data["active"])
-	}
+	assert.Equal(t, "1", data["user_id"], "user_id: got %v", data["user_id"])
+	assert.Equal(t, "Alice", data["username"], "username: got %v", data["username"])
+	assert.Equal(t, true, data["active"], "active: got %v", data["active"])
 	tags := data["tags"].([]any)
 	if len(tags) != 2 || tags[0] != "admin" {
-		t.Errorf("tags: got %v", tags)
+		assert.Len(t, tags, 2, "tags: got %v", tags)
+		if len(tags) >= 1 {
+			assert.Equal(t, "admin", tags[0], "tags: got %v", tags)
+		}
 	}
 	addr := data["address"].(map[string]any)
-	if addr["street"] != "Main St" {
-		t.Errorf("address.street: got %v", addr["street"])
-	}
+	assert.Equal(t, "Main St", addr["street"], "address.street: got %v", addr["street"])
 }
 
 func TestRun_FullSchema_UnicodeAndBoundary(t *testing.T) {
@@ -405,16 +384,10 @@ func TestRun_FullSchema_UnicodeAndBoundary(t *testing.T) {
 	)
 	mustStatus(t, resps2[1], "deserialize")
 	data := resps2[1]["data"].(map[string]any)
-	if data["user_id"] != "18446744073709551615" {
-		t.Errorf("uint64 max: got %v", data["user_id"])
-	}
-	if data["username"] != "用户名🎉" {
-		t.Errorf("username unicode: got %v", data["username"])
-	}
+	assert.Equal(t, "18446744073709551615", data["user_id"], "uint64 max: got %v", data["user_id"])
+	assert.Equal(t, "用户名🎉", data["username"], "username unicode: got %v", data["username"])
 	addr := data["address"].(map[string]any)
-	if addr["zip"] != float64(99) {
-		t.Errorf("zip: got %v (%T)", addr["zip"], addr["zip"])
-	}
+	assert.Equal(t, float64(99), addr["zip"], "zip: got %v (%T)", addr["zip"], addr["zip"])
 }
 
 func TestRun_NullOptional(t *testing.T) {
@@ -434,9 +407,7 @@ func TestRun_NullOptional(t *testing.T) {
 	)
 	mustStatus(t, resps2[1], "deserialize")
 	data := resps2[1]["data"].(map[string]any)
-	if data["profile"] != nil {
-		t.Errorf("profile should be null, got %v", data["profile"])
-	}
+	assert.Nil(t, data["profile"], "profile should be null, got %v", data["profile"])
 }
 
 func TestRun_ExplicitTypeAndFormat(t *testing.T) {
@@ -454,24 +425,17 @@ func TestRun_ExplicitTypeAndFormat(t *testing.T) {
 		`{"op":"bind","schema":`+u64Schema+`,"type":"user","format":"binary"}`,
 		`{"op":"serialize","id":"s1","data":{"user_id":"77"}}`,
 	)
-	if len(resps) != 2 {
-		t.Fatalf("expected 2 responses, got %d: %v", len(resps), resps)
-	}
+	require.Len(t, resps, 2, "expected 2 responses, got %d: %v", len(resps), resps)
 	mustStatus(t, resps[1], "serialize")
 }
 
 func TestRun_PingReportsProtocolVersion(t *testing.T) {
 	resps := exchange(t, u64Suite(), `{"op":"ping"}`)
-	if len(resps) != 1 {
-		t.Fatalf("expected 1 response, got %d", len(resps))
-	}
-	if resps[0]["op"] != "ping" || resps[0]["status"] != "OK" {
-		t.Errorf("expected ping OK, got %v", resps[0])
-	}
+	require.Len(t, resps, 1, "expected 1 response, got %d", len(resps))
+	assert.Equal(t, "ping", resps[0]["op"], "expected ping OK, got %v", resps[0])
+	assert.Equal(t, "OK", resps[0]["status"], "expected ping OK, got %v", resps[0])
 	// JSON numbers decode as float64.
-	if got, want := resps[0]["protocol_version"], float64(protocol.ProtocolVersion); got != want {
-		t.Errorf("protocol_version = %v, want %v", got, want)
-	}
+	assert.Equal(t, float64(protocol.ProtocolVersion), resps[0]["protocol_version"], "protocol_version = %v, want %v", resps[0]["protocol_version"], protocol.ProtocolVersion)
 }
 
 // Ping binds nothing, so a serialize after only a ping must still fail.
@@ -480,32 +444,26 @@ func TestRun_PingDoesNotBind(t *testing.T) {
 		`{"op":"ping"}`,
 		`{"id":"t1","op":"serialize","data":{}}`,
 	)
-	if len(resps) != 2 {
-		t.Fatalf("expected 2 responses, got %d", len(resps))
-	}
-	if resps[1]["status"] != "ERROR" {
-		t.Errorf("serialize after a bare ping should be an ERROR, got %v", resps[1])
-	}
+	require.Len(t, resps, 2, "expected 2 responses, got %d", len(resps))
+	assert.Equal(t, "ERROR", resps[1]["status"], "serialize after a bare ping should be an ERROR, got %v", resps[1])
 }
 
 func TestRun_UnknownType_Skipped(t *testing.T) {
 	resps := exchange(t, u64Suite(),
 		`{"op":"bind","schema":`+u64Schema+`,"type":"nonexistent"}`,
 	)
-	if len(resps) != 1 {
-		t.Fatalf("expected 1 response, got %d", len(resps))
-	}
-	if resps[0]["op"] != "bind" || resps[0]["status"] != "SKIPPED" {
-		t.Errorf("expected bind SKIPPED, got %v", resps[0])
-	}
+	require.Len(t, resps, 1, "expected 1 response, got %d", len(resps))
+	assert.Equal(t, "bind", resps[0]["op"], "expected bind SKIPPED, got %v", resps[0])
+	assert.Equal(t, "SKIPPED", resps[0]["status"], "expected bind SKIPPED, got %v", resps[0])
 }
 
 func TestRun_UnknownFormat_Skipped(t *testing.T) {
 	resps := exchange(t, u64Suite(),
 		`{"op":"bind","schema":`+u64Schema+`,"type":"u64rec","format":"nonexistent"}`,
 	)
-	if len(resps) != 1 || resps[0]["status"] != "SKIPPED" {
-		t.Errorf("expected bind SKIPPED, got %v", resps)
+	assert.Equal(t, 1, len(resps), "expected bind SKIPPED, got %v", resps)
+	if len(resps) >= 1 {
+		assert.Equal(t, "SKIPPED", resps[0]["status"], "expected bind SKIPPED, got %v", resps)
 	}
 }
 
@@ -545,9 +503,7 @@ func TestRun_MultipleTypes_RequiresTypeField(t *testing.T) {
 	resps := exchange(t, suite,
 		`{"op":"bind","schema":[{"name":"user_id","type":"uint64"}]}`,
 	)
-	if resps[0]["status"] != "ERROR" {
-		t.Errorf("expected ERROR for missing type, got %v", resps[0])
-	}
+	assert.Equal(t, "ERROR", resps[0]["status"], "expected ERROR for missing type, got %v", resps[0])
 
 	// Bind with explicit type and format works
 	resps2 := exchange(t, suite,
@@ -600,9 +556,7 @@ func TestRun_MultipleFormats(t *testing.T) {
 	mustStatus(t, respsBin[1], "serialize")
 
 	// Different formats produce different bytes
-	if respsJSON[1]["hex"] == respsBin[1]["hex"] {
-		t.Error("json and binary serializer should produce different bytes")
-	}
+	assert.NotEqual(t, respsJSON[1]["hex"], respsBin[1]["hex"], "json and binary serializer should produce different bytes")
 }
 
 func TestRun_FactoryDeserializer(t *testing.T) {
@@ -642,7 +596,5 @@ func TestRun_FactoryDeserializer(t *testing.T) {
 		`{"op":"deserialize","id":"d1","hex":"`+hexVal+`"}`,
 	)
 	mustStatus(t, resps2[1], "deserialize")
-	if resps2[1]["data"].(map[string]any)["user_id"] != "123" {
-		t.Errorf("factory deserialize: got %v", resps2[1]["data"])
-	}
+	assert.Equal(t, "123", resps2[1]["data"].(map[string]any)["user_id"], "factory deserialize: got %v", resps2[1]["data"])
 }

@@ -17,8 +17,10 @@ package builder
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDetectLanguage(t *testing.T) {
@@ -45,121 +47,75 @@ func TestDetectLanguage(t *testing.T) {
 			dir := t.TempDir()
 			for _, f := range tt.files {
 				path := filepath.Join(dir, f)
-				if err := os.WriteFile(path, nil, 0644); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.WriteFile(path, nil, 0644))
 			}
 
 			lang, err := DetectLanguage(dir)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if lang != tt.wantLang {
-				t.Errorf("got %q, want %q", lang, tt.wantLang)
-			}
+			require.NoError(t, err, "unexpected error: %v", err)
+			assert.Equal(t, tt.wantLang, lang, "got %q, want %q", lang, tt.wantLang)
 		})
 	}
 }
 
 func TestDetectLanguage_Ambiguous(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), nil, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), nil, 0644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), nil, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Cargo.toml"), nil, 0644))
 
 	_, err := DetectLanguage(dir)
-	if err == nil {
-		t.Fatal("expected error for ambiguous markers")
-	}
-	if got := err.Error(); !strings.Contains(got, "ambiguous") {
-		t.Errorf("error should mention 'ambiguous', got: %s", got)
-	}
+	require.Error(t, err, "expected error for ambiguous markers")
+	assert.Contains(t, err.Error(), "ambiguous", "error should mention 'ambiguous', got: %s", err.Error())
 }
 
 func TestDetectLanguage_NoMarker(t *testing.T) {
 	dir := t.TempDir()
 
 	_, err := DetectLanguage(dir)
-	if err == nil {
-		t.Fatal("expected error for empty directory")
-	}
-	if got := err.Error(); !strings.Contains(got, "cannot detect") {
-		t.Errorf("error should mention 'cannot detect', got: %s", got)
-	}
+	require.Error(t, err, "expected error for empty directory")
+	assert.Contains(t, err.Error(), "cannot detect", "error should mention 'cannot detect', got: %s", err.Error())
 }
 
 func TestDetect_NoYAML(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), nil, 0644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), nil, 0644))
 
 	info, err := Detect(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	require.NoError(t, err, "unexpected error: %v", err)
+	assert.Equal(t, "go", info.Language, "language = %q, want %q", info.Language, "go")
+	if assert.NotNil(t, info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults["go"].Build) {
+		assert.Equal(t, Defaults["go"].Build, *info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults["go"].Build)
 	}
-	if info.Language != "go" {
-		t.Errorf("language = %q, want %q", info.Language, "go")
-	}
-	if info.Manifest.Build == nil || *info.Manifest.Build != Defaults["go"].Build {
-		t.Errorf("build = %v, want default %q", info.Manifest.Build, Defaults["go"].Build)
-	}
-	if info.Manifest.Run != Defaults["go"].Run {
-		t.Errorf("run = %q, want default %q", info.Manifest.Run, Defaults["go"].Run)
-	}
+	assert.Equal(t, Defaults["go"].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults["go"].Run)
 }
 
 func TestDetect_YAMLOverride(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), nil, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), nil, 0644))
+	require.NoError(t, os.WriteFile(
 		filepath.Join(dir, "worker.yaml"),
-		[]byte("build: custom build\nrun: custom run\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
+		[]byte("build: custom build\nrun: custom run\n"), 0644))
 
 	info, err := Detect(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	require.NoError(t, err, "unexpected error: %v", err)
+	assert.Equal(t, "go", info.Language, "language = %q, want %q", info.Language, "go")
+	if assert.NotNil(t, info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom build") {
+		assert.Equal(t, "custom build", *info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom build")
 	}
-	if info.Language != "go" {
-		t.Errorf("language = %q, want %q", info.Language, "go")
-	}
-	if info.Manifest.Build == nil || *info.Manifest.Build != "custom build" {
-		t.Errorf("build = %v, want %q", info.Manifest.Build, "custom build")
-	}
-	if info.Manifest.Run != "custom run" {
-		t.Errorf("run = %q, want %q", info.Manifest.Run, "custom run")
-	}
+	assert.Equal(t, "custom run", info.Manifest.Run, "run = %q, want %q", info.Manifest.Run, "custom run")
 }
 
 func TestDetect_PartialYAML(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), nil, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Cargo.toml"), nil, 0644))
+	require.NoError(t, os.WriteFile(
 		filepath.Join(dir, "worker.yaml"),
-		[]byte("build: custom cargo build\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
+		[]byte("build: custom cargo build\n"), 0644))
 
 	info, err := Detect(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	require.NoError(t, err, "unexpected error: %v", err)
+	assert.Equal(t, "rust", info.Language, "language = %q, want %q", info.Language, "rust")
+	if assert.NotNil(t, info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom cargo build") {
+		assert.Equal(t, "custom cargo build", *info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom cargo build")
 	}
-	if info.Language != "rust" {
-		t.Errorf("language = %q, want %q", info.Language, "rust")
-	}
-	if info.Manifest.Build == nil || *info.Manifest.Build != "custom cargo build" {
-		t.Errorf("build = %v, want %q", info.Manifest.Build, "custom cargo build")
-	}
-	if info.Manifest.Run != Defaults["rust"].Run {
-		t.Errorf("run = %q, want default %q", info.Manifest.Run, Defaults["rust"].Run)
-	}
+	assert.Equal(t, Defaults["rust"].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults["rust"].Run)
 }

@@ -12,12 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Meta-test: drive deliberately-faulty workers (the `wrong` type) through the
+// real `serify` CLI and assert it reports the resulting disagreements correctly.
+// Each worker drops its OWN language from `langs` when the active format's fault
+// directive is disabled, so its output diverges from the reference; serify must
+// flag exactly the operations the case's flags predict, and exit non-zero.
+//
+// This goes through the actual CLI binary (not orchestrate in-process): it
+// exercises arg parsing, --ref, the process exit code, and the canonical CSV
+// export. Because the CSV is the single source of truth for results, asserting
+// against it is just as precise as inspecting the in-memory report.
+
 package test
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/chengxilo/serify/internal/language"
 	"github.com/chengxilo/serify/internal/report"
@@ -38,9 +51,7 @@ func TestCLI_KnownFailures(t *testing.T) {
 	// Run 1: without --known-failures — must exit 1 with FAILs.
 	csv1 := filepath.Join(t.TempDir(), "out1.csv")
 	out, code := testutil.RunSerify(t, wrong.runArgs(language.Go, errCases, "--csv", csv1)...)
-	if code != 1 {
-		t.Fatalf("serify exit = %d, want 1 (errors without known-failures must fail)\n%s", code, out)
-	}
+	require.Equal(t, 1, code, "serify exit = %d, want 1 (errors without known-failures must fail)\n%s", code, out)
 
 	grid1 := readResultGrid(t, csv1)
 
@@ -51,9 +62,8 @@ func TestCLI_KnownFailures(t *testing.T) {
 	assertCell(t, grid1, "wrong/err_ser/boom", language.Rust, report.OpDeserialize, report.StatusSkip)
 	// Verify detail contains the injected error.
 	rec := grid1["wrong/err_ser/boom"][language.Go][report.OpSerialize]
-	if !strings.Contains(rec.Detail, "injected serialize error") {
-		t.Errorf("err_ser detail = %q, want injected serialize error", rec.Detail)
-	}
+	assert.Contains(t, rec.Detail, "injected serialize error",
+		"err_ser detail = %q, want injected serialize error", rec.Detail)
 
 	// err_deser/boom: serialize PASS, deserialize FAIL.
 	assertCell(t, grid1, "wrong/err_deser/boom", language.Go, report.OpSerialize, report.StatusPass)
@@ -66,12 +76,8 @@ func TestCLI_KnownFailures(t *testing.T) {
 	csv2 := filepath.Join(t.TempDir(), "out2.csv")
 	out2, code2 := testutil.RunSerify(t, wrong.runArgs(language.Go, errCases,
 		"--csv", csv2, "--known-failures", kfDir)...)
-	if code2 != 0 {
-		t.Fatalf("serify exit = %d, want 0 (all failures are known)\n%s", code2, out2)
-	}
-	if !strings.Contains(out2, "XFAIL:") {
-		t.Errorf("known-failures summary missing XFAIL:\n%s", out2)
-	}
+	require.Equal(t, 0, code2, "serify exit = %d, want 0 (all failures are known)\n%s", code2, out2)
+	assert.Contains(t, out2, "XFAIL:", "known-failures summary missing XFAIL:\n%s", out2)
 
 	grid2 := readResultGrid(t, csv2)
 	assertCell(t, grid2, "wrong/err_ser/boom", language.Go, report.OpSerialize, report.StatusXFail)
@@ -84,9 +90,8 @@ func TestCLI_KnownFailures(t *testing.T) {
 	assertCell(t, grid2, "wrong/err_deser/boom", language.Go, report.OpSerialize, report.StatusXPass)
 	assertCell(t, grid2, "wrong/err_deser/boom", language.Rust, report.OpSerialize, report.StatusXPass)
 	rec2 := grid2["wrong/err_deser/boom"][language.Go][report.OpSerialize]
-	if !strings.Contains(rec2.Detail, "expected to fail") {
-		t.Errorf("XPASS detail = %q, want mention of expected-to-fail reason", rec2.Detail)
-	}
+	assert.Contains(t, rec2.Detail, "expected to fail",
+		"XPASS detail = %q, want mention of expected-to-fail reason", rec2.Detail)
 
 	// err_ser's deserialize op is skipped (nothing was serialized); a
 	// known-failures entry must not convert SKIP into anything else.
@@ -103,9 +108,7 @@ func TestCLI_Run_TimeoutOnHungWorker(t *testing.T) {
 	csv := filepath.Join(t.TempDir(), "out.csv")
 	out, code := testutil.RunSerify(t, wrong.runArgs(language.Go, hangCases,
 		"--csv", csv, "--timeout", "1")...)
-	if code != 1 {
-		t.Fatalf("serify exit = %d, want 1 (timeout must fail)\n%s", code, out)
-	}
+	require.Equal(t, 1, code, "serify exit = %d, want 1 (timeout must fail)\n%s", code, out)
 
 	grid := readResultGrid(t, csv)
 
@@ -113,9 +116,8 @@ func TestCLI_Run_TimeoutOnHungWorker(t *testing.T) {
 	assertCell(t, grid, "wrong/hang/sleeper", language.Go, report.OpSerialize, report.StatusError)
 	assertCell(t, grid, "wrong/hang/sleeper", language.Rust, report.OpSerialize, report.StatusError)
 	rec := grid["wrong/hang/sleeper"][language.Go][report.OpSerialize]
-	if !strings.Contains(rec.Detail, "timeout after 1s") {
-		t.Errorf("hang detail = %q, want timeout after 1s", rec.Detail)
-	}
+	assert.Contains(t, rec.Detail, "timeout after 1s",
+		"hang detail = %q, want timeout after 1s", rec.Detail)
 	assertCell(t, grid, "wrong/hang/sleeper", language.Go, report.OpDeserialize, report.StatusSkip)
 	assertCell(t, grid, "wrong/hang/sleeper", language.Rust, report.OpDeserialize, report.StatusSkip)
 }
@@ -127,9 +129,7 @@ func TestCLI_Run_WorkerCrash(t *testing.T) {
 	crashCases := wrong.CasePathNamed("cases_crash")
 	csv := filepath.Join(t.TempDir(), "out.csv")
 	out, code := testutil.RunSerify(t, wrong.runArgs(language.Go, crashCases, "--csv", csv)...)
-	if code != 1 {
-		t.Fatalf("serify exit = %d, want 1 (crash must fail)\n%s", code, out)
-	}
+	require.Equal(t, 1, code, "serify exit = %d, want 1 (crash must fail)\n%s", code, out)
 
 	grid := readResultGrid(t, csv)
 
@@ -138,9 +138,7 @@ func TestCLI_Run_WorkerCrash(t *testing.T) {
 	assertCell(t, grid, "wrong/crash/abort", language.Rust, report.OpSerialize, report.StatusError)
 	// Detail is platform-dependent (EOF/pipe/exit), just check non-empty.
 	rec := grid["wrong/crash/abort"][language.Go][report.OpSerialize]
-	if rec.Detail == "" {
-		t.Error("crash detail is empty, want non-empty transport error")
-	}
+	assert.NotEmpty(t, rec.Detail, "crash detail is empty, want non-empty transport error")
 	assertCell(t, grid, "wrong/crash/abort", language.Go, report.OpDeserialize, report.StatusSkip)
 	assertCell(t, grid, "wrong/crash/abort", language.Rust, report.OpDeserialize, report.StatusSkip)
 }

@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
@@ -34,9 +35,7 @@ func TestCLI_Run_FullMatrix(t *testing.T) {
 
 	csv := filepath.Join(t.TempDir(), "out.csv")
 	out, code := testutil.RunSerify(t, happy.runArgs("go", happy.CasePath(), "--full-matrix", "--csv", csv)...)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0\n%s", code, out)
-	}
+	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 
 	grid := readResultGrid(t, csv)
 
@@ -47,13 +46,10 @@ func TestCLI_Run_FullMatrix(t *testing.T) {
 		for _, dst := range pairs {
 			op := report.OpMatrix
 			rec, ok := grid[id][src+"→"+dst][op]
-			if !ok {
-				t.Errorf("[%s / %s→%s / %s] no row in CSV", id, src, dst, op)
+			if !assert.True(t, ok, "[%s / %s→%s / %s] no row in CSV", id, src, dst, op) {
 				continue
 			}
-			if rec.Status != string(report.StatusPass) {
-				t.Errorf("[%s / %s→%s] status = %s, want PASS", id, src, dst, rec.Status)
-			}
+			assert.Equal(t, string(report.StatusPass), rec.Status, "[%s / %s→%s] status = %s, want PASS", id, src, dst, rec.Status)
 		}
 	}
 
@@ -67,21 +63,16 @@ func TestCLI_Run_JSONOutput(t *testing.T) {
 	requireWorkers(t, happy.langs...)
 
 	out, code := testutil.RunSerify(t, happy.runArgs("go", happy.CasePath(), "--output", "json")...)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0\n%s", code, out)
-	}
+	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 
 	// Slice from the first '[' — nothing prints after the JSON array when --csv is absent.
 	idx := strings.Index(out, "[")
-	if idx < 0 {
-		t.Fatalf("no JSON array found in output:\n%s", out)
-	}
+	require.GreaterOrEqual(t, idx, 0, "no JSON array found in output:\n%s", out)
 	jsonStr := out[idx:]
 
 	var records []report.Record
-	if err := json.Unmarshal([]byte(jsonStr), &records); err != nil {
-		t.Fatalf("json.Unmarshal: %v\n%s", err, jsonStr)
-	}
+	err := json.Unmarshal([]byte(jsonStr), &records)
+	require.NoError(t, err, "json.Unmarshal: %v\n%s", err, jsonStr)
 
 	found := false
 	for _, r := range records {
@@ -91,9 +82,7 @@ func TestCLI_Run_JSONOutput(t *testing.T) {
 			break
 		}
 	}
-	if !found {
-		t.Errorf("all_types/json/basic go serialize PASS not found in %d records", len(records))
-	}
+	assert.True(t, found, "all_types/json/basic go serialize PASS not found in %d records", len(records))
 }
 
 // TestCLI_Run_BuildOnly exercises --build-only (first coverage of the real build path).
@@ -103,9 +92,7 @@ func TestCLI_Run_BuildOnly(t *testing.T) {
 	// Use the happy go worker dir without --no-build.
 	goDir := happy.WorkerPaths()[0]
 	out, code := testutil.RunSerify(t, "run", "--ref", "go", "--cases", happy.CasePath(), "--build-only", goDir)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0\n%s", code, out)
-	}
+	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 	assert.Contains(t, out, "Build complete (--build-only).", "build-only message")
 	assert.NotContains(t, out, "Suite:", "should not run tests")
 }
@@ -137,9 +124,7 @@ func TestCLI_Run_FlagValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			out, code := testutil.RunSerify(t, tt.args...)
-			if code == 0 {
-				t.Fatalf("expected non-zero exit, got 0\n%s", out)
-			}
+			require.NotEqual(t, 0, code, "expected non-zero exit, got 0\n%s", out)
 			assert.Contains(t, out, tt.wantSub, tt.name)
 		})
 	}
@@ -149,24 +134,18 @@ func TestCLI_Run_FlagValidation(t *testing.T) {
 func TestCLI_Run_MalformedCases(t *testing.T) {
 	// Invalid YAML.
 	badDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(badDir, "bad.yaml"), []byte("{not yaml!!"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(badDir, "bad.yaml"), []byte("{not yaml!!"), 0644))
 	out, code := testutil.RunSerify(t, slices.Concat(
 		[]string{"run", "--ref", "go", "--cases", badDir, "--no-build"},
 		happy.WorkerPaths())...)
-	if code == 0 {
-		t.Fatalf("expected non-zero exit for bad yaml, got 0\n%s", out)
-	}
+	require.NotEqual(t, 0, code, "expected non-zero exit for bad yaml, got 0\n%s", out)
 	assert.Contains(t, out, "load cases:", "bad yaml error")
 
 	// Nonexistent directory.
 	out2, code2 := testutil.RunSerify(t, slices.Concat(
 		[]string{"run", "--ref", "go", "--cases", "/nonexistent", "--no-build"},
 		happy.WorkerPaths())...)
-	if code2 == 0 {
-		t.Fatalf("expected non-zero exit for missing dir, got 0\n%s", out2)
-	}
+	require.NotEqual(t, 0, code2, "expected non-zero exit for missing dir, got 0\n%s", out2)
 	assert.Contains(t, out2, "stat", "nonexistent dir")
 }
 
@@ -174,17 +153,11 @@ func TestCLI_Run_MalformedCases(t *testing.T) {
 func TestCLI_Run_BadRunCommand(t *testing.T) {
 	tmp := t.TempDir()
 	// Create a minimal Go marker file so the builder detects "go".
-	if err := os.WriteFile(filepath.Join(tmp, "main.go"), []byte("package main\nfunc main() {}"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "main.go"), []byte("package main\nfunc main() {}"), 0644))
 	// worker.yaml with a nonexistent run command.
-	if err := os.WriteFile(filepath.Join(tmp, "worker.yaml"), []byte("run: ./no-such-worker"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "worker.yaml"), []byte("run: ./no-such-worker"), 0644))
 	out, code := testutil.RunSerify(t, "run", "--ref", "go", "--cases", happy.CasePath(), "--no-build", tmp)
-	if code == 0 {
-		t.Fatalf("expected non-zero exit, got 0\n%s", out)
-	}
+	require.NotEqual(t, 0, code, "expected non-zero exit, got 0\n%s", out)
 	assert.Contains(t, out, "start go worker", "bad run command")
 }
 
@@ -198,9 +171,7 @@ func TestCLI_Run_DuplicateLanguage(t *testing.T) {
 	out, code := testutil.RunSerify(t,
 		"run", "--ref", "go", "--cases", happy.CasePath(), "--no-build",
 		goWorker, goWorker)
-	if code == 0 {
-		t.Fatalf("expected non-zero exit for two workers of the same language\n%s", out)
-	}
+	require.NotEqual(t, 0, code, "expected non-zero exit for two workers of the same language\n%s", out)
 	assert.Contains(t, out, "two go workers", "error should name the duplicated language")
 }
 
@@ -209,23 +180,17 @@ func TestCLI_Run_DuplicateLanguage(t *testing.T) {
 func TestCLI_Validate(t *testing.T) {
 	// Validate cases only (no workers).
 	out, code := testutil.RunSerify(t, "validate", "--cases", happy.CasePath())
-	if code != 0 {
-		t.Fatalf("validate exit = %d, want 0\n%s", code, out)
-	}
+	require.Equal(t, 0, code, "validate exit = %d, want 0\n%s", code, out)
 	assert.Contains(t, out, "Suite:", "validate should show suite")
 
 	// Validate with a worker directory.
 	out2, code2 := testutil.RunSerify(t, "validate", "--cases", happy.CasePath(), happy.WorkerPaths()[0])
-	if code2 != 0 {
-		t.Fatalf("validate exit = %d, want 0\n%s", code2, out2)
-	}
+	require.Equal(t, 0, code2, "validate exit = %d, want 0\n%s", code2, out2)
 	assert.Contains(t, out2, "Worker go", "validate should detect worker")
 
 	// Bad cases directory.
 	out3, code3 := testutil.RunSerify(t, "validate", "--cases", "/nonexistent")
-	if code3 == 0 {
-		t.Fatalf("expected non-zero exit for bad cases, got 0\n%s", out3)
-	}
+	require.NotEqual(t, 0, code3, "expected non-zero exit for bad cases, got 0\n%s", out3)
 	assert.Contains(t, out3, "load cases:", "bad cases error")
 }
 
@@ -238,12 +203,8 @@ func TestCLI_Validate(t *testing.T) {
 // named.
 func TestCLI_Validate_CasesDirPassedPositionally(t *testing.T) {
 	out, code := testutil.RunSerify(t, "validate", happy.CasePath())
-	if code == 0 {
-		t.Fatalf("expected non-zero exit when a cases dir is passed positionally\n%s", out)
-	}
+	require.NotEqual(t, 0, code, "expected non-zero exit when a cases dir is passed positionally\n%s", out)
 	assert.Contains(t, out, "--cases", "error should name the flag to use instead")
 	// The suite report must not appear: nothing was successfully validated.
-	if strings.Contains(out, "Total:") {
-		t.Errorf("validate printed a suite report before failing:\n%s", out)
-	}
+	assert.NotContains(t, out, "Total:", "validate printed a suite report before failing:\n%s", out)
 }

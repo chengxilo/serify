@@ -267,11 +267,8 @@ func (r *Report) unimplementedTypes() []string {
 	return out
 }
 
-func (r *Report) ExitCode() int {
-	if len(r.Failures) > 0 {
-		return 1
-	}
-	return 0
+func (r *Report) Success() bool {
+	return len(r.Failures) == 0
 }
 
 type junitSuites struct {

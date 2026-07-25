@@ -19,8 +19,10 @@ import (
 	"math"
 	"math/big"
 	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMapOf(t *testing.T) {
@@ -44,25 +46,34 @@ func TestMapOf(t *testing.T) {
 		"arr", [4]uint32{1, 2, 3, 4},
 	)
 	if v, _ := fm.GetU8("uint8"); v != 1 {
-		t.Errorf("uint8: %d", v)
+		assert.Equal(t, uint8(1), v, "uint8: %d", v)
 	}
 	if v, _ := fm.GetU32("uint32"); v != 3 {
-		t.Errorf("uint32: %d", v)
+		assert.Equal(t, uint32(3), v, "uint32: %d", v)
 	}
 	if v, _ := fm.GetI64("int64"); v != -4 {
-		t.Errorf("int64: %d", v)
+		assert.Equal(t, int64(-4), v, "int64: %d", v)
 	}
 	if v, _ := fm.GetF32("float32"); v != 1.5 {
-		t.Errorf("float32: %v", v)
+		assert.Equal(t, float32(1.5), v, "float32: %v", v)
 	}
 	if v, _ := fm.GetBool("b"); !v {
-		t.Error("bool: false")
+		assert.True(t, v, "bool: false")
 	}
 	if v, _ := fm.GetOptionalString("opt"); v == nil || *v != "opt" {
-		t.Errorf("opt: %v", v)
+		if v == nil {
+			assert.Fail(t, "opt: <nil>")
+		} else {
+			assert.Equal(t, "opt", *v, "opt: %v", v)
+		}
 	}
 	if v, _ := fm.GetListU32("arr"); len(v) != 4 || v[0] != 1 || v[3] != 4 {
-		t.Errorf("arr: %v", v)
+		if len(v) == 4 {
+			assert.Equal(t, uint32(1), v[0], "arr[0]: %v", v)
+			assert.Equal(t, uint32(4), v[3], "arr[3]: %v", v)
+		} else {
+			assert.Fail(t, fmt.Sprintf("arr: len=%d", len(v)))
+		}
 	}
 }
 
@@ -77,21 +88,24 @@ func TestMapOf_StructAndListStruct(t *testing.T) {
 		"ls", []*FieldMap{b},
 	)
 	if v, _ := fm.GetStruct("s"); v != inner {
-		t.Error("struct not stored")
+		assert.Equal(t, inner, v, "struct not stored")
 	}
 	if v, _ := fm.GetListStruct("ls"); len(v) != 1 || v[0] != b {
-		t.Error("list struct not stored")
+		if len(v) == 1 {
+			assert.Equal(t, b, v[0], "list struct not stored")
+		} else {
+			assert.Fail(t, "list struct not stored")
+		}
 	}
 }
 
 func TestMapOf_OddArgs(t *testing.T) {
 	fm := MapOf("a", uint32(1), "orphan") // orphan has no value -> not stored
 	if v, _ := fm.GetU32("a"); v != 1 {
-		t.Errorf("a: %d", v)
+		assert.Equal(t, uint32(1), v, "a: %d", v)
 	}
-	if _, err := fm.GetString("orphan"); err == nil {
-		t.Error("orphan key should not be stored")
-	}
+	_, err := fm.GetString("orphan")
+	assert.Error(t, err, "orphan key should not be stored")
 }
 
 func makeTestRecordFM(profile *string) *FieldMap {
@@ -119,38 +133,44 @@ func makeTestRecordFM(profile *string) *FieldMap {
 func TestReflectFill_AllFields(t *testing.T) {
 	profile := "bio text"
 	msg := &testRecord{}
-	if err := reflectFill(reflect.ValueOf(msg).Elem(), makeTestRecordFM(&profile)); err != nil {
-		t.Fatalf("reflectFill: %v", err)
-	}
+	require.NoError(t, reflectFill(reflect.ValueOf(msg).Elem(), makeTestRecordFM(&profile)), "reflectFill")
 	if msg.UserID != 42 {
-		t.Errorf("UserID: %d", msg.UserID)
+		assert.Equal(t, uint64(42), msg.UserID, "UserID: %d", msg.UserID)
 	}
 	if msg.Username != "Alice" {
-		t.Errorf("Username: %q", msg.Username)
+		assert.Equal(t, "Alice", msg.Username, "Username: %q", msg.Username)
 	}
 	if math.Abs(float64(msg.Score-1.5)) > 1e-6 {
-		t.Errorf("Score: %v", msg.Score)
+		assert.InDelta(t, 1.5, msg.Score, 1e-6, "Score: %v", msg.Score)
 	}
 	if !msg.Active {
-		t.Error("Active: false")
+		assert.True(t, msg.Active, "Active: false")
 	}
 	if len(msg.Tags) != 2 || msg.Tags[0] != "admin" {
-		t.Errorf("Tags: %v", msg.Tags)
+		if len(msg.Tags) == 2 {
+			assert.Equal(t, "admin", msg.Tags[0], "Tags[0]: %v", msg.Tags)
+		} else {
+			assert.Fail(t, fmt.Sprintf("Tags: len=%d", len(msg.Tags)))
+		}
 	}
 	if msg.Profile == nil || *msg.Profile != "bio text" {
-		t.Errorf("Profile: %v", msg.Profile)
+		if msg.Profile == nil {
+			assert.Fail(t, "Profile: <nil>")
+		} else {
+			assert.Equal(t, "bio text", *msg.Profile, "Profile: %v", msg.Profile)
+		}
 	}
 	if msg.Counts != [4]uint32{1, 2, 3, 4} {
-		t.Errorf("Counts: %v", msg.Counts)
+		assert.Equal(t, [4]uint32{1, 2, 3, 4}, msg.Counts, "Counts: %v", msg.Counts)
 	}
 	if msg.Address.Street != "Main St" {
-		t.Errorf("Address.Street: %q", msg.Address.Street)
+		assert.Equal(t, "Main St", msg.Address.Street, "Address.Street: %q", msg.Address.Street)
 	}
 	if msg.Address.Zip != 12345 {
-		t.Errorf("Address.Zip: %d", msg.Address.Zip)
+		assert.Equal(t, uint32(12345), msg.Address.Zip, "Address.Zip: %d", msg.Address.Zip)
 	}
 	if msg.Scores["math"] != 95 {
-		t.Errorf("Scores[math]: %d", msg.Scores["math"])
+		assert.Equal(t, uint32(95), msg.Scores["math"], "Scores[math]: %d", msg.Scores["math"])
 	}
 }
 
@@ -171,30 +191,36 @@ func TestReflectExtract_AllFields(t *testing.T) {
 	reflectExtract(reflect.ValueOf(msg).Elem(), fm)
 
 	if v, _ := fm.GetU64("user_id"); v != 99 {
-		t.Errorf("user_id: %d", v)
+		assert.Equal(t, uint64(99), v, "user_id: %d", v)
 	}
 	if v, _ := fm.GetString("username"); v != "Bob" {
-		t.Errorf("username: %q", v)
+		assert.Equal(t, "Bob", v, "username: %q", v)
 	}
 	if v, _ := fm.GetBool("active"); v {
-		t.Error("active: true")
+		assert.False(t, v, "active: true")
 	}
 	if v, _ := fm.GetOptionalString("profile"); v == nil || *v != "bio" {
-		t.Errorf("profile: %v", v)
+		if v == nil {
+			assert.Fail(t, "profile: <nil>")
+		} else {
+			assert.Equal(t, "bio", *v, "profile: %v", v)
+		}
 	}
 	addr, _ := fm.GetStruct("address")
-	if addr == nil {
-		t.Fatal("address: nil")
-	}
+	require.NotNil(t, addr, "address: nil")
 	if v, _ := addr.GetString("street"); v != "Oak Ave" {
-		t.Errorf("address.street: %q", v)
+		assert.Equal(t, "Oak Ave", v, "address.street: %q", v)
 	}
 	if v, _ := addr.GetU32("zip"); v != 77777 {
-		t.Errorf("address.zip: %d", v)
+		assert.Equal(t, uint32(77777), v, "address.zip: %d", v)
 	}
 	scores, ok := fm.GetMap("scores")
 	if !ok || scores["a"] != uint32(1) {
-		t.Errorf("scores: %v", scores)
+		if !ok {
+			assert.Fail(t, "scores map not found")
+		} else {
+			assert.Equal(t, uint32(1), scores["a"], "scores: %v", scores)
+		}
 	}
 }
 
@@ -203,35 +229,39 @@ func TestReflectFillExtract_RoundTrip(t *testing.T) {
 	fm1 := makeTestRecordFM(&profile)
 
 	msg := &testRecord{}
-	if err := reflectFill(reflect.ValueOf(msg).Elem(), fm1); err != nil {
-		t.Fatalf("reflectFill: %v", err)
-	}
+	require.NoError(t, reflectFill(reflect.ValueOf(msg).Elem(), fm1), "reflectFill")
 
 	fm2 := NewFieldMap()
 	reflectExtract(reflect.ValueOf(msg).Elem(), fm2)
 
 	if v, _ := fm2.GetU64("user_id"); v != 42 {
-		t.Errorf("user_id: %d", v)
+		assert.Equal(t, uint64(42), v, "user_id: %d", v)
 	}
 	if v, _ := fm2.GetString("username"); v != "Alice" {
-		t.Errorf("username: %q", v)
+		assert.Equal(t, "Alice", v, "username: %q", v)
 	}
 	if v, _ := fm2.GetBool("active"); !v {
-		t.Error("active: false")
+		assert.True(t, v, "active: false")
 	}
 	tags, _ := fm2.GetListString("tags")
 	if len(tags) != 2 || tags[0] != "admin" {
-		t.Errorf("tags: %v", tags)
+		if len(tags) == 2 {
+			assert.Equal(t, "admin", tags[0], "tags[0]: %v", tags)
+		} else {
+			assert.Fail(t, fmt.Sprintf("tags: len=%d", len(tags)))
+		}
 	}
 	if v, _ := fm2.GetOptionalString("profile"); v == nil || *v != "text" {
-		t.Errorf("profile: %v", v)
+		if v == nil {
+			assert.Fail(t, "profile: <nil>")
+		} else {
+			assert.Equal(t, "text", *v, "profile: %v", v)
+		}
 	}
 	addr, _ := fm2.GetStruct("address")
-	if addr == nil {
-		t.Fatal("address: nil")
-	}
+	require.NotNil(t, addr, "address: nil")
 	if v, _ := addr.GetString("street"); v != "Main St" {
-		t.Errorf("address.street: %q", v)
+		assert.Equal(t, "Main St", v, "address.street: %q", v)
 	}
 }
 
@@ -247,11 +277,9 @@ func TestReflectFill_OptionalNil(t *testing.T) {
 	fm.SetStruct("address", NewFieldMap())
 
 	msg := &testRecord{}
-	if err := reflectFill(reflect.ValueOf(msg).Elem(), fm); err != nil {
-		t.Fatalf("reflectFill: %v", err)
-	}
+	require.NoError(t, reflectFill(reflect.ValueOf(msg).Elem(), fm), "reflectFill")
 	if msg.Profile != nil {
-		t.Errorf("profile should be nil, got %v", msg.Profile)
+		assert.Nil(t, msg.Profile, "profile should be nil, got %v", msg.Profile)
 	}
 }
 
@@ -268,11 +296,9 @@ func TestReflect_GenericArray(t *testing.T) {
 	reflectExtract(reflect.ValueOf(src).Elem(), fm)
 
 	dst := &box{}
-	if err := reflectFill(reflect.ValueOf(dst).Elem(), fm); err != nil {
-		t.Fatalf("reflectFill: %v", err)
-	}
+	require.NoError(t, reflectFill(reflect.ValueOf(dst).Elem(), fm), "reflectFill")
 	if *dst != *src {
-		t.Errorf("round-trip mismatch: got %#v want %#v", dst, src)
+		assert.Equal(t, *src, *dst, "round-trip mismatch: got %#v want %#v", dst, src)
 	}
 }
 
@@ -291,12 +317,8 @@ func TestReflectFill_ShapeMismatchIsAnError(t *testing.T) {
 
 		dst := &box{}
 		err := reflectFill(reflect.ValueOf(dst).Elem(), fm)
-		if err == nil {
-			t.Fatalf("want error, got nil (ID silently left %v)", dst.ID)
-		}
-		if !strings.Contains(err.Error(), "id") {
-			t.Errorf("error should name the field: %v", err)
-		}
+		require.Error(t, err, "want error, got nil (ID silently left %v)", dst.ID)
+		assert.Contains(t, err.Error(), "id", "error should name the field: %v", err)
 	})
 
 	t.Run("struct field, scalar data", func(t *testing.T) {
@@ -308,9 +330,7 @@ func TestReflectFill_ShapeMismatchIsAnError(t *testing.T) {
 		fm.SetString("nested", "not a struct")
 
 		dst := &box{}
-		if err := reflectFill(reflect.ValueOf(dst).Elem(), fm); err == nil {
-			t.Fatal("want error, got nil")
-		}
+		require.Error(t, reflectFill(reflect.ValueOf(dst).Elem(), fm), "want error, got nil")
 	})
 
 	t.Run("map field, scalar data", func(t *testing.T) {
@@ -321,13 +341,11 @@ func TestReflectFill_ShapeMismatchIsAnError(t *testing.T) {
 		fm.SetString("labels", "not a map")
 
 		dst := &box{}
-		if err := reflectFill(reflect.ValueOf(dst).Elem(), fm); err == nil {
-			t.Fatal("want error, got nil")
-		}
+		require.Error(t, reflectFill(reflect.ValueOf(dst).Elem(), fm), "want error, got nil")
 	})
 }
 
-// A model field the schema does not mention stays untouched — that is not a
+// A model field the schema does not mention stays untouched -- that is not a
 // mismatch, and must keep working.
 func TestReflectFill_UnmentionedFieldIsSkipped(t *testing.T) {
 	type box struct {
@@ -338,11 +356,10 @@ func TestReflectFill_UnmentionedFieldIsSkipped(t *testing.T) {
 	fm.SetU32("a", 7)
 
 	dst := &box{B: 99}
-	if err := reflectFill(reflect.ValueOf(dst).Elem(), fm); err != nil {
-		t.Fatalf("reflectFill: %v", err)
-	}
+	require.NoError(t, reflectFill(reflect.ValueOf(dst).Elem(), fm), "reflectFill")
 	if dst.A != 7 || dst.B != 99 {
-		t.Errorf("got %+v, want {A:7 B:99}", dst)
+		assert.Equal(t, uint32(7), dst.A, "got %+v, want {A:7 B:99}", dst)
+		assert.Equal(t, uint32(99), dst.B, "got %+v, want {A:7 B:99}", dst)
 	}
 }
 
@@ -380,23 +397,16 @@ func TestConverter_RoundTrip(t *testing.T) {
 	fm.SetBig("id", big.NewInt(0x0102))
 
 	var h header
-	if err := codec.fill(reflect.ValueOf(&h).Elem(), fm); err != nil {
-		t.Fatalf("fill: %v", err)
-	}
+	require.NoError(t, codec.fill(reflect.ValueOf(&h).Elem(), fm))
 	// 0x0102 little-endian in 16 bytes: 0x02 at index 0, 0x01 at index 1.
-	if h.ID[0] != 0x02 || h.ID[1] != 0x01 {
-		t.Fatalf("Decode byte order wrong: %v", h.ID)
-	}
+	require.Equal(t, byte(0x02), h.ID[0], "Decode byte order wrong: %v", h.ID)
+	require.Equal(t, byte(0x01), h.ID[1], "Decode byte order wrong: %v", h.ID)
 
 	out := NewFieldMap()
 	codec.extract(reflect.ValueOf(&h).Elem(), out)
 	got, err := out.GetBig("id")
-	if err != nil {
-		t.Fatalf("extract stored wrong type: %v", err)
-	}
-	if got.Cmp(big.NewInt(0x0102)) != 0 {
-		t.Errorf("round-trip: got %s, want 258", got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 0, got.Cmp(big.NewInt(0x0102)), "round-trip: got %s, want 258", got)
 }
 
 // A whole-type converter folds a flattened sum type (kind + payload fields) into
@@ -440,17 +450,13 @@ func TestConverter_WholeType(t *testing.T) {
 		fm.SetU32("num_value", 7)
 
 		var id ident
-		if err := codec.fill(reflect.ValueOf(&id).Elem(), fm); err != nil {
-			t.Fatalf("fill: %v", err)
-		}
-		if id.tag != "num:7" {
-			t.Fatalf("top-level decode: got %q", id.tag)
-		}
+		require.NoError(t, codec.fill(reflect.ValueOf(&id).Elem(), fm))
+		require.Equal(t, "num:7", id.tag, "top-level decode: got %q", id.tag)
 
 		out := NewFieldMap()
 		codec.extract(reflect.ValueOf(&id).Elem(), out)
 		if s, _ := out.GetString("str_value"); s != "num:7" {
-			t.Errorf("top-level extract: got %q", s)
+			assert.Equal(t, "num:7", s, "top-level extract: got %q", s)
 		}
 	})
 
@@ -465,17 +471,15 @@ func TestConverter_WholeType(t *testing.T) {
 		fm.SetStruct("stream_id", inner)
 
 		var req request
-		if err := codec.fill(reflect.ValueOf(&req).Elem(), fm); err != nil {
-			t.Fatalf("fill: %v", err)
-		}
+		require.NoError(t, codec.fill(reflect.ValueOf(&req).Elem(), fm))
 		if req.StreamID.tag != "str:orders" {
-			t.Errorf("nested decode: got %q", req.StreamID.tag)
+			assert.Equal(t, "str:orders", req.StreamID.tag, "nested decode: got %q", req.StreamID.tag)
 		}
 	})
 }
 
 // An anonymous embedded struct is flattened into the parent's level, matching Go
-// promotion and encoding/json — so an SDK type that groups fields in an embedded
+// promotion and encoding/json -- so an SDK type that groups fields in an embedded
 // struct (iggy's CreateConsumerGroup embeds TopicPath) maps to a flat schema
 // with no shim. A whole-type converter on a field inside the embed still fires.
 func TestReflect_EmbeddedFlattening(t *testing.T) {
@@ -514,29 +518,27 @@ func TestReflect_EmbeddedFlattening(t *testing.T) {
 	fm.SetString("name", "grp")
 
 	var req request
-	if err := codec.fill(reflect.ValueOf(&req).Elem(), fm); err != nil {
-		t.Fatalf("fill: %v", err)
-	}
-	if req.StreamID.tag != "s1" || req.TopicID.tag != "t1" || req.Name != "grp" {
-		t.Fatalf("flatten decode: %+v", req)
-	}
+	require.NoError(t, codec.fill(reflect.ValueOf(&req).Elem(), fm))
+	require.Equal(t, "s1", req.StreamID.tag, "flatten decode: %+v", req)
+	require.Equal(t, "t1", req.TopicID.tag, "flatten decode: %+v", req)
+	require.Equal(t, "grp", req.Name, "flatten decode: %+v", req)
 
 	out := NewFieldMap()
 	codec.extract(reflect.ValueOf(&req).Elem(), out)
 	// The embedded fields must appear at the top level, not under "topic_path".
 	if _, ok := out.fields["topic_path"]; ok {
-		t.Error("embedded struct leaked a topic_path key instead of flattening")
+		assert.Fail(t, "embedded struct leaked a topic_path key instead of flattening")
 	}
 	if _, ok := out.fields["stream_id"]; !ok {
-		t.Error("embedded stream_id not promoted on extract")
+		assert.Fail(t, "embedded stream_id not promoted on extract")
 	}
 	if n, _ := out.GetString("name"); n != "grp" {
-		t.Errorf("name: %q", n)
+		assert.Equal(t, "grp", n, "name: %q", n)
 	}
 }
 
 // Without the converter, that same [16]byte field is a hard error (the array
-// branch), not a silent zero — proving the converter is what enables it, not a
+// branch), not a silent zero -- proving the converter is what enables it, not a
 // pre-existing lax path.
 func TestConverter_AbsentIsStillAnError(t *testing.T) {
 	type msgID [16]byte
@@ -547,9 +549,7 @@ func TestConverter_AbsentIsStillAnError(t *testing.T) {
 	fm.SetBig("id", big.NewInt(1))
 
 	var h header
-	if err := reflectFill(reflect.ValueOf(&h).Elem(), fm); err == nil {
-		t.Fatal("want error without a converter, got nil")
-	}
+	require.Error(t, reflectFill(reflect.ValueOf(&h).Elem(), fm), "want error without a converter, got nil")
 }
 
 func TestReflectFill_SnakeCaseMapping(t *testing.T) {
@@ -558,13 +558,11 @@ func TestReflectFill_SnakeCaseMapping(t *testing.T) {
 	fm.SetString("username", "Bob")
 
 	msg := &testRecord{}
-	if err := reflectFill(reflect.ValueOf(msg).Elem(), fm); err != nil {
-		t.Fatalf("reflectFill: %v", err)
-	}
+	require.NoError(t, reflectFill(reflect.ValueOf(msg).Elem(), fm), "reflectFill")
 	if msg.UserID != 99 {
-		t.Errorf("UserID via serify tag: %d", msg.UserID)
+		assert.Equal(t, uint64(99), msg.UserID, "UserID via serify tag: %d", msg.UserID)
 	}
 	if msg.Username != "Bob" {
-		t.Errorf("Username via snake_case: %q", msg.Username)
+		assert.Equal(t, "Bob", msg.Username, "Username via snake_case: %q", msg.Username)
 	}
 }

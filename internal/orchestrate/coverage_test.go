@@ -19,6 +19,7 @@ import (
 
 	"github.com/chengxilo/serify/internal/config"
 	"github.com/chengxilo/serify/internal/report"
+	"github.com/stretchr/testify/assert"
 )
 
 func skipReport(t *testing.T, entries ...report.Result) *report.Report {
@@ -50,9 +51,7 @@ func TestCheckExpectedSkips_DeclaredStaysGreen(t *testing.T) {
 			Operations: map[string][]string{report.OpDeserialize: {"get_stream"}},
 		},
 	})
-	if got := rep.ExitCode(); got != 0 {
-		t.Errorf("ExitCode = %d, want 0: declared skips must not fail the run", got)
-	}
+	assert.True(t, rep.Success(), "declared skips must not fail the run")
 }
 
 // An undeclared skip is a coverage regression and must fail — this is the whole
@@ -62,9 +61,7 @@ func TestCheckExpectedSkips_UndeclaredFails(t *testing.T) {
 	CheckExpectedSkips(rep, map[string]config.ExpectedSkips{
 		"go": {Types: []string{"wire_name"}},
 	})
-	if got := rep.ExitCode(); got == 0 {
-		t.Error("ExitCode = 0, want non-zero: an undeclared skip must fail")
-	}
+	assert.False(t, rep.Success(), "an undeclared skip must fail")
 }
 
 // A blanket direction must not be expressible: declaring deserialize for one
@@ -74,9 +71,7 @@ func TestCheckExpectedSkips_OperationIsPerType(t *testing.T) {
 	CheckExpectedSkips(rep, map[string]config.ExpectedSkips{
 		"go": {Operations: map[string][]string{report.OpDeserialize: {"get_stream"}}},
 	})
-	if got := rep.ExitCode(); got == 0 {
-		t.Error("ExitCode = 0, want non-zero: deserialize declared for get_stream must not cover message_header")
-	}
+	assert.False(t, rep.Success(), "deserialize declared for get_stream must not cover message_header")
 }
 
 // A cascade skip (the reference itself could not produce bytes) is fallout from
@@ -90,9 +85,7 @@ func TestCheckExpectedSkips_CascadeSkipsExempt(t *testing.T) {
 			Status: report.StatusSkip, Detail: detail,
 		})
 		CheckExpectedSkips(rep, map[string]config.ExpectedSkips{})
-		if got := rep.ExitCode(); got != 0 {
-			t.Errorf("detail %q: ExitCode = %d, want 0 (cascade skips are not coverage gaps)", detail, got)
-		}
+		assert.True(t, rep.Success(), "detail %q: cascade skips are not coverage gaps", detail)
 	}
 }
 
@@ -105,10 +98,6 @@ func TestCheckExpectedSkips_StaleDeclarationWarns(t *testing.T) {
 	CheckExpectedSkips(rep, map[string]config.ExpectedSkips{
 		"go": {Types: []string{"wire_name"}},
 	})
-	if len(rep.Warnings) == 0 {
-		t.Error("want a warning for the stale expected-skip entry")
-	}
-	if got := rep.ExitCode(); got != 0 {
-		t.Errorf("ExitCode = %d, want 0: a stale entry warns, it does not fail", got)
-	}
+	assert.NotEmpty(t, rep.Warnings, "want a warning for the stale expected-skip entry")
+	assert.True(t, rep.Success(), "a stale entry warns, it does not fail")
 }

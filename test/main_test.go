@@ -16,8 +16,11 @@ package test
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/chengxilo/serify/internal/language"
 	"github.com/chengxilo/serify/internal/testutil"
@@ -90,7 +93,7 @@ func requireWorkers(t *testing.T, langs ...string) {
 	t.Helper()
 	for _, lang := range langs {
 		if reason, ok := missingLang[lang]; ok {
-			t.Fatalf("required toolchain %s unavailable: %s", lang, reason)
+			require.Fail(t, fmt.Sprintf("required toolchain %s unavailable: %s", lang, reason))
 		}
 	}
 }

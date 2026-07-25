@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/chengxilo/serify/internal/config"
+	"github.com/stretchr/testify/require"
 )
 
 // strPtr is for building WorkerManifest literals: Build is a *string so that an
@@ -37,9 +38,8 @@ func TestBuild_NoBuildCommand(t *testing.T) {
 			Run:   "python3 worker.py",
 		},
 	}
-	if err := Build(info); err != nil {
-		t.Fatalf("Build: %v", err)
-	}
+	err := Build(info)
+	require.NoError(t, err, "Build: %v", err)
 }
 
 func TestBuild_RunsCommand(t *testing.T) {
@@ -52,12 +52,10 @@ func TestBuild_RunsCommand(t *testing.T) {
 			Run:   "./worker",
 		},
 	}
-	if err := Build(info); err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "out.txt")); err != nil {
-		t.Fatalf("build command did not run: %v", err)
-	}
+	err := Build(info)
+	require.NoError(t, err, "Build: %v", err)
+	_, err = os.Stat(filepath.Join(dir, "out.txt"))
+	require.NoError(t, err, "build command did not run: %v", err)
 }
 
 // TestBuild_AlwaysRuns is the property this package exists to guarantee. serify
@@ -79,25 +77,20 @@ func TestBuild_AlwaysRuns(t *testing.T) {
 	}
 	const runs = 3
 	for i := range runs {
-		if err := Build(info); err != nil {
-			t.Fatalf("Build #%d: %v", i+1, err)
-		}
+		err := Build(info)
+		require.NoError(t, err, "Build #%d: %v", i+1, err)
 	}
 
 	got, err := os.ReadFile(filepath.Join(dir, "count.txt"))
-	if err != nil {
-		t.Fatalf("read count: %v", err)
-	}
+	require.NoError(t, err, "read count: %v", err)
 	lines := 0
 	for _, b := range got {
 		if b == '\n' {
 			lines++
 		}
 	}
-	if lines != runs {
-		t.Fatalf("build ran %s times, want %s: nothing may cache the build away",
-			strconv.Itoa(lines), strconv.Itoa(runs))
-	}
+	require.Equal(t, runs, lines, "build ran %s times, want %s: nothing may cache the build away",
+		strconv.Itoa(lines), strconv.Itoa(runs))
 }
 
 func TestBuild_CommandFails(t *testing.T) {
@@ -109,7 +102,5 @@ func TestBuild_CommandFails(t *testing.T) {
 			Run:   "./worker",
 		},
 	}
-	if err := Build(info); err == nil {
-		t.Fatal("expected an error when the build command fails")
-	}
+	require.Error(t, Build(info), "expected an error when the build command fails")
 }

@@ -21,6 +21,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/chengxilo/serify/internal/testutil"
 )
 
@@ -51,9 +53,7 @@ func TestExamples_GoRust(t *testing.T) {
 		filepath.Join(repoRoot, "examples", "go"),
 		filepath.Join(repoRoot, "examples", "rust"),
 	)
-	if code != 0 {
-		t.Fatalf("expected exit 0, got %d\n%s", code, out)
-	}
+	require.Equal(t, 0, code, "expected exit 0, got %d\n%s", code, out)
 
 	grid := testutil.ReadResultGrid(t, csv)
 	for _, lang := range []string{"go", "rust"} {
@@ -100,7 +100,7 @@ func allWorkersGrid(t *testing.T) testutil.ResultGrid {
 		sharedGrid = testutil.ReadResultGrid(t, csv)
 	})
 	if sharedGridErr != "" {
-		t.Fatal(sharedGridErr)
+		require.Fail(t, sharedGridErr)
 	}
 	return sharedGrid
 }

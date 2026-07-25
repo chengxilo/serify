@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProtocol_Scalars(t *testing.T) {
@@ -44,9 +47,7 @@ func TestProtocol_Scalars(t *testing.T) {
 			sc := []SchemaField{{Name: "v", Type: tc.typ}}
 			fm := mustDecode(t, mkRaw(t, "v", tc.send), sc)
 			enc := mustEncode(t, fm, sc)
-			if enc["v"] != tc.want {
-				t.Errorf("want %v (%T), got %v (%T)", tc.want, tc.want, enc["v"], enc["v"])
-			}
+			assert.Equal(t, tc.want, enc["v"], "want %v (%T), got %v (%T)", tc.want, tc.want, enc["v"], enc["v"])
 		})
 	}
 }
@@ -56,21 +57,18 @@ func TestProtocol_U64_Max(t *testing.T) {
 	raw := mkRaw(t, "v", "18446744073709551615")
 	fm := mustDecode(t, raw, sc)
 	v, err := fm.GetU64("v")
-	if err != nil || v != math.MaxUint64 {
-		t.Fatalf("GetU64: %v %v", v, err)
-	}
-	if enc := mustEncode(t, fm, sc); enc["v"] != "18446744073709551615" {
-		t.Errorf("encode: %v", enc["v"])
-	}
+	require.NoError(t, err)
+	require.Equal(t, uint64(math.MaxUint64), v)
+	enc := mustEncode(t, fm, sc)
+	assert.Equal(t, "18446744073709551615", enc["v"], "encode: %v", enc["v"])
 }
 
 func TestProtocol_U128_As_U64(t *testing.T) {
 	sc := []SchemaField{{Name: "v", Type: "uint128"}}
 	raw := mkRaw(t, "v", "12345678901234567890")
 	fm := mustDecode(t, raw, sc)
-	if enc := mustEncode(t, fm, sc); enc["v"] != "12345678901234567890" {
-		t.Errorf("uint128 roundtrip: %v", enc["v"])
-	}
+	enc := mustEncode(t, fm, sc)
+	assert.Equal(t, "12345678901234567890", enc["v"], "uint128 roundtrip: %v", enc["v"])
 }
 
 func TestProtocol_I64_Min(t *testing.T) {
@@ -78,12 +76,10 @@ func TestProtocol_I64_Min(t *testing.T) {
 	raw := mkRaw(t, "v", "-9223372036854775808")
 	fm := mustDecode(t, raw, sc)
 	v, err := fm.GetI64("v")
-	if err != nil || v != math.MinInt64 {
-		t.Fatalf("GetI64: %v %v", v, err)
-	}
-	if enc := mustEncode(t, fm, sc); enc["v"] != "-9223372036854775808" {
-		t.Errorf("encode int64 min: %v", enc["v"])
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(math.MinInt64), v)
+	enc := mustEncode(t, fm, sc)
+	assert.Equal(t, "-9223372036854775808", enc["v"], "encode int64 min: %v", enc["v"])
 }
 
 func TestProtocol_F32(t *testing.T) {
@@ -93,21 +89,17 @@ func TestProtocol_F32(t *testing.T) {
 			h := f32hex(want)
 			fm := mustDecode(t, mkRaw(t, "v", h), sc)
 			got, err := fm.GetF32("v")
-			if err != nil {
-				t.Fatalf("GetF32: %v", err)
-			}
+			require.NoError(t, err)
 			switch {
-			case math.IsInf(float64(want), 1) && !math.IsInf(float64(got), 1):
-				t.Errorf("+Inf: got %v", got)
-			case math.IsInf(float64(want), -1) && !math.IsInf(float64(got), -1):
-				t.Errorf("-Inf: got %v", got)
-			case !math.IsInf(float64(want), 0) && math.Abs(float64(got-want)) > 1e-5:
-				t.Errorf("want %.6g, got %.6g", want, got)
+			case math.IsInf(float64(want), 1):
+				assert.True(t, math.IsInf(float64(got), 1), "+Inf: got %v", got)
+			case math.IsInf(float64(want), -1):
+				assert.True(t, math.IsInf(float64(got), -1), "-Inf: got %v", got)
+			default:
+				assert.InDelta(t, float64(want), float64(got), 1e-5, "want %.6g, got %.6g", want, got)
 			}
 			enc := mustEncode(t, fm, sc)
-			if enc["v"] != h {
-				t.Errorf("encode: got %v want %v", enc["v"], h)
-			}
+			assert.Equal(t, h, enc["v"], "encode: got %v want %v", enc["v"], h)
 		})
 	}
 }
@@ -119,20 +111,17 @@ func TestProtocol_F64(t *testing.T) {
 			h := f64hex(want)
 			fm := mustDecode(t, mkRaw(t, "v", h), sc)
 			got, err := fm.GetF64("v")
-			if err != nil {
-				t.Fatalf("GetF64: %v", err)
-			}
+			require.NoError(t, err)
 			switch {
-			case math.IsInf(want, 1) && !math.IsInf(got, 1):
-				t.Errorf("+Inf: got %v", got)
-			case math.IsInf(want, -1) && !math.IsInf(got, -1):
-				t.Errorf("-Inf: got %v", got)
-			case !math.IsInf(want, 0) && math.Abs(got-want) > 1e-15:
-				t.Errorf("want %.15g, got %.15g", want, got)
+			case math.IsInf(want, 1):
+				assert.True(t, math.IsInf(got, 1), "+Inf: got %v", got)
+			case math.IsInf(want, -1):
+				assert.True(t, math.IsInf(got, -1), "-Inf: got %v", got)
+			default:
+				assert.InDelta(t, want, got, 1e-15, "want %.15g, got %.15g", want, got)
 			}
-			if enc := mustEncode(t, fm, sc); enc["v"] != h {
-				t.Errorf("encode: got %v want %v", enc["v"], h)
-			}
+			enc := mustEncode(t, fm, sc)
+			assert.Equal(t, h, enc["v"], "encode: got %v want %v", enc["v"], h)
 		})
 	}
 }
@@ -142,12 +131,10 @@ func TestProtocol_Bytes(t *testing.T) {
 	raw := mkRaw(t, "v", "deadbeef")
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetBytes("v")
-	if err != nil || hex.EncodeToString(got) != "deadbeef" {
-		t.Fatalf("GetBytes: %v %v", got, err)
-	}
-	if enc := mustEncode(t, fm, sc); enc["v"] != "deadbeef" {
-		t.Errorf("encode: %v", enc["v"])
-	}
+	require.NoError(t, err)
+	require.Equal(t, "deadbeef", hex.EncodeToString(got))
+	enc := mustEncode(t, fm, sc)
+	assert.Equal(t, "deadbeef", enc["v"], "encode: %v", enc["v"])
 }
 
 func TestProtocol_Bytes_Empty(t *testing.T) {
@@ -156,16 +143,19 @@ func TestProtocol_Bytes_Empty(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetBytes("v")
 	if err != nil || len(got) != 0 {
-		t.Errorf("empty bytes: %v %v", got, err)
+		assert.NoError(t, err, "empty bytes: %v %v", got, err)
+		assert.Empty(t, got, "empty bytes: %v %v", got, err)
 	}
 }
 
 func TestProtocol_String_Unicode(t *testing.T) {
 	sc := []SchemaField{{Name: "v", Type: "string"}}
-	for _, s := range []string{"", "hello", "ä¸\u00adæ–‡ç”¨æˆ·ðŸ˜‰", "Ã±oÃ±o", "æ—¥æœ¬èªžãƒ†ã‚¹ãƒˆ"} {
+	for _, s := range []string{"", "hello", "ä¸­æ–‡ç”¨æˆ·ðŸ˜‰", "Ã±oÃ±o", "æ—¥æœ¬èªžãƒ†ã‚¹ãƒˆ"} {
 		fm := mustDecode(t, mkRaw(t, "v", s), sc)
-		if got, err := fm.GetString("v"); err != nil || got != s {
-			t.Errorf("string %q: got %q %v", s, got, err)
+		got, err := fm.GetString("v")
+		if err != nil || got != s {
+			assert.NoError(t, err, "string %q: got %q %v", s, got, err)
+			assert.Equal(t, s, got, "string %q: got %q %v", s, got, err)
 		}
 	}
 }
@@ -176,11 +166,12 @@ func TestProtocol_Optional_Null(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetOptionalString("v")
 	if err != nil || got != nil {
-		t.Errorf("optional null: %v %v", got, err)
+		assert.NoError(t, err, "optional null: %v %v", got, err)
+		assert.Nil(t, got, "optional null: %v %v", got, err)
 	}
 	enc := mustEncode(t, fm, sc)
 	if enc["v"] != nil {
-		t.Errorf("encode null: %v", enc["v"])
+		assert.Nil(t, enc["v"], "encode null: %v", enc["v"])
 	}
 }
 
@@ -190,11 +181,14 @@ func TestProtocol_Optional_Present(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetOptionalString("v")
 	if err != nil || got == nil || *got != "world" {
-		t.Errorf("optional present: %v %v", got, err)
+		assert.NoError(t, err, "optional present: %v %v", got, err)
+		if err == nil {
+			require.NotNil(t, got, "optional present: %v %v", got, err)
+			assert.Equal(t, "world", *got, "optional present: %v %v", got, err)
+		}
 	}
-	if enc := mustEncode(t, fm, sc); enc["v"] != "world" {
-		t.Errorf("encode present: %v", enc["v"])
-	}
+	enc := mustEncode(t, fm, sc)
+	assert.Equal(t, "world", enc["v"], "encode present: %v", enc["v"])
 }
 
 func TestProtocol_Array_U32_RoundTrip(t *testing.T) {
@@ -204,16 +198,18 @@ func TestProtocol_Array_U32_RoundTrip(t *testing.T) {
 	}
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListU32("v")
-	if err != nil {
-		t.Fatalf("GetListU32: %v", err)
-	}
-	if len(got) != 4 || got[0] != 0xFFFFFFFF || got[1] != 0 || got[2] != 1 || got[3] != 2 {
-		t.Errorf("got %v", got)
-	}
+	require.NoError(t, err)
+	require.Len(t, got, 4)
+	assert.Equal(t, uint32(0xFFFFFFFF), got[0], "got %v", got)
+	assert.Equal(t, uint32(0), got[1], "got %v", got)
+	assert.Equal(t, uint32(1), got[2], "got %v", got)
+	assert.Equal(t, uint32(2), got[3], "got %v", got)
 	enc := mustEncode(t, fm, sc)
 	arr, ok := enc["v"].([]any)
 	if !ok || len(arr) != 4 || arr[0] != uint32(0xFFFFFFFF) {
-		t.Errorf("encode array: %#v", enc["v"])
+		assert.True(t, ok, "encode array: %#v", enc["v"])
+		assert.Len(t, arr, 4, "encode array: %#v", enc["v"])
+		assert.Equal(t, uint32(0xFFFFFFFF), arr[0], "encode array: %#v", enc["v"])
 	}
 }
 
@@ -225,7 +221,12 @@ func TestProtocol_Array_U32_Numbers(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListU32("v")
 	if err != nil || len(got) != 4 || got[0] != 100 || got[3] != 400 {
-		t.Errorf("numeric array: %v %v", got, err)
+		assert.NoError(t, err, "numeric array: %v %v", got, err)
+		assert.Len(t, got, 4, "numeric array: %v %v", got, err)
+		if len(got) == 4 {
+			assert.Equal(t, uint32(100), got[0], "numeric array: %v %v", got, err)
+			assert.Equal(t, uint32(400), got[3], "numeric array: %v %v", got, err)
+		}
 	}
 }
 
@@ -235,7 +236,11 @@ func TestProtocol_ListString(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListString("v")
 	if err != nil || len(got) != 3 || got[2] != "ÃŽÂ³ÃŽÂ´ÃŽÂµ" {
-		t.Errorf("ListString: %v %v", got, err)
+		assert.NoError(t, err, "ListString: %v %v", got, err)
+		assert.Len(t, got, 3, "ListString: %v %v", got, err)
+		if len(got) == 3 {
+			assert.Equal(t, "ÃŽÂ³ÃŽÂ´ÃŽÂµ", got[2], "ListString: %v %v", got, err)
+		}
 	}
 }
 
@@ -245,7 +250,8 @@ func TestProtocol_ListString_Empty(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListString("v")
 	if err != nil || len(got) != 0 {
-		t.Errorf("empty ListString: %v %v", got, err)
+		assert.NoError(t, err, "empty ListString: %v %v", got, err)
+		assert.Empty(t, got, "empty ListString: %v %v", got, err)
 	}
 }
 
@@ -255,7 +261,11 @@ func TestProtocol_ListU32(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListU32("v")
 	if err != nil || len(got) != 3 || got[2] != 0xFFFFFFFF {
-		t.Errorf("ListU32: %v %v", got, err)
+		assert.NoError(t, err, "ListU32: %v %v", got, err)
+		assert.Len(t, got, 3, "ListU32: %v %v", got, err)
+		if len(got) == 3 {
+			assert.Equal(t, uint32(0xFFFFFFFF), got[2], "ListU32: %v %v", got, err)
+		}
 	}
 }
 
@@ -267,7 +277,11 @@ func TestProtocol_ListU64(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListU64("v")
 	if err != nil || len(got) != 3 || got[0] != math.MaxUint64 {
-		t.Errorf("ListU64: %v %v", got, err)
+		assert.NoError(t, err, "ListU64: %v %v", got, err)
+		assert.Len(t, got, 3, "ListU64: %v %v", got, err)
+		if len(got) == 3 {
+			assert.Equal(t, uint64(math.MaxUint64), got[0], "ListU64: %v %v", got, err)
+		}
 	}
 }
 
@@ -279,7 +293,12 @@ func TestProtocol_ListI64(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListI64("v")
 	if err != nil || len(got) != 3 || got[0] != math.MinInt64 || got[2] != math.MaxInt64 {
-		t.Errorf("ListI64: %v %v", got, err)
+		assert.NoError(t, err, "ListI64: %v %v", got, err)
+		assert.Len(t, got, 3, "ListI64: %v %v", got, err)
+		if len(got) == 3 {
+			assert.Equal(t, int64(math.MinInt64), got[0], "ListI64: %v %v", got, err)
+			assert.Equal(t, int64(math.MaxInt64), got[2], "ListI64: %v %v", got, err)
+		}
 	}
 }
 
@@ -292,7 +311,12 @@ func TestProtocol_ListF32(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListF32("v")
 	if err != nil || len(got) != 3 || math.Abs(float64(got[0]-1.5)) > 1e-6 || math.Abs(float64(got[1]+2.0)) > 1e-6 {
-		t.Errorf("ListF32: %v %v", got, err)
+		assert.NoError(t, err, "ListF32: %v %v", got, err)
+		assert.Len(t, got, 3, "ListF32: %v %v", got, err)
+		if len(got) >= 2 {
+			assert.InDelta(t, 1.5, got[0], 1e-6, "ListF32: %v %v", got, err)
+			assert.InDelta(t, -2.0, got[1], 1e-6, "ListF32: %v %v", got, err)
+		}
 	}
 }
 
@@ -302,7 +326,13 @@ func TestProtocol_ListBool(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListBool("v")
 	if err != nil || len(got) != 3 || !got[0] || got[1] || !got[2] {
-		t.Errorf("ListBool: %v %v", got, err)
+		assert.NoError(t, err, "ListBool: %v %v", got, err)
+		assert.Len(t, got, 3, "ListBool: %v %v", got, err)
+		if len(got) == 3 {
+			assert.True(t, got[0], "ListBool: %v %v", got, err)
+			assert.False(t, got[1], "ListBool: %v %v", got, err)
+			assert.True(t, got[2], "ListBool: %v %v", got, err)
+		}
 	}
 }
 
@@ -317,26 +347,23 @@ func TestProtocol_Struct(t *testing.T) {
 	}
 	fm := mustDecode(t, raw, sc)
 	addr, err := fm.GetStruct("addr")
-	if err != nil || addr == nil {
-		t.Fatalf("GetStruct: %v %v", addr, err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, addr)
 	if s, _ := addr.GetString("street"); s != "Main St" {
-		t.Errorf("street: %q", s)
+		assert.Equal(t, "Main St", s, "street: %q", s)
 	}
 	if z, _ := addr.GetU32("zip"); z != 90210 {
-		t.Errorf("zip: %d", z)
+		assert.Equal(t, uint32(90210), z, "zip: %d", z)
 	}
 
 	enc := mustEncode(t, fm, sc)
 	addrMap, ok := enc["addr"].(map[string]any)
-	if !ok {
-		t.Fatalf("addr type: %T", enc["addr"])
-	}
+	require.True(t, ok, "addr type: %T", enc["addr"])
 	if addrMap["street"] != "Main St" {
-		t.Errorf("encoded street: %v", addrMap["street"])
+		assert.Equal(t, "Main St", addrMap["street"], "encoded street: %v", addrMap["street"])
 	}
 	if addrMap["zip"] != uint32(90210) {
-		t.Errorf("encoded zip: %v (%T)", addrMap["zip"], addrMap["zip"])
+		assert.Equal(t, uint32(90210), addrMap["zip"], "encoded zip: %v (%T)", addrMap["zip"], addrMap["zip"])
 	}
 }
 
@@ -349,12 +376,12 @@ func TestProtocol_Struct_U32Boundary(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	addr, _ := fm.GetStruct("addr")
 	if z, _ := addr.GetU32("zip"); z != 0xFFFFFFFF {
-		t.Errorf("uint32 max in struct: %d", z)
+		assert.Equal(t, uint32(0xFFFFFFFF), z, "uint32 max in struct: %d", z)
 	}
 	enc := mustEncode(t, fm, sc)
 	addrMap := enc["addr"].(map[string]any)
 	if addrMap["zip"] != uint32(0xFFFFFFFF) {
-		t.Errorf("encoded uint32 max: %v (%T)", addrMap["zip"], addrMap["zip"])
+		assert.Equal(t, uint32(0xFFFFFFFF), addrMap["zip"], "encoded uint32 max: %v (%T)", addrMap["zip"], addrMap["zip"])
 	}
 }
 
@@ -366,21 +393,19 @@ func TestProtocol_ListStruct(t *testing.T) {
 	}
 	fm := mustDecode(t, raw, sc)
 	items, err := fm.GetListStruct("items")
-	if err != nil || len(items) != 3 {
-		t.Fatalf("ListStruct decode: %v %v", items, err)
-	}
+	require.NoError(t, err)
+	require.Len(t, items, 3)
 	if v, _ := items[2].GetU32("n"); v != 3 {
-		t.Errorf("items[2].n: %d", v)
+		assert.Equal(t, uint32(3), v, "items[2].n: %d", v)
 	}
 
 	enc := mustEncode(t, fm, sc)
 	list, ok := enc["items"].([]any)
-	if !ok || len(list) != 3 {
-		t.Fatalf("ListStruct encode: %v", enc["items"])
-	}
+	require.True(t, ok, "ListStruct encode: %v", enc["items"])
+	require.Len(t, list, 3)
 	m := list[0].(map[string]any)
 	if m["n"] != uint32(1) {
-		t.Errorf("items[0].n: %v (%T)", m["n"], m["n"])
+		assert.Equal(t, uint32(1), m["n"], "items[0].n: %v (%T)", m["n"], m["n"])
 	}
 }
 
@@ -391,11 +416,12 @@ func TestProtocol_OptionalStruct_Null(t *testing.T) {
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetOptionalStruct("s")
 	if !errors.Is(err, ErrNilField) || got != nil {
-		t.Errorf("optional[struct] null: %v %v", got, err)
+		assert.True(t, errors.Is(err, ErrNilField), "optional[struct] null: %v %v", got, err)
+		assert.Nil(t, got, "optional[struct] null: %v %v", got, err)
 	}
 	enc := mustEncode(t, fm, sc)
 	if enc["s"] != nil {
-		t.Errorf("encode null struct: %v", enc["s"])
+		assert.Nil(t, enc["s"], "encode null struct: %v", enc["s"])
 	}
 }
 
@@ -405,11 +431,10 @@ func TestProtocol_OptionalStruct_Present(t *testing.T) {
 	raw := map[string]json.RawMessage{"s": json.RawMessage(`{"x":42}`)}
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetOptionalStruct("s")
-	if err != nil || got == nil {
-		t.Fatalf("optional[struct] present: %v %v", got, err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, got)
 	if v, _ := got.GetU32("x"); v != 42 {
-		t.Errorf("s.x: %d", v)
+		assert.Equal(t, uint32(42), v, "s.x: %d", v)
 	}
 }
 
@@ -421,20 +446,17 @@ func TestProtocol_MissingField_Skipped(t *testing.T) {
 	raw := mkRaw(t, "a", 5.0) // b is absent
 	fm := mustDecode(t, raw, sc)
 	if v, _ := fm.GetU32("a"); v != 5 {
-		t.Errorf("a: %d", v)
+		assert.Equal(t, uint32(5), v, "a: %d", v)
 	}
-	if _, err := fm.GetString("b"); err == nil {
-		t.Error("expected not-found error for absent b")
-	}
+	_, err := fm.GetString("b")
+	assert.Error(t, err, "expected not-found error for absent b")
 }
 
 func TestProtocol_UnknownType_Error(t *testing.T) {
 	sc := []SchemaField{{Name: "v", Type: "uuid"}}
 	raw := mkRaw(t, "v", "something")
 	_, err := DecodeFieldMap(raw, sc)
-	if err == nil {
-		t.Error("expected error for unknown type")
-	}
+	assert.Error(t, err, "expected error for unknown type")
 }
 
 func TestProtocol_NestedStruct_MultiLevel(t *testing.T) {
@@ -450,14 +472,15 @@ func TestProtocol_NestedStruct_MultiLevel(t *testing.T) {
 	inner, _ := outer.GetStruct("inner")
 	v, err := inner.GetU64("value")
 	if err != nil || v != 9999999999999999999 {
-		t.Errorf("deep nested uint64: %v %v", v, err)
+		assert.NoError(t, err, "deep nested uint64: %v %v", v, err)
+		assert.Equal(t, uint64(9999999999999999999), v, "deep nested uint64: %v %v", v, err)
 	}
 }
 
 // TestProtocol_ListEveryScalarElem pins the invariant that a list supports every
 // element type a bare field does. Before decodeList routed through decodeScalar
 // it carried its own switch, and uint16/int8/int16/float64/bytes were missing
-// from it — declarable in a case file, accepted by `serify validate`, and only
+// from it -- declarable in a case file, accepted by `serify validate`, and only
 // failing once a worker actually ran. Adding a scalar to typekind without
 // teaching decodeList about it used to be silently possible; now it cannot be.
 func TestProtocol_ListEveryScalarElem(t *testing.T) {
@@ -488,27 +511,17 @@ func TestProtocol_ListEveryScalarElem(t *testing.T) {
 
 			fm := mustDecode(t, raw, sc)
 			got, ok := fm.fields["v"]
-			if !ok {
-				t.Fatal("field not decoded")
-			}
-			if fmt.Sprintf("%v (%T)", got, got) != fmt.Sprintf("%v (%T)", c.want, c.want) {
-				t.Fatalf("decode: got %v (%T), want %v (%T)", got, got, c.want, c.want)
-			}
+			require.True(t, ok, "field not decoded")
+			require.Equal(t, fmt.Sprintf("%v (%T)", c.want, c.want), fmt.Sprintf("%v (%T)", got, got), "decode: got %v (%T), want %v (%T)", got, got, c.want, c.want)
 
 			// Re-encoding must reproduce the wire form the runner sent, so the
 			// two directions cannot drift apart for any element type.
 			enc := mustEncode(t, fm, sc)
 			gotJSON, err := json.Marshal(enc["v"])
-			if err != nil {
-				t.Fatalf("marshal encoded: %v", err)
-			}
+			require.NoError(t, err, "marshal encoded: %v", err)
 			wantJSON, err := json.Marshal(c.send)
-			if err != nil {
-				t.Fatalf("marshal sent: %v", err)
-			}
-			if string(gotJSON) != string(wantJSON) {
-				t.Errorf("re-encode: got %s, want %s", gotJSON, wantJSON)
-			}
+			require.NoError(t, err, "marshal sent: %v", err)
+			assert.Equal(t, string(wantJSON), string(gotJSON), "re-encode: got %s, want %s", gotJSON, wantJSON)
 		})
 	}
 }
@@ -523,18 +536,14 @@ func TestProtocol_ListBigElems(t *testing.T) {
 
 			fm := mustDecode(t, raw, sc)
 			got, err := fm.GetListBig("v")
-			if err != nil || len(got) != 2 {
-				t.Fatalf("GetListBig: %v %v", got, err)
-			}
-			if got[0].String() != "170141183460469231731687303715884105727" || got[1].Sign() != 0 {
-				t.Fatalf("decode: %v", got)
-			}
+			require.NoError(t, err)
+			require.Len(t, got, 2)
+			require.Equal(t, "170141183460469231731687303715884105727", got[0].String())
+			require.Equal(t, 0, got[1].Sign())
 
 			enc := mustEncode(t, fm, sc)
 			b, _ := json.Marshal(enc["v"])
-			if string(b) != `["170141183460469231731687303715884105727","0"]` {
-				t.Errorf("re-encode: %s", b)
-			}
+			assert.Equal(t, `["170141183460469231731687303715884105727","0"]`, string(b), "re-encode: %s", b)
 		})
 	}
 }

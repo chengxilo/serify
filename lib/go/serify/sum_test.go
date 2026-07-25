@@ -17,6 +17,9 @@ package serify
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // identifier-shaped sum: a unit variant plus two single-payload variants.
@@ -48,30 +51,21 @@ func TestSum_DecodeEncodeRoundTrip(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var raw map[string]json.RawMessage
 			if err := json.Unmarshal([]byte(tc.wire), &raw); err != nil {
-				t.Fatal(err)
+				require.NoError(t, err)
 			}
 
 			fm, err := DecodeFieldMap(raw, schema)
-			if err != nil {
-				t.Fatalf("decode: %v", err)
-			}
+			require.NoError(t, err, "decode: %v", err)
 			v, err := fm.GetVariant("id")
-			if err != nil {
-				t.Fatalf("GetVariant: %v", err)
-			}
-			if v.Tag != tc.wantTag || v.Value != tc.wantVal {
-				t.Fatalf("got {%q, %v(%T)}, want {%q, %v}", v.Tag, v.Value, v.Value, tc.wantTag, tc.wantVal)
-			}
+			require.NoError(t, err, "GetVariant: %v", err)
+			require.Equal(t, tc.wantTag, v.Tag, "got {%q, %v(%T)}, want {%q, %v}", v.Tag, v.Value, v.Value, tc.wantTag, tc.wantVal)
+			assert.Equal(t, tc.wantVal, v.Value, "got {%q, %v(%T)}, want {%q, %v}", v.Tag, v.Value, v.Value, tc.wantTag, tc.wantVal)
 
 			// Re-encode and compare to the original wire JSON.
 			out, err := EncodeFieldMap(fm, schema)
-			if err != nil {
-				t.Fatalf("encode: %v", err)
-			}
+			require.NoError(t, err, "encode: %v", err)
 			got, _ := json.Marshal(out)
-			if string(got) != tc.wire {
-				t.Errorf("round-trip: got %s, want %s", got, tc.wire)
-			}
+			assert.Equal(t, tc.wire, string(got), "round-trip: got %s, want %s", got, tc.wire)
 		})
 	}
 }
@@ -87,9 +81,8 @@ func TestSum_SnapshotDeepCopiesPayload(t *testing.T) {
 	payload, _ := fm.GetVariant("id")
 	payload.Value.([]byte)[0] = 0xFF // a serializer mutating its input
 
-	if diffs := CompareFieldMaps(before, fm); len(diffs) != 1 || diffs[0] != "id" {
-		t.Errorf("CompareFieldMaps = %v, want [id]: a mutated sum payload must be detected", diffs)
-	}
+	diffs := CompareFieldMaps(before, fm)
+	assert.Equal(t, []string{"id"}, diffs, "CompareFieldMaps = %v, want [id]: a mutated sum payload must be detected", diffs)
 }
 
 // DetectZeroCopy must see through a sum: a bytes payload aliasing the input
@@ -99,9 +92,8 @@ func TestSum_DetectZeroCopyOnPayload(t *testing.T) {
 	fm := NewFieldMap()
 	fm.SetVariant("id", "key", buf) // aliased, not copied
 
-	if aliased := DetectZeroCopy(fm, buf); len(aliased) != 1 || aliased[0] != "id" {
-		t.Errorf("DetectZeroCopy = %v, want [id]", aliased)
-	}
+	aliased := DetectZeroCopy(fm, buf)
+	assert.Equal(t, []string{"id"}, aliased, "DetectZeroCopy = %v, want [id]", aliased)
 }
 
 // A worker builds a sum from scratch via SetVariant, and it encodes correctly.
@@ -110,11 +102,7 @@ func TestSum_SetVariantEncodes(t *testing.T) {
 	fm.SetVariant("id", "numeric", uint32(42))
 
 	out, err := EncodeFieldMap(fm, sumSchema())
-	if err != nil {
-		t.Fatalf("encode: %v", err)
-	}
+	require.NoError(t, err, "encode: %v", err)
 	got, _ := json.Marshal(out)
-	if string(got) != `{"id":{"numeric":42}}` {
-		t.Errorf("got %s", got)
-	}
+	assert.Equal(t, `{"id":{"numeric":42}}`, string(got), "got %s", got)
 }

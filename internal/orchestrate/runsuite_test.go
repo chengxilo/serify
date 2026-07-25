@@ -24,6 +24,7 @@ import (
 	"github.com/chengxilo/serify/internal/config"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/worker"
+	"github.com/stretchr/testify/assert"
 )
 
 // stubScript builds a stub worker that serializes to a fixed hex and
@@ -224,9 +225,7 @@ func TestRunSuite_DeclaredSkipIsNotAFailure(t *testing.T) {
 			t.Errorf("skip %s: status %q (detail %q), want SKIP", op, res.Status, res.Detail)
 		}
 	}
-	if got := rep.ExitCode(); got != 0 {
-		t.Errorf("ExitCode = %d, want 0: a declared skip must not fail the run", got)
-	}
+	assert.True(t, rep.Success(), "a declared skip must not fail the run")
 }
 
 // A worker that dies during Bind must not be reported as SKIP. Skip and death
@@ -249,9 +248,7 @@ func TestRunSuite_DeadWorkerIsErrorNotSkip(t *testing.T) {
 			t.Errorf("dead %s: status %q (detail %q), want ERROR", op, res.Status, res.Detail)
 		}
 	}
-	if got := rep.ExitCode(); got == 0 {
-		t.Error("ExitCode = 0, want non-zero: a worker that died must fail the run")
-	}
+	assert.False(t, rep.Success(), "a worker that died must fail the run")
 }
 
 func TestRunSuite_CancelledContextReturnsPromptly(t *testing.T) {
