@@ -57,7 +57,7 @@ class SerifyModelHelper
             $key = $attr->name ?? self::defaultKey($prop->getName());
             $val = $prop->isInitialized($obj) ? $prop->getValue($obj) : null;
             // A union type is PHP's sum type, so a property declared with one is
-            // a oneof — see toVariant.
+            // a sum — see toVariant.
             if ($prop->getType() instanceof \ReflectionUnionType) {
                 $fm->setRaw($key, self::toVariant($prop->getType(), $key, $val));
             } else {
@@ -101,14 +101,14 @@ class SerifyModelHelper
         return $obj;
     }
 
-    // ── oneof ───────────────────────────────────────────────────────────────
+    // ── sum ───────────────────────────────────────────────────────────────
     //
     // A property union type (`public Silent|Sms|Push|Invoice $channel`) is PHP's
     // sum type, and it is all the binding needs: ReflectionUnionType names the
     // arms and each arm's own public properties give its payload. No converter,
     // no registration.
     //
-    // The arity rule is the same one every serify binding uses, because a oneof
+    // The arity rule is the same one every serify binding uses, because a sum
     // is a sum-of-products:
     //
     //     0 properties -> a unit variant, no payload
@@ -184,7 +184,7 @@ class SerifyModelHelper
         }
 
         $known = implode(', ', array_map([self::class, 'armTag'], $arms));
-        throw new \RuntimeException("unknown oneof variant \"{$v->tag}\" (declared: $known)");
+        throw new \RuntimeException("unknown variant \"{$v->tag}\" (declared: $known)");
     }
 
     private static function setFieldMapValue(FieldMap $fm, string $key, mixed $val): void

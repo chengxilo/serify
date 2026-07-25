@@ -400,14 +400,14 @@ class User:
 
 Generates `to_field_map()` and `from_field_map(fm)` class methods.
 
-### `oneof` fields
+### `sum` fields
 
-A `oneof` binds onto whatever sum type the language already has, so six of the
+A `sum` binds onto whatever sum type the language already has, so six of the
 nine need **nothing declared** — the binding reads the arms off the type itself:
 a Rust `enum`, a Java `sealed interface`, a Python union of dataclasses, a PHP
 property union type, a C# `abstract record` hierarchy, an Elixir tagged tuple.
 The three that cannot be introspected name their arms instead: C++
-`SERIFY_ONEOF(T, "a", "b")` (no reflection), Node `@Serify.oneof([A, B])` (union
+`SERIFY_SUM(T, "a", "b")` (no reflection), Node `@Serify.sum([A, B])` (union
 types are erased at runtime), Go a `serify.Converter` (implementations of an
 interface cannot be enumerated).
 

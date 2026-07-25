@@ -16,12 +16,12 @@
 
 /**
  * `NotificationRecord` mirrors examples/cases/notification.yaml, whose
- * `channel` field is a `oneof`.
+ * `channel` field is a `sum`.
  *
  * TypeScript's union type is erased before the code runs, so unlike Rust, Java,
  * Python, PHP, C# and Elixir — where the binding reads the arms off the
  * language's own sum type — the arms have to be named at runtime. That is what
- * `@Serify.oneof([...])` is, and it is the only extra line: each arm is a plain
+ * `@Serify.sum([...])` is, and it is the only extra line: each arm is a plain
  * class whose own properties are its payload.
  *
  * Go is the --ref language and owns the byte layout; see examples/go/wire.go.
@@ -54,7 +54,7 @@ export type Channel = Silent | Sms | Push | Invoice;
 @Serify.Model()
 export class NotificationRecord {
   @Serify.field() notification_id = 0;
-  @Serify.oneof([Silent, Sms, Push, Invoice]) channel: Channel = new Silent();
+  @Serify.sum([Silent, Sms, Push, Invoice]) channel: Channel = new Silent();
   @Serify.field() urgent = false;
 
   marshal(): Buffer {
@@ -62,7 +62,7 @@ export class NotificationRecord {
     id.writeUInt32LE(this.notification_id, 0);
     const parts: Buffer[] = [id];
 
-    // The tag ordinal is the arm's position in the case file's oneof, which is
+    // The tag ordinal is the arm's position in the case file's sum, which is
     // the declaration order of the four classes above. The schema tag *names*
     // are the binding's business, and never appear here.
     if (this.channel instanceof Silent) {

@@ -62,7 +62,7 @@ type rawTypeField struct {
 // separate flag, and the two are mutually exclusive by construction.
 //
 // A sum referenced from another type's field is that field's type directly —
-// bare, at the referencing key — so `stream_id: identifier` is a oneof at
+// bare, at the referencing key — so `stream_id: identifier` is a variant at
 // `stream_id`. As the type under test it becomes the `{value: <variant>}` record
 // a standalone sum needs (see sumSchema), because the top level of a schema is a
 // field list and a bare sum is not one.
@@ -266,7 +266,7 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 	}
 	if nt, ok := r.named[expr]; ok {
 		// A sum is its variants: as a field it *is* the sum, so
-		// `stream_id: identifier` is a oneof at `stream_id` rather than a struct
+		// `stream_id: identifier` is a variant at `stream_id` rather than a struct
 		// wrapping one. (It becomes a `{value: <variant>}` record only when it is
 		// itself the type under test — see sumSchema.)
 		if nt.sum {
@@ -341,7 +341,7 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 			return FieldType{}, err
 		}
 		return FieldType{Base: typekind.Map, Key: &key, Elem: &val}, nil
-	case typekind.OneOf:
+	case typekind.Sum:
 		return FieldType{}, fmt.Errorf(
 			"%q: a sum is declared with a `variants:` section on its own type file, not "+
 				"as a type expression — put the arms there (an entry with no type is a unit "+
@@ -351,7 +351,7 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 	}
 }
 
-// sumType builds the oneof for a `sum: true` type from its entries: each entry is
+// sumType builds the sum for a `sum: true` type from its entries: each entry is
 // one variant, `tag: payload-type`, and an entry with no type is a unit variant.
 func (r *schemaResolver) sumType(raw []rawTypeField) (FieldType, error) {
 	if len(raw) == 0 {
@@ -369,7 +369,7 @@ func (r *schemaResolver) sumType(raw []rawTypeField) (FieldType, error) {
 		}
 		variants = append(variants, v)
 	}
-	return FieldType{Base: typekind.OneOf, Variants: variants}, nil
+	return FieldType{Base: typekind.Sum, Variants: variants}, nil
 }
 
 // sumSchema is the schema of a sum type when it is the type under test. The top

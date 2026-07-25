@@ -23,7 +23,7 @@ import java.nio.ByteOrder;
 
 /**
  * Mirrors examples/cases/notification.yaml, whose {@code channel} field is a
- * {@code oneof}.
+ * {@code sum}.
  *
  * <p>Java's sum type is a sealed interface, and that is all the binding needs:
  * {@code permits} names the arms and each arm's record components give its
@@ -35,7 +35,7 @@ import java.nio.ByteOrder;
 @WorkerLib.SerifyModel
 public final class Notification {
 
-    /** The {@code oneof} from the case file. */
+    /** The {@code sum} from the case file. */
     public sealed interface Channel permits Silent, Sms, Push, Invoice {}
 
     public record Silent() implements Channel {}                      // arity 0 — a unit variant
@@ -53,7 +53,7 @@ public final class Notification {
         out.writeBytes(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
                 .putInt(notificationId).array());
 
-        // The tag ordinal is the variant's position in the case file's oneof,
+        // The tag ordinal is the variant's position in the case file's sum,
         // which is the declaration order of the four arms above. The schema tag
         // *names* are the binding's business, and never appear here.
         //

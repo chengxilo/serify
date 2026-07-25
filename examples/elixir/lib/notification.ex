@@ -14,10 +14,10 @@
 
 defmodule NotificationRecord do
   @moduledoc """
-  Mirrors examples/cases/notification.yaml, whose `channel` field is a `oneof`.
+  Mirrors examples/cases/notification.yaml, whose `channel` field is a `sum`.
 
   Elixir has no sum type to declare, and needs none — a tagged tuple already
-  *is* a tag and a payload, so `serify_field(:channel, :oneof)` is the whole
+  *is* a tag and a payload, so `serify_field(:channel, :sum)` is the whole
   binding. No arm list, no converter, no registration:
 
       :silent                            a unit variant
@@ -32,11 +32,11 @@ defmodule NotificationRecord do
   defstruct [:notification_id, :channel, :urgent]
 
   serify_field(:notification_id, :u32)
-  serify_field(:channel, :oneof)
+  serify_field(:channel, :sum)
   serify_field(:urgent, :bool)
 
   def marshal(%__MODULE__{} = n) do
-    # The tag ordinal is the variant's position in the case file's oneof. The
+    # The tag ordinal is the variant's position in the case file's sum. The
     # schema tag *names* are the binding's business, and never appear here.
     tagged =
       case n.channel do

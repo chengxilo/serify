@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # yaml-language-server: $schema=.schemas/notification.schema.json
-# A delivery notification. Exists to cover `oneof` — a value is exactly one
+# A delivery notification. Exists to cover `sum` — a value is exactly one
 # variant, and the three payload arities the type system allows all appear here:
 #
 #   silent            arity 0 — a unit variant, no payload

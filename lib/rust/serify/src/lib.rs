@@ -48,7 +48,7 @@ pub trait SerifyField: Sized {
     fn serify_write(&self, fm: &mut FieldMap, key: &str);
 }
 
-/// How a value of this type occupies a *oneof payload* — a bare `FieldValue`
+/// How a value of this type occupies a *sum payload* — a bare `FieldValue`
 /// rather than a keyed slot.
 ///
 /// Emitted by `#[derive(SerifyModel)]` for the same reason as [`SerifyField`]:
@@ -232,7 +232,7 @@ pub enum FieldValue {
     Struct(Box<FieldMap>),
     OptionalStruct(Option<Box<FieldMap>>),
     Map(HashMap<String, FieldValue>),
-    /// One arm of a oneof: the active variant's tag and its payload (None for a
+    /// One arm of a sum: the active variant's tag and its payload (None for a
     /// unit variant).
     Variant {
         tag: String,
@@ -597,7 +597,7 @@ impl FieldMap {
             .insert(k.into(), FieldValue::Struct(Box::new(v)));
     }
 
-    /// Store a oneof value: the active variant's tag and payload (None for a
+    /// Store a sum value: the active variant's tag and payload (None for a
     /// unit variant).
     pub fn set_variant(&mut self, k: &str, tag: &str, value: Option<FieldValue>) {
         self.fields.insert(
@@ -609,7 +609,7 @@ impl FieldMap {
         );
     }
 
-    /// Read a oneof value: (tag, payload). Returns None if the field is absent
+    /// Read a sum value: (tag, payload). Returns None if the field is absent
     /// or not a variant.
     pub fn get_variant(&self, k: &str) -> Option<(&str, Option<&FieldValue>)> {
         if let Some(FieldValue::Variant { tag, value }) = self.fields.get(k) {
@@ -642,11 +642,11 @@ pub struct SchemaField {
     pub name: String,
     pub typ: String,
     pub fields: Vec<SchemaField>, // nested schema for struct / list<struct> / optional<struct>
-    pub variants: Vec<SchemaVariant>, // for oneof<...>
+    pub variants: Vec<SchemaVariant>, // for sum<...>
     pub tags: HashMap<String, String>,
 }
 
-/// One arm of a oneof: a tag and its payload schema (None for a unit variant).
+/// One arm of a sum: a tag and its payload schema (None for a unit variant).
 #[cfg(feature = "worker")]
 #[derive(Debug, Clone, Default)]
 pub struct SchemaVariant {
@@ -817,25 +817,26 @@ fn decode_field(fm: &mut FieldMap, sf: &SchemaField, v: &Value) -> Result<(), St
                 return Err(format!("array {name}: expected {want} elements, got {got}"));
             }
         }
-        // enum<a,b,c>: a bare variant name in case data, carried internally as a
-        // payload-less Variant — the same representation oneof uses. An enum field
-        // and a sum field thus share one shape and one derive path, so a model type
-        // needs no `str`/`repr` marker to say which it is.
+        // enum<a,b,c>: an enum value is just its variant name — a plain string,
+        // exactly as the Go reference stores it. An enum is NOT a sum: it carries
+        // no payload, and a worker models the field as a String, so it must be
+        // stored and read as a string (not a payload-less Variant, which is the
+        // sum representation and would leave a String-typed field unreadable).
         typ if typ.starts_with("enum<") => {
             let tag = v.as_str().ok_or("enum must be a string")?;
-            fm.set_variant(name, tag, None);
+            fm.set_string(name, tag.to_string());
         }
-        typ if typ.starts_with("oneof<") => {
-            let obj = v.as_object().ok_or("oneof must be an object")?;
+        typ if typ.starts_with("sum<") => {
+            let obj = v.as_object().ok_or("sum must be an object")?;
             if obj.len() != 1 {
-                return Err(format!("oneof must name one variant, got {}", obj.len()));
+                return Err(format!("sum must name one variant, got {}", obj.len()));
             }
             let (tag, payload) = obj.iter().next().unwrap();
             let sv = sf
                 .variants
                 .iter()
                 .find(|x| &x.name == tag)
-                .ok_or_else(|| format!("unknown oneof variant {tag}"))?;
+                .ok_or_else(|| format!("unknown variant {tag}"))?;
             match &sv.payload {
                 None => fm.set_variant(name, tag, None),
                 Some(p) => {
@@ -1139,28 +1140,28 @@ fn encode_field(sf: &SchemaField, fv: &FieldValue) -> Result<Value, String> {
             let (elem, _) = array_parts(typ)?;
             encode_list(sf, elem, fv)
         }
-        // enum<a,b,c>: a payload-less Variant goes back out as the bare variant name.
+        // enum<a,b,c>: the stored string goes back out as the bare variant name.
         typ if typ.starts_with("enum<") => {
-            if let FieldValue::Variant { tag, value: None } = fv {
-                Ok(json!(tag))
+            if let FieldValue::Str(v) = fv {
+                Ok(json!(v))
             } else {
                 Err("type mismatch enum".into())
             }
         }
-        typ if typ.starts_with("oneof<") => {
+        typ if typ.starts_with("sum<") => {
             let FieldValue::Variant { tag, value } = fv else {
-                return Err("type mismatch oneof".into());
+                return Err("type mismatch sum".into());
             };
             let sv = sf
                 .variants
                 .iter()
                 .find(|x| &x.name == tag)
-                .ok_or_else(|| format!("unknown oneof variant {tag}"))?;
+                .ok_or_else(|| format!("unknown variant {tag}"))?;
             let mut out = serde_json::Map::new();
             let payload = match (&sv.payload, value.as_deref()) {
                 (None, _) => Value::Null,
                 (Some(p), Some(v)) => encode_field(p, v)?,
-                (Some(_), None) => return Err(format!("oneof variant {tag} needs a payload")),
+                (Some(_), None) => return Err(format!("variant {tag} needs a payload")),
             };
             out.insert(tag.clone(), payload);
             Ok(Value::Object(out))
@@ -1428,7 +1429,7 @@ impl Default for Suite {
 #[cfg(feature = "worker")]
 /// The protocol revision this library speaks. The runner requires an exact
 /// match and refuses to start a worker reporting anything else.
-const PROTOCOL_VERSION: u32 = 1;
+const PROTOCOL_VERSION: u32 = 2;
 
 // --- audit helpers ----------------------------------------------------------
 
@@ -1825,11 +1826,11 @@ mod tests {
         }
     }
 
-    // identifier-shaped oneof: a unit variant plus two single-payload variants.
-    fn oneof_schema() -> Vec<SchemaField> {
+    // identifier-shaped sum: a unit variant plus two single-payload variants.
+    fn sum_schema() -> Vec<SchemaField> {
         vec![SchemaField {
             name: "id".into(),
-            typ: "oneof<balanced, numeric: uint32, name: string>".into(),
+            typ: "sum<balanced, numeric: uint32, name: string>".into(),
             variants: vec![
                 SchemaVariant {
                     name: "balanced".into(),
@@ -1849,22 +1850,22 @@ mod tests {
     }
 
     #[test]
-    fn oneof_round_trip() {
+    fn sum_round_trip() {
         for wire in [
             json!({"id": {"numeric": 5}}),
             json!({"id": {"name": "iggy"}}),
             json!({"id": {"balanced": null}}),
         ] {
-            let fm = decode_field_map(&wire, &oneof_schema()).unwrap();
-            let out = encode_field_map(&fm, &oneof_schema()).unwrap();
+            let fm = decode_field_map(&wire, &sum_schema()).unwrap();
+            let out = encode_field_map(&fm, &sum_schema()).unwrap();
             assert_eq!(out, wire, "round-trip mismatch");
         }
     }
 
     #[test]
-    fn oneof_get_set_variant() {
+    fn sum_get_set_variant() {
         let wire = json!({"id": {"numeric": 42}});
-        let fm = decode_field_map(&wire, &oneof_schema()).unwrap();
+        let fm = decode_field_map(&wire, &sum_schema()).unwrap();
         let (tag, val) = fm.get_variant("id").unwrap();
         assert_eq!(tag, "numeric");
         assert_eq!(val, Some(&FieldValue::U32(42)));
@@ -1872,7 +1873,7 @@ mod tests {
         // Build one from scratch and encode it.
         let mut built = FieldMap::new();
         built.set_variant("id", "name", Some(FieldValue::Str("x".into())));
-        let out = encode_field_map(&built, &oneof_schema()).unwrap();
+        let out = encode_field_map(&built, &sum_schema()).unwrap();
         assert_eq!(out, json!({"id": {"name": "x"}}));
     }
 
@@ -2074,13 +2075,13 @@ mod tests {
         let r2 = Rich::from_field_map(&fm2).expect("from_field_map 2");
         assert_eq!(r2, want);
     }
-    // A oneof payload is aliasing-capable, so detect_zero_copy must see through
+    // A sum payload is aliasing-capable, so detect_zero_copy must see through
     // the variant. Rust gets this for free — FieldMap derives Clone and
     // PartialEq, so cloning a Variant deep-copies its boxed payload and the diff
     // compares it by value — but nothing pinned that, and the equivalent code in
     // Go, Node, Python, C# and Java all had to be fixed by hand.
     #[test]
-    fn oneof_detect_zero_copy_on_payload() {
+    fn sum_detect_zero_copy_on_payload() {
         let mut buf = vec![1u8, 2, 3, 4];
         let mut fm = FieldMap::new();
         fm.set_variant("id", "key", Some(FieldValue::Bytes(buf.clone())));

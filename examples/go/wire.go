@@ -32,7 +32,7 @@ import (
 //	map<K,V>     u32 entry count, then each key/value pair, keys sorted byte-wise
 //	array<T,N>   exactly N elements, no length prefix (N is fixed by the schema)
 //	struct       its fields back to back, in schema order
-//	oneof        u8 tag ordinal (declaration order in the case file), then the
+//	sum          u8 tag ordinal (declaration order in the case file), then the
 //	             active variant's payload — nothing at all for a unit variant
 //	int128       16 bytes, two's complement
 //

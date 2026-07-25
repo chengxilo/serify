@@ -13,10 +13,10 @@
 // limitations under the License.
 
 // NotificationRecord mirrors examples/cases/notification.yaml, whose `channel`
-// field is a `oneof`.
+// field is a `sum`.
 //
 // std::variant is C++'s sum type, and it supplies the arms. The one thing it
-// cannot supply is their names — C++ has no reflection — so SERIFY_ONEOF names
+// cannot supply is their names — C++ has no reflection — so SERIFY_SUM names
 // them, and that single line is the whole binding. No converter, and no way to
 // build a notification carrying two targets at once.
 //
@@ -58,7 +58,7 @@ using Channel = std::variant<
     Money            // arity N — a struct payload
 >;
 
-SERIFY_ONEOF(Channel, "silent", "sms", "push", "invoice")
+SERIFY_SUM(Channel, "silent", "sms", "push", "invoice")
 
 struct NotificationRecord {
     uint32_t notification_id{};
@@ -68,13 +68,13 @@ struct NotificationRecord {
 
 SERIFY_TO(NotificationRecord,
     SERIFY_FIELD(notification_id, u32)
-    SERIFY_FIELD_ONEOF(channel, Channel)
+    SERIFY_FIELD_SUM(channel, Channel)
     SERIFY_FIELD(urgent, bool)
 )
 
 SERIFY_FROM(NotificationRecord,
     SERIFY_FROM_FIELD(notification_id, u32)
-    SERIFY_FROM_FIELD_ONEOF(channel, Channel)
+    SERIFY_FROM_FIELD_SUM(channel, Channel)
     SERIFY_FROM_FIELD(urgent, bool)
 )
 
@@ -82,7 +82,7 @@ inline std::vector<uint8_t> notification_marshal(const NotificationRecord& n) {
     std::vector<uint8_t> out;
     put_le<uint32_t>(out, n.notification_id, 4);
 
-    // The tag ordinal is the alternative's position in the case file's oneof,
+    // The tag ordinal is the alternative's position in the case file's sum,
     // which is its index in the variant above — so it needs no lookup table.
     // The schema tag *names* are the binding's business, and never appear here.
     out.push_back(static_cast<uint8_t>(n.channel.index()));

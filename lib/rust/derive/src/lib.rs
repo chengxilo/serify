@@ -27,9 +27,9 @@ use syn::{
 ///   key using `#[serify(rename = "key")]` or, if the attribute is absent, the
 ///   field name as-is (Rust fields are already snake_case, so no conversion is
 ///   needed).
-/// - **Enum** — a `oneof`. A sum type is exactly what `oneof<...>` describes, so
+/// - **Enum** — a `sum`. A sum type is exactly what `sum<...>` describes, so
 ///   variant names become schema tags in snake_case and no converter is needed.
-///   A payload-less enum is carried as a unit-variant `oneof`, which is also what
+///   A payload-less enum is carried as a unit-variant `sum`, which is also what
 ///   an `enum<...>` schema field maps to, so no marker distinguishes the two.
 /// - **Single-field tuple struct** — a newtype, with `#[serify(transparent)]`:
 ///   the schema sees straight through the wrapper to the type it wraps. Add
@@ -82,7 +82,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
                 ))
             }
         },
-        // An enum is a sum type, which is exactly what `oneof<...>` describes,
+        // An enum is a sum type, which is exactly what `sum<...>` describes,
         // so it derives too — no hand-written converter.
         Data::Enum(e) => return expand_enum(name, e),
         _ => {
@@ -165,7 +165,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
 
-        // As a oneof payload, a product type is a struct value.
+        // As a sum payload, a product type is a struct value.
         impl serify::SerifyPayload for #name {
             fn from_payload(v: &serify::FieldValue)
                 -> ::std::result::Result<Self, ::std::string::String>
@@ -198,7 +198,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
     })
 }
 
-// Enum -> oneof
+// Enum -> sum
 
 /// `Numeric` -> `numeric`, `PartitionId` -> `partition_id`, `MessagesKey` ->
 /// `messages_key`. Matches how the schema spells its variant tags.
@@ -217,7 +217,7 @@ fn snake_case(s: &str) -> String {
     out
 }
 
-/// Derive for an enum: each variant becomes one arm of a `oneof`.
+/// Derive for an enum: each variant becomes one arm of a `sum`.
 ///
 /// - A unit variant (`Balanced`) carries no payload.
 /// - A one-field tuple variant (`PartitionId(u32)`) carries that value.
@@ -282,7 +282,7 @@ fn expand_enum(name: &syn::Ident, data: &syn::DataEnum) -> syn::Result<TokenStre
                 -> ::std::result::Result<Self, ::std::string::String>
             {
                 let (tag, payload) = fm.get_variant(key)
-                    .ok_or_else(|| format!("field {key} is not a oneof"))?;
+                    .ok_or_else(|| format!("field {key} is not a sum"))?;
                 ::std::result::Result::Ok(match (tag, payload) {
                     #(#read_arms,)*
                     (t, _) => return ::std::result::Result::Err(
@@ -365,7 +365,7 @@ fn payload_ops(ty: &Type, tag: &str) -> syn::Result<(TokenStream2, TokenStream2)
         _ => {
             return Err(syn::Error::new_spanned(
                 ty,
-                "unsupported oneof payload type; use a scalar, String, Vec<u8>, \
+                "unsupported sum payload type; use a scalar, String, Vec<u8>, \
                  or a type deriving SerifyModel",
             ))
         }

@@ -116,7 +116,7 @@ Each schema field:
 | `type` | string | Type string (see [Type System](#type-system)) |
 | `fields` | array | Nested schema for struct/list\<struct\>/map\<K,struct\> |
 | `key_type` | string | Map key type (e.g. `"string"`) |
-| `variants` | array | Arms of a `oneof<...>`; absent for every other type |
+| `variants` | array | Arms of a `sum<...>`; absent for every other type |
 | `tags` | object | Arbitrary metadata from case files |
 
 Each entry in `variants`:
@@ -307,7 +307,7 @@ own byte encoding.
 | `map<K,V>` | JSON object with encoded values | `{"a": "42"}` |
 | `struct` | JSON object with encoded fields | `{"street": "Main", "zip": 12345}` |
 | `enum<a,b,c>` | Variant name as a JSON string | `"b"` |
-| `oneof<a, b: T>` | Single-key object `{tag: encoded payload}`; `null` payload for a unit variant | `{"b": "42"}`, `{"a": null}` |
+| `sum<a, b: T>` | Single-key object `{tag: encoded payload}`; `null` payload for a unit variant | `{"b": "42"}`, `{"a": null}` |
 
 ### Key gotchas
 
@@ -336,28 +336,36 @@ The canonical type names used in the `type` field of schema entries:
 | Other scalars | `bool` (alias: `boolean`), `string`, `bytes` |
 | Compound | `optional<T>`, `list<T>`, `array<T,N>`, `map<K,V>`, `struct` |
 | Enum | `enum<a,b,c>` — self-describing variant list; the variant name travels as a string, and a worker can derive an ordinal for its byte layout from the declared order |
-| Sum | `oneof<a, b: T, c: U>` — a tagged union: a value is *exactly one* variant, its tag plus a typed payload |
+| Sum | `sum<a, b: T, c: U>` — a tagged union: a value is *exactly one* variant, its tag plus a typed payload |
 
-Note that `oneof<...>` is a **wire** spelling. Case files do not write it: a sum
+Note that `sum<...>` is a **wire** spelling. Case files do not write it: a sum
 is declared with a `variants:` section on its own type file, whose entries are
 the variants. The runner renders that into the type string above, so a worker
 library only ever sees this form.
 
-### `enum` vs `oneof`
+### `enum` vs `sum`
 
-The split mirrors Protocol Buffers, where both keywords exist with these same
-roles — pick by whether the variants carry data:
+`sum` is the type-theory name for a **sum type** (a.k.a. tagged union or
+coproduct); each of its arms is a **variant**, and a variant's discriminant is
+its **tag**. The pick between the two constructs is by whether the variants
+carry data:
 
-- **`enum<a,b,c>`** — named constants, no payload. The value is just a name.
-- **`oneof<a, b: T>`** — a tagged union whose variants carry typed payloads.
+- **`enum<a,b,c>`** — named constants, no payload. The value is *just a name*,
+  and it travels as a plain string. Model it as a string (or a native enum that
+  maps to its name); it is **not** a sum.
+- **`sum<a, b: T>`** — a tagged union whose variants carry typed payloads.
 
-Use `oneof` whenever a variant has data. Do **not** model a sum type as an
+This mirrors the *decision* Protocol Buffers makes with `enum` vs `oneof`, but
+serify's `sum` is a genuine sum type, not protobuf's `oneof` (see the
+differences below).
+
+Use `sum` whenever a variant has data. Do **not** model a sum type as an
 `enum` tag plus separate flat payload fields: every inactive field then has to
 be filled with a default on the deserialize round-trip, and nothing stops a case
-from setting a payload that does not belong to the declared tag. A `oneof`
+from setting a payload that does not belong to the declared tag. A `sum`
 carries exactly one variant, so both problems disappear.
 
-`oneof` is a sum-of-products — a variant's payload is any single type, so arity
+`sum` is a sum-of-products — a variant's payload is any single type, so arity
 needs no special syntax:
 
 | Variant arity | Wire spelling | Case-file entry |
@@ -366,14 +374,16 @@ needs no special syntax:
 | 1 | `partition_id: uint32` | `- partition_id: uint32` |
 | N | `configured: my_struct` | `- configured: my_struct` (payload is a struct holding the N fields) |
 
-Two deliberate differences from protobuf: unit variants are allowed, where
-protobuf requires every arm to have a type; and a serify `oneof` carries
-**exactly one** variant, where a protobuf `oneof` also has a "none set" state. A case file that
-names zero variants (or two) is a load error, not a default.
+Two deliberate differences from protobuf's `oneof`: unit variants are allowed,
+where protobuf requires every arm to have a type; and a serify `sum` carries
+**exactly one** variant, where a protobuf `oneof` also has a "none set" state. A
+case file that names zero variants (or two) is a load error, not a default.
+(protobuf's `oneof` is also a field-grouping within a message, not a reusable
+named type — a serify `sum` is a first-class type you declare once and `import`.)
 
-### `oneof` and your own types
+### `sum` and your own types
 
-Every library maps a `oneof` onto whatever sum type the language already has, so
+Every library maps a `sum` onto whatever sum type the language already has, so
 in seven of the nine there is nothing to declare beyond the type itself:
 
 | Language | Sum type | What you write |
@@ -384,8 +394,8 @@ in seven of the nine there is nothing to declare beyond the type itself:
 | PHP | property union type (`A\|B`) | nothing — the declaration names the arms |
 | C# | `abstract record` + nested sealed records | nothing — the nested types are the arms |
 | Elixir | tagged tuple (`{:sms, v}`) | nothing — the tag is in the data |
-| C++ | `std::variant` | `SERIFY_ONEOF(T, "a", "b")` — C++ has no reflection, so only the *names* are missing |
-| Node/TS | (erased at runtime) | `@Serify.oneof([A, B])` — the union type does not survive compilation |
+| C++ | `std::variant` | `SERIFY_SUM(T, "a", "b")` — C++ has no reflection, so only the *names* are missing |
+| Node/TS | (erased at runtime) | `@Serify.sum([A, B])` — the union type does not survive compilation |
 | Go | interface | a `serify.Converter` — Go cannot enumerate an interface's implementations |
 
 An arm's tag is its type name in snake_case (`Sms` → `sms`), and its payload

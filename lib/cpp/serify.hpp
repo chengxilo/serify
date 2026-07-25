@@ -140,7 +140,7 @@ using FieldValue = std::variant<
 // Map fields are stored separately to avoid recursive variant definition.
 using MapStore = std::map<std::string, FieldValue>;
 
-// One arm of a oneof: a tag and its decoded payload (null for a unit variant).
+// One arm of a sum: a tag and its decoded payload (null for a unit variant).
 // The payload is held behind a shared_ptr so Variant does not have to be one of
 // FieldValue's alternatives, which would make the variant recursive.
 struct Variant {
@@ -149,7 +149,7 @@ struct Variant {
 
     bool is_unit() const { return value == nullptr; }
     template<typename T> T payload() const {
-        if (!value) throw std::runtime_error("oneof variant \"" + tag + "\" has no payload");
+        if (!value) throw std::runtime_error("variant \"" + tag + "\" has no payload");
         return std::get<T>(*value);
     }
 };
@@ -259,7 +259,7 @@ public:
         return it != _maps.end() ? it->second : empty;
     }
 
-    // Store a oneof value: the active variant's tag and payload.
+    // Store a sum value: the active variant's tag and payload.
     void set_variant(const std::string& k, std::string tag, FieldValue v) {
         _variants[k] = Variant{std::move(tag), std::make_shared<FieldValue>(std::move(v))};
     }
@@ -267,10 +267,10 @@ public:
     void set_variant(const std::string& k, std::string tag) {
         _variants[k] = Variant{std::move(tag), nullptr};
     }
-    // Return the oneof value stored at k.
+    // Return the sum value stored at k.
     const Variant& get_variant(const std::string& k) const {
         auto it = _variants.find(k);
-        if (it == _variants.end()) throw std::runtime_error("oneof field not found: " + k);
+        if (it == _variants.end()) throw std::runtime_error("sum field not found: " + k);
         return it->second;
     }
 };
@@ -501,7 +501,7 @@ static std::vector<uint8_t> from_hex(const std::string& s) {
 
 struct SchemaField;
 
-// One arm of a oneof: a tag and its payload schema (empty for a unit variant).
+// One arm of a sum: a tag and its payload schema (empty for a unit variant).
 struct SchemaVariant {
     std::string name;
     std::vector<SchemaField> payload; // 0 or 1 element; a vector keeps SchemaField incomplete here
@@ -510,12 +510,12 @@ struct SchemaVariant {
 struct SchemaField {
     std::string name, type;
     std::vector<SchemaField> fields; // nested schema for struct / list[struct] / optional[struct]
-    std::vector<SchemaVariant> variants; // arms of a oneof<...>; empty otherwise
+    std::vector<SchemaVariant> variants; // arms of a sum<...>; empty otherwise
     std::map<std::string, std::string> tags;
 
     const SchemaVariant& find_variant(const std::string& tag) const {
         for (auto& sv : variants) if (sv.name == tag) return sv;
-        throw std::runtime_error("unknown oneof variant \"" + tag + "\"");
+        throw std::runtime_error("unknown variant \"" + tag + "\"");
     }
 };
 
@@ -717,12 +717,12 @@ static FieldMap decode_field_map(const Json& data, const std::vector<SchemaField
         }
         // enum<a,b,c>: the variant name travels as a string.
         else if (t.rfind("enum<",0)==0) fm.set_string(n, el->as_str());
-        // oneof<a, b: T>: {tag: payload} on the wire (payload null for a unit
+        // sum<a, b: T>: {tag: payload} on the wire (payload null for a unit
         // variant). The payload is decoded through the variant's own schema by
         // re-entering this function with a one-field schema.
-        else if (t.rfind("oneof<",0)==0) {
+        else if (t.rfind("sum<",0)==0) {
             if (el->obj.size() != 1)
-                throw std::runtime_error("oneof must name exactly one variant, got " +
+                throw std::runtime_error("sum must name exactly one variant, got " +
                                          std::to_string(el->obj.size()));
             auto& tag = el->obj[0].first;
             auto& sv  = sf.find_variant(tag);
@@ -733,7 +733,7 @@ static FieldMap decode_field_map(const Json& data, const std::vector<SchemaField
                 wrapper.set(psf.name, el->obj[0].second);
                 FieldMap tmp = decode_field_map(wrapper, sv.payload);
                 if (!tmp.raw().count(psf.name))
-                    throw std::runtime_error("oneof variant \"" + tag +
+                    throw std::runtime_error("variant \"" + tag +
                                              "\": unsupported payload type " + psf.type);
                 fm.set_variant(n, tag, tmp.raw().at(psf.name));
             }
@@ -779,9 +779,9 @@ static Json encode_field_map(const FieldMap& fm, const std::vector<SchemaField>&
     for (auto& sf : schema) {
         if (!fm.has(sf.name)) continue;
         auto& n=sf.name; auto& t=sf.type;
-        // oneof values live in a separate container. Inverse of the decode
+        // sum values live in a separate container. Inverse of the decode
         // branch: a Variant becomes {tag: payload}.
-        if (t.rfind("oneof<",0)==0) {
+        if (t.rfind("sum<",0)==0) {
             auto& var = fm.get_variant(n);
             auto& sv  = sf.find_variant(var.tag);
             auto obj  = Json::obj_();
@@ -955,11 +955,11 @@ static Json encode_field_map(const FieldMap& fm, const std::vector<SchemaField>&
 
 // The protocol revision this library speaks. The runner requires an exact
 // match and refuses to start a worker reporting anything else.
-static const int PROTOCOL_VERSION = 1;
+static const int PROTOCOL_VERSION = 2;
 
 // --- audit helpers --------------------------------------------------------
 
-// in_variant marks a snapshot taken from a oneof payload rather than a plain
+// in_variant marks a snapshot taken from a sum payload rather than a plain
 // bytes field, so the comparison knows where to read the current value from.
 struct ByteSnap { FieldMap* fm; std::string key; Bytes orig; bool in_variant = false; };
 
@@ -982,7 +982,7 @@ inline void collect_byte_snaps(FieldMap& fm, std::vector<ByteSnap>& snaps) {
                 collect_byte_snaps(**nested, snaps);
         }
     }
-    // …and oneof fields, likewise stored separately. The variant itself cannot
+    // …and sum fields, likewise stored separately. The variant itself cannot
     // alias, but its payload can: snapshot the payload so a zero-copy variant
     // shows up as a change.
     for (auto& [k, var] : fm.variants()) {
@@ -1263,17 +1263,17 @@ inline void run_suite(const SuiteMap& suite) {
 //   SERIFY_FIELD_LIST_STRUCT(items, ItemType)
 //   SERIFY_FROM_FIELD_LIST_STRUCT(items, ItemType)
 //
-// oneof:
+// sum:
 //   using Channel = std::variant<std::monostate, std::string, uint64_t, Money>;
-//   SERIFY_ONEOF(Channel, "silent", "sms", "push", "invoice")
-//   SERIFY_FIELD_ONEOF(channel, Channel)
-//   SERIFY_FROM_FIELD_ONEOF(channel, Channel)
+//   SERIFY_SUM(Channel, "silent", "sms", "push", "invoice")
+//   SERIFY_FIELD_SUM(channel, Channel)
+//   SERIFY_FROM_FIELD_SUM(channel, Channel)
 
-// -- oneof --------------------------------------------------------------
+// -- sum --------------------------------------------------------------
 //
 // std::variant is C++'s sum type and supplies the arms. What it cannot supply
 // is their *names*: C++ has no reflection, so the tags are the one thing the
-// user has to write, and SERIFY_ONEOF is the whole of it. Everything else —
+// user has to write, and SERIFY_SUM is the whole of it. Everything else —
 // which arm is live, how its payload is carried — comes from the alternative
 // types, which the compiler already knows.
 //
@@ -1293,7 +1293,7 @@ struct has_field_map<T, std::void_t<decltype(to_field_map(std::declval<const T&>
     : std::true_type {};
 
 template <typename A>
-inline void oneof_payload_out(FieldMap& fm, const std::string& key,
+inline void sum_payload_out(FieldMap& fm, const std::string& key,
                               const std::string& tag, const A& a) {
     if constexpr (std::is_same_v<A, std::monostate>) {
         (void)a;
@@ -1307,22 +1307,22 @@ inline void oneof_payload_out(FieldMap& fm, const std::string& key,
 
 /// Walk the alternatives at compile time and write whichever one is live.
 template <size_t I = 0, typename V>
-inline void set_oneof(FieldMap& fm, const std::string& key, const V& v,
+inline void set_sum(FieldMap& fm, const std::string& key, const V& v,
                       const char* const* tags) {
     if constexpr (I < std::variant_size_v<V>) {
         if (v.index() == I) {
-            oneof_payload_out(fm, key, tags[I], std::get<I>(v));
+            sum_payload_out(fm, key, tags[I], std::get<I>(v));
             return;
         }
-        set_oneof<I + 1>(fm, key, v, tags);
+        set_sum<I + 1>(fm, key, v, tags);
     } else {
-        throw std::runtime_error("oneof field \"" + key + "\" is valueless");
+        throw std::runtime_error("sum field \"" + key + "\" is valueless");
     }
 }
 
 /// Walk the alternatives at compile time and rebuild the one the tag names.
 template <size_t I = 0, typename V>
-inline void get_oneof(const FieldMap& fm, const std::string& key, V& v,
+inline void get_sum(const FieldMap& fm, const std::string& key, V& v,
                       const char* const* tags) {
     if constexpr (I < std::variant_size_v<V>) {
         const Variant& var = fm.get_variant(key);
@@ -1339,29 +1339,29 @@ inline void get_oneof(const FieldMap& fm, const std::string& key, V& v,
             }
             return;
         }
-        get_oneof<I + 1>(fm, key, v, tags);
+        get_sum<I + 1>(fm, key, v, tags);
     } else {
-        throw std::runtime_error("unknown oneof variant \"" + fm.get_variant(key).tag + "\"");
+        throw std::runtime_error("unknown variant \"" + fm.get_variant(key).tag + "\"");
     }
 }
 
 }  // namespace serify
 
 /// Name the arms of a std::variant, in declaration order.
-#define SERIFY_ONEOF(Type, ...) \
-    inline const char* const* serify_oneof_tags(const Type*) { \
+#define SERIFY_SUM(Type, ...) \
+    inline const char* const* serify_sum_tags(const Type*) { \
         static const char* _tags[] = {__VA_ARGS__}; \
         static_assert(sizeof(_tags) / sizeof(_tags[0]) == std::variant_size_v<Type>, \
-                      #Type ": SERIFY_ONEOF needs exactly one tag per variant alternative"); \
+                      #Type ": SERIFY_SUM needs exactly one tag per variant alternative"); \
         return _tags; \
     }
 
-#define SERIFY_FIELD_ONEOF(name, OneofType) \
-    serify::set_oneof(fm, #name, obj.name, serify_oneof_tags((const OneofType*)nullptr));
+#define SERIFY_FIELD_SUM(name, SumType) \
+    serify::set_sum(fm, #name, obj.name, serify_sum_tags((const SumType*)nullptr));
 
-#define SERIFY_FROM_FIELD_ONEOF(name, OneofType) \
+#define SERIFY_FROM_FIELD_SUM(name, SumType) \
     if (fm.has_variant(#name)) \
-        serify::get_oneof(fm, #name, obj.name, serify_oneof_tags((const OneofType*)nullptr));
+        serify::get_sum(fm, #name, obj.name, serify_sum_tags((const SumType*)nullptr));
 
 // -- to_field_map block -------------------------------------------------
 

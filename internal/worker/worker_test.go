@@ -42,7 +42,7 @@ func writeStubScript() string {
 		"  id=$(echo \"$line\" | sed 's/.*\"id\":\"\\([^\"]*\\)\".*/\\1/')\n" +
 		"  case \"$op\" in\n" +
 		"    ping)\n" +
-		"      echo '{\"op\":\"ping\",\"protocol_version\":1,\"status\":\"OK\"}' ;;\n" +
+		"      echo '{\"op\":\"ping\",\"protocol_version\":2,\"status\":\"OK\"}' ;;\n" +
 		"    bind)\n" +
 		"      type=$(echo \"$line\" | sed 's/.*\"type\":\"\\([^\"]*\\)\".*/\\1/')\n" +
 		"      format=$(echo \"$line\" | sed 's/.*\"format\":\"\\([^\"]*\\)\".*/\\1/')\n" +
@@ -119,7 +119,7 @@ func TestStart_BindsNoTypeOrFormat(t *testing.T) {
 		"while read line; do\n" +
 		"  op=$(echo \"$line\" | sed 's/.*\"op\":\"\\([^\"]*\\)\".*/\\1/')\n" +
 		"  case \"$op\" in\n" +
-		"    ping) echo '{\"op\":\"ping\",\"protocol_version\":1,\"status\":\"OK\"}' ;;\n" +
+		"    ping) echo '{\"op\":\"ping\",\"protocol_version\":2,\"status\":\"OK\"}' ;;\n" +
 		"    bind) echo '{\"op\":\"bind\",\"status\":\"SKIPPED\"}' ;;\n" +
 		"    exit) exit 0 ;;\n" +
 		"  esac\n" +
@@ -290,7 +290,7 @@ func TestBind_TimeoutMarksWorkerDead(t *testing.T) {
 	// later request on the shared scanner.
 	script := "#!/bin/sh\n" +
 		"read line\n" +
-		"echo '{\"op\":\"ping\",\"protocol_version\":1,\"status\":\"OK\"}'\n" +
+		"echo '{\"op\":\"ping\",\"protocol_version\":2,\"status\":\"OK\"}'\n" +
 		"sleep 30\n"
 	info := StartInfo{
 		Dir:      t.TempDir(),

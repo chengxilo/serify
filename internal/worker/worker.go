@@ -45,9 +45,9 @@ var (
 	errOpMismatch = errors.New("response op mismatch")
 )
 
-// ErrTypeNotSupported means the worker answered bind with SKIPPED: it is running
-// fine but does not implement that (type, format). Only Bind can produce it —
-// startup uses ping, which names no type and so has nothing to skip.
+// ErrTypeNotSupported means the worker answered bind with SKIPPED: it is 
+// running fine but does not implement that (type, format). Only bind operation
+// can produce it.
 var ErrTypeNotSupported = errors.New("worker does not support this type/format")
 
 // Worker represents a running language worker process.
@@ -98,9 +98,6 @@ func Start(ctx context.Context, info StartInfo, timeoutSec int) (*Worker, error)
 		}
 	}
 
-	// #nosec G204 -- launching the worker command is what this package is for. The
-	// command string comes from the developer's own serify.yaml (or a built-in
-	// language default), the same trust level as the code they're testing.
 	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
 	cmd.Dir = dir
 
@@ -142,15 +139,14 @@ func Start(ctx context.Context, info StartInfo, timeoutSec int) (*Worker, error)
 
 	if err := w.ping(ctx, timeoutSec); err != nil {
 		_ = w.Stop()
-		return nil, fmt.Errorf("ping %s worker: %w", lang, err)
+		return nil, fmt.Errorf("failed to ping %s worker: %w", lang, err)
 	}
 
 	return w, nil
 }
 
 // ping is the startup handshake: it confirms the process came up and speaks the
-// same protocol revision as this runner. It names no type and carries no schema:
-// binding is Bind's job, and every (type, format) group does its own.
+// same protocol revision as this runner.
 func (w *Worker) ping(ctx context.Context, timeoutSec int) error {
 	if err := w.writer.Write(protocol.PingRequest{Op: string(protocol.OpPing)}); err != nil {
 		return err
@@ -173,7 +169,7 @@ func (w *Worker) ping(ctx context.Context, timeoutSec int) error {
 	}
 	if *resp.ProtocolVersion != protocol.ProtocolVersion {
 		return fmt.Errorf("protocol version mismatch: worker library speaks %d, "+
-			"this serify needs %d — rebuild the worker against the current library",
+			"this serify needs %d — rebuild the worker against the appropriate library",
 			*resp.ProtocolVersion, protocol.ProtocolVersion)
 	}
 	return nil

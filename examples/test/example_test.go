@@ -128,7 +128,7 @@ func TestExamples_Ledger(t *testing.T) {
 }
 
 // TestExamples_Notification asserts that every available language agrees
-// byte-for-byte on `notification`, the suite's `oneof` type. Its four cases are
+// byte-for-byte on `notification`, the suite's `sum` type. Its four cases are
 // the three payload arities the type system allows — a unit variant, a scalar
 // payload, a u64 payload that must survive as a decimal string, and a struct
 // payload — and each language reaches them through its own sum type: an enum

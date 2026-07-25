@@ -19,7 +19,7 @@ import (
 	"fmt"
 )
 
-// Channel is the `oneof` from examples/cases/notification.yaml. Go has no sum
+// Channel is the `sum` from examples/cases/notification.yaml. Go has no sum
 // type, so the idiomatic encoding is a sealed interface: the unexported marker
 // method means only the four types below can be a Channel — with a bare `any`,
 // `n.Channel = 42` would compile.
@@ -57,7 +57,7 @@ func (n *NotificationRecord) MarshalBinary() ([]byte, error) {
 	}
 	buf := binary.LittleEndian.AppendUint32(nil, n.NotificationID)
 
-	// The tag ordinal is the variant's position in the case file's oneof, which
+	// The tag ordinal is the variant's position in the case file's sum, which
 	// is the declaration order of the four types above.
 	switch ch := n.Channel.(type) {
 	case Silent:

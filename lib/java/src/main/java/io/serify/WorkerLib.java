@@ -103,14 +103,14 @@ public final class WorkerLib {
         public void setListF32(String k, List<Float> v)   { fields.put(k, v); }
         public void setMap(String k, Map<String, Object> v) { fields.put(k, v); }
 
-        /** Stores a oneof value: the active variant's tag and payload ({@code null} for a unit variant). */
+        /** Stores a sum value: the active variant's tag and payload ({@code null} for a unit variant). */
         public void setVariant(String k, String tag, Object v) { fields.put(k, new Variant(tag, v)); }
 
-        /** Returns the oneof value stored at {@code k}. */
+        /** Returns the sum value stored at {@code k}. */
         public Variant getVariant(String k) {
             var v = fields.get(k);
             if (!(v instanceof Variant variant)) {
-                throw new IllegalArgumentException("field \"" + k + "\" is not a oneof variant");
+                throw new IllegalArgumentException("field \"" + k + "\" is not a variant");
             }
             return variant;
         }
@@ -119,8 +119,8 @@ public final class WorkerLib {
     }
 
     /**
-     * One arm of a oneof: a tag and its decoded payload ({@code null} for a unit
-     * variant). A oneof field stores a Variant.
+     * One arm of a sum: a tag and its decoded payload ({@code null} for a unit
+     * variant). A sum field stores a Variant.
      */
     public static final class Variant {
         public final String tag;
@@ -141,7 +141,7 @@ public final class WorkerLib {
         public final String type;
         public final List<SchemaField> fields;
         public final Map<String, String> tags;
-        /** Arms of a oneof&lt;...&gt; type; empty for every other type. */
+        /** Arms of a sum&lt;...&gt; type; empty for every other type. */
         public final List<SchemaVariant> variants;
 
         public SchemaField(String name, String type, List<SchemaField> fields, Map<String, String> tags) {
@@ -157,14 +157,14 @@ public final class WorkerLib {
             this.variants = variants != null ? variants : List.of();
         }
 
-        /** Returns the oneof arm named {@code tag}. */
+        /** Returns the sum arm named {@code tag}. */
         public SchemaVariant findVariant(String tag) {
             for (var sv : variants) if (sv.name.equals(tag)) return sv;
-            throw new IllegalArgumentException("unknown oneof variant \"" + tag + "\"");
+            throw new IllegalArgumentException("unknown variant \"" + tag + "\"");
         }
     }
 
-    /** One arm of a oneof: a tag and its payload schema ({@code null} for a unit variant). */
+    /** One arm of a sum: a tag and its payload schema ({@code null} for a unit variant). */
     public static final class SchemaVariant {
         public final String name;
         public final SchemaField payload;
@@ -212,7 +212,7 @@ public final class WorkerLib {
      * The protocol revision this library speaks. The runner requires an exact
      * match and refuses to start a worker reporting anything else.
      */
-    private static final int PROTOCOL_VERSION = 1;
+    private static final int PROTOCOL_VERSION = 2;
 
     // --- audit helpers --------------------------------------------------------
 
@@ -598,7 +598,7 @@ public final class WorkerLib {
                 }
                 // enum<a,b,c>: the variant name travels as a string.
                 else if (type.startsWith("enum<")) { fm.setString(name, el.asText()); }
-                else if (type.startsWith("oneof<")) { decodeOneOf(fm, sf, el); }
+                else if (type.startsWith("sum<")) { decodeSum(fm, sf, el); }
                 else if (type.startsWith("map<")) {
                     var parts = splitMapTypes(type);
                     fm.setMap(name, decodeMap(parts[1], sf.fields, el));
@@ -612,12 +612,12 @@ public final class WorkerLib {
     }
 
     /**
-     * Decodes a oneof wire value {tag: payload} (payload null for a unit variant)
+     * Decodes a sum wire value {tag: payload} (payload null for a unit variant)
      * into a Variant, decoding the payload per the variant's own schema.
      */
-    private static void decodeOneOf(FieldMap fm, SchemaField sf, JsonNode el) {
+    private static void decodeSum(FieldMap fm, SchemaField sf, JsonNode el) {
         if (el.size() != 1) {
-            throw new IllegalArgumentException("oneof must name exactly one variant, got " + el.size());
+            throw new IllegalArgumentException("sum must name exactly one variant, got " + el.size());
         }
         var entry = el.fields().next();
         var sv = sf.findVariant(entry.getKey());
@@ -788,10 +788,10 @@ public final class WorkerLib {
         return node;
     }
 
-    /** Inverse of decodeOneOf: a Variant becomes {tag: payload}. */
-    private static JsonNode encodeOneOf(SchemaField sf, Object v, ObjectMapper mapper) {
+    /** Inverse of decodeSum: a Variant becomes {tag: payload}. */
+    private static JsonNode encodeSum(SchemaField sf, Object v, ObjectMapper mapper) {
         if (!(v instanceof Variant variant)) {
-            throw new IllegalArgumentException("expected a Variant for oneof field \"" + sf.name + "\"");
+            throw new IllegalArgumentException("expected a Variant for sum field \"" + sf.name + "\"");
         }
         var sv   = sf.findVariant(variant.tag);
         var node = mapper.createObjectNode();
@@ -830,7 +830,7 @@ public final class WorkerLib {
                 if (type.startsWith("optional<")) yield encodeOptional(sf, type.substring(9, type.length()-1), v, mapper);
                 if (type.startsWith("array<")) yield encodeList(sf, splitArrayType(type).elem(), v, mapper);
                 if (type.startsWith("enum<")) yield new TextNode((String) v);
-                if (type.startsWith("oneof<")) yield encodeOneOf(sf, v, mapper);
+                if (type.startsWith("sum<")) yield encodeSum(sf, v, mapper);
                 if (type.startsWith("map<")) {
                     var parts = splitMapTypes(type);
                     yield encodeMap(sf, parts[1], v, mapper);
@@ -942,7 +942,7 @@ public final class WorkerLib {
                     field.setAccessible(true);
                     var val = field.get(obj);
                     // A sealed interface is Java's sum type, so a field declared
-                    // with one is a oneof — see toVariant.
+                    // with one is a sum — see toVariant.
                     if (field.getType().isSealed()) fm.raw().put(key, toVariant(field.getType(), val));
                     else setFieldMapValue(fm, key, val);
                 } catch (IllegalAccessException ignored) {}
@@ -973,14 +973,14 @@ public final class WorkerLib {
             }
         }
 
-        // ── oneof ───────────────────────────────────────────────────────────
+        // ── sum ───────────────────────────────────────────────────────────
         //
         // A sealed interface is Java's sum type, and it is all the binding needs:
         // getPermittedSubclasses() names the arms and each arm's record
         // components give its payload. No converter, no registration.
         //
         // The arity rule is the same one every serify binding uses, because a
-        // oneof is a sum-of-products:
+        // sum is a sum-of-products:
         //
         //     0 components -> a unit variant, no payload
         //     1 component  -> that component's value is the payload
@@ -995,7 +995,7 @@ public final class WorkerLib {
             var rcs = arm.getRecordComponents();
             if (rcs == null) {
                 throw new IllegalArgumentException(
-                        arm.getName() + " is a oneof arm, so it must be a record — "
+                        arm.getName() + " is a sum arm, so it must be a record — "
                         + "its components are the variant's payload");
             }
             return rcs;
@@ -1007,7 +1007,7 @@ public final class WorkerLib {
                 accessor.setAccessible(true);
                 return accessor.invoke(arm);
             } catch (ReflectiveOperationException e) {
-                throw new RuntimeException("reading oneof payload " + rc.getName(), e);
+                throw new RuntimeException("reading sum payload " + rc.getName(), e);
             }
         }
 
@@ -1059,7 +1059,7 @@ public final class WorkerLib {
                     ctor.setAccessible(true);
                     return ctor.newInstance(args);
                 } catch (ReflectiveOperationException e) {
-                    throw new RuntimeException("constructing oneof arm " + arm.getName(), e);
+                    throw new RuntimeException("constructing sum arm " + arm.getName(), e);
                 }
             }
             var known = new StringBuilder();
@@ -1068,7 +1068,7 @@ public final class WorkerLib {
                 known.append(armTag(arm));
             }
             throw new IllegalArgumentException(
-                    "unknown oneof variant \"" + v.tag + "\" (declared: " + known + ")");
+                    "unknown variant \"" + v.tag + "\" (declared: " + known + ")");
         }
 
         @SuppressWarnings("unchecked")

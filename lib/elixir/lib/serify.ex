@@ -22,12 +22,12 @@ defmodule WorkerLib do
 
   # The protocol revision this library speaks. The runner requires an exact
   # match and refuses to start a worker reporting anything else.
-  @protocol_version 1
+  @protocol_version 2
 
   defmodule Variant do
     @moduledoc """
-    One arm of a oneof: a tag and its decoded payload (nil for a unit variant).
-    A oneof field holds a `%Variant{}`.
+    One arm of a sum: a tag and its decoded payload (nil for a unit variant).
+    A sum field holds a `%Variant{}`.
     """
     defstruct [:tag, value: nil]
   end
@@ -292,7 +292,7 @@ defmodule WorkerLib do
     end)
   end
 
-  # One arm of a oneof: a tag and its payload schema (nil for a unit variant).
+  # One arm of a sum: a tag and its payload schema (nil for a unit variant).
   defp parse_schema_variants(raw_variants) do
     Enum.map(raw_variants || [], fn v ->
       payload =
@@ -308,7 +308,7 @@ defmodule WorkerLib do
 
   defp find_schema_variant(sf, tag) do
     case Enum.find(Map.get(sf, :variants, []), &(&1.name == tag)) do
-      nil -> raise ArgumentError, ~s(unknown oneof variant "#{tag}")
+      nil -> raise ArgumentError, ~s(unknown variant "#{tag}")
       sv  -> sv
     end
   end
@@ -385,9 +385,9 @@ defmodule WorkerLib do
   # enum<a,b,c>: the variant name travels as a string.
   defp decode_field(%{type: "enum<" <> _rest}, v), do: v
 
-  # oneof<a, b: T>: {tag: payload} on the wire (payload null for a unit variant);
+  # sum<a, b: T>: {tag: payload} on the wire (payload null for a unit variant);
   # the payload is decoded through the variant's own schema.
-  defp decode_field(%{type: "oneof<" <> _rest} = sf, v) do
+  defp decode_field(%{type: "sum<" <> _rest} = sf, v) do
     case Map.to_list(v) do
       [{tag, payload}] ->
         case find_schema_variant(sf, tag).payload do
@@ -396,7 +396,7 @@ defmodule WorkerLib do
         end
 
       other ->
-        raise ArgumentError, "oneof must name exactly one variant, got #{length(other)}"
+        raise ArgumentError, "sum must name exactly one variant, got #{length(other)}"
     end
   end
 
@@ -493,8 +493,8 @@ defmodule WorkerLib do
   end
   defp encode_field(%{type: "enum<" <> _rest}, v), do: v
 
-  # Inverse of the oneof decode clause: a %Variant{} becomes {tag: payload}.
-  defp encode_field(%{type: "oneof<" <> _rest} = sf, %Variant{} = var) do
+  # Inverse of the sum decode clause: a %Variant{} becomes {tag: payload}.
+  defp encode_field(%{type: "sum<" <> _rest} = sf, %Variant{} = var) do
     case find_schema_variant(sf, var.tag).payload do
       nil -> %{var.tag => nil}
       psf -> %{var.tag => encode_field(psf, var.value)}
@@ -666,7 +666,7 @@ defmodule WorkerLib.Serify.Model do
       fm = Map.put(fm, unquote(key), unquote(mod).to_field_map(struct.unquote(name)))
     end
   end
-  defp to_clause(name, :oneof, key, _opts) do
+  defp to_clause(name, :sum, key, _opts) do
     quote do
       fm = Map.put(fm, unquote(key), WorkerLib.Serify.Model.variant_of(struct.unquote(name)))
     end
@@ -688,11 +688,11 @@ defmodule WorkerLib.Serify.Model do
     end
   end
 
-  # oneof: a tagged tuple is already a tagged union
+  # sum: a tagged tuple is already a tagged union
   #
   # Elixir has no sum type to declare, and needs none — `{:sms, "hi"}` *is* a tag
   # and a payload, and `:silent` on its own is a unit variant. So `serify_field(
-  # :channel, :oneof)` is the whole binding: no arm list, no converter, no
+  # :channel, :sum)` is the whole binding: no arm list, no converter, no
   # registration. The arity rule every other serify binding spells out falls out
   # of the shape:
   #
@@ -701,14 +701,14 @@ defmodule WorkerLib.Serify.Model do
   #     {:invoice, %{...}}    -> a map payload is the struct holding N fields
 
   @doc false
-  def variant_of(nil), do: raise(ArgumentError, "oneof field is unset")
+  def variant_of(nil), do: raise(ArgumentError, "sum field is unset")
   def variant_of(tag) when is_atom(tag), do: %WorkerLib.Variant{tag: Atom.to_string(tag), value: nil}
   def variant_of({tag, value}) when is_atom(tag),
     do: %WorkerLib.Variant{tag: Atom.to_string(tag), value: value}
 
   def variant_of(other) do
     raise ArgumentError,
-          "a oneof must be an atom (unit variant) or a {tag, payload} tuple, got #{inspect(other)}"
+          "a sum must be an atom (unit variant) or a {tag, payload} tuple, got #{inspect(other)}"
   end
 
   @doc false
@@ -719,12 +719,12 @@ defmodule WorkerLib.Serify.Model do
   def variant_to_term(%WorkerLib.Variant{tag: tag, value: value}), do: {existing_tag(tag), value}
 
   def variant_to_term(other),
-    do: raise(ArgumentError, "expected a oneof variant, got #{inspect(other)}")
+    do: raise(ArgumentError, "expected a variant, got #{inspect(other)}")
 
   defp existing_tag(tag) do
     String.to_existing_atom(tag)
   rescue
-    ArgumentError -> reraise ArgumentError, [message: "unknown oneof variant #{inspect(tag)}"], __STACKTRACE__
+    ArgumentError -> reraise ArgumentError, [message: "unknown variant #{inspect(tag)}"], __STACKTRACE__
   end
 
   # ── from_field_map helpers ────────────────────────────────────────────
@@ -794,7 +794,7 @@ defmodule WorkerLib.Serify.Model do
         unquote(mod).from_field_map(Map.get(fm, unquote(key), %{})))
     end
   end
-  defp from_clause(name, :oneof, key, _opts) do
+  defp from_clause(name, :sum, key, _opts) do
     quote do
       struct =
         Map.put(struct, unquote(name),

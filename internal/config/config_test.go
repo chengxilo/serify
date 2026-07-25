@@ -107,7 +107,13 @@ func TestSchemaResolver(t *testing.T) {
 // its single inner field's type directly (bare), not a one-field struct.
 func TestSchemaResolver_Transparent(t *testing.T) {
 	r := newSchemaResolver(map[string]rawType{
-		"wire_name": {fields: []rawTypeField{{name: "value", typ: "string"}}, transparent: true},
+		"wire_name": {
+			fields: []rawTypeField{{
+				name: "value",
+				typ:  "string",
+			},
+			},
+			transparent: true},
 	})
 
 	ft, err := r.typeOf("wire_name")
@@ -140,8 +146,8 @@ func TestSchemaResolver_Sum(t *testing.T) {
 	if err != nil {
 		t.Fatalf("typeOf(identifier): %v", err)
 	}
-	if ft.Base != typekind.OneOf {
-		t.Fatalf("sum field ref = %q, want a bare oneof", ft.String())
+	if ft.Base != typekind.Sum {
+		t.Fatalf("sum field ref = %q, want a bare sum", ft.String())
 	}
 	if len(ft.Variants) != 3 {
 		t.Fatalf("variants = %d, want 3", len(ft.Variants))
@@ -158,18 +164,18 @@ func TestSchemaResolver_Sum(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sumSchema: %v", err)
 	}
-	if len(standalone) != 1 || standalone[0].Name != "value" || standalone[0].Type.Base != typekind.OneOf {
-		t.Errorf("sum standalone = %+v, want a {value: oneof} record", standalone)
+	if len(standalone) != 1 || standalone[0].Name != "value" || standalone[0].Type.Base != typekind.Sum {
+		t.Errorf("sum standalone = %+v, want a {value: sum} record", standalone)
 	}
 }
 
-// The oneof type expression is gone; the error must say what replaced it rather
+// The sum type expression is gone; the error must say what replaced it rather
 // than reporting an unknown type.
-func TestSchemaResolver_OneOfExpressionRejected(t *testing.T) {
+func TestSchemaResolver_SumExpressionRejected(t *testing.T) {
 	r := newSchemaResolver(map[string]rawType{})
-	_, err := r.typeOf("oneof<a: uint32, b>")
+	_, err := r.typeOf("sum<a: uint32, b>")
 	if err == nil {
-		t.Fatal("expected the oneof type expression to be rejected")
+		t.Fatal("expected the sum type expression to be rejected")
 	}
 	if !strings.Contains(err.Error(), "variants:") {
 		t.Errorf("error should point at `variants:`: %v", err)

@@ -98,22 +98,22 @@ export class FieldMap {
   setListBytes(key: string, v: Buffer[]) { this._fields.set(key, v); }
   setMap(key: string, v: Map<string, unknown>) { this._fields.set(key, v); }
 
-  /** Store a oneof value: the active variant's tag and payload (null for a unit variant). */
+  /** Store a sum value: the active variant's tag and payload (null for a unit variant). */
   setVariant(key: string, tag: string, value: unknown) { this._fields.set(key, new Variant(tag, value)); }
 
-  /** Read the oneof value stored at key. */
+  /** Read the sum value stored at key. */
   getVariant(key: string): Variant {
     const v = this._fields.get(key);
     if (!(v instanceof Variant)) {
-      throw new Error(`field "${key}" is not a oneof variant`);
+      throw new Error(`field "${key}" is not a variant`);
     }
     return v;
   }
 }
 
 /**
- * One arm of a oneof: a tag and its decoded payload (null for a unit variant).
- * A oneof field stores a Variant.
+ * One arm of a sum: a tag and its decoded payload (null for a unit variant).
+ * A sum field stores a Variant.
  */
 export class Variant {
   constructor(readonly tag: string, readonly value: unknown = null) {}
@@ -129,7 +129,7 @@ export interface SchemaField {
   tags?: Record<string, string>;
 }
 
-/** One arm of a oneof: a tag and its payload schema (null for a unit variant). */
+/** One arm of a sum: a tag and its payload schema (null for a unit variant). */
 export interface SchemaVariant {
   name: string;
   payload?: SchemaField | null;
@@ -161,7 +161,7 @@ function parseSchemaVariants(arr: unknown[]): SchemaVariant[] {
 
 function findSchemaVariant(sf: SchemaField, tag: string): SchemaVariant {
   const sv = (sf.variants || []).find(v => v.name === tag);
-  if (!sv) throw new Error(`unknown oneof variant "${tag}"`);
+  if (!sv) throw new Error(`unknown variant "${tag}"`);
   return sv;
 }
 
@@ -222,7 +222,7 @@ function decodeField(fm: FieldMap, sf: SchemaField, v: unknown): void {
   }
   // enum<a,b,c>: the variant name travels as a string.
   if (typ.startsWith('enum<')) { fm.setString(name, String(v)); return; }
-  if (typ.startsWith('oneof<')) { decodeOneOf(fm, sf, v); return; }
+  if (typ.startsWith('sum<')) { decodeSum(fm, sf, v); return; }
   if (typ.startsWith('map<')) {
     const [, valType] = splitMapTypes(typ);
     fm.setMap(name, decodeMap(valType, sf.fields || [], v as Record<string, unknown>)); return;
@@ -234,14 +234,14 @@ function decodeField(fm: FieldMap, sf: SchemaField, v: unknown): void {
 }
 
 /**
- * Decode a oneof wire value {tag: payload} (payload null for a unit variant)
+ * Decode a sum wire value {tag: payload} (payload null for a unit variant)
  * into a Variant, decoding the payload per the variant's own schema.
  */
-function decodeOneOf(fm: FieldMap, sf: SchemaField, v: unknown): void {
+function decodeSum(fm: FieldMap, sf: SchemaField, v: unknown): void {
   const obj = v as Record<string, unknown>;
   const tags = Object.keys(obj);
   if (tags.length !== 1) {
-    throw new Error(`oneof must name exactly one variant, got ${tags.length}`);
+    throw new Error(`sum must name exactly one variant, got ${tags.length}`);
   }
   const tag = tags[0];
   const sv = findSchemaVariant(sf, tag);
@@ -384,7 +384,7 @@ function encodeField(sf: SchemaField, v: unknown): unknown {
   }
   // enum<a,b,c>: the variant name goes back out as a plain string.
   if (typ.startsWith('enum<')) return v;
-  if (typ.startsWith('oneof<')) return encodeOneOf(sf, v);
+  if (typ.startsWith('sum<')) return encodeSum(sf, v);
   if (typ.startsWith('map<')) {
     const [, valType] = splitMapTypes(typ);
     return encodeMap(valType, sf.fields || [], v as Map<string, unknown>);
@@ -392,10 +392,10 @@ function encodeField(sf: SchemaField, v: unknown): unknown {
   throw new Error(`unknown type "${typ}"`);
 }
 
-/** Inverse of decodeOneOf: a Variant becomes {tag: payload}. */
-function encodeOneOf(sf: SchemaField, v: unknown): unknown {
+/** Inverse of decodeSum: a Variant becomes {tag: payload}. */
+function encodeSum(sf: SchemaField, v: unknown): unknown {
   if (!(v instanceof Variant)) {
-    throw new Error(`expected a Variant for oneof field "${sf.name}"`);
+    throw new Error(`expected a Variant for sum field "${sf.name}"`);
   }
   const sv = findSchemaVariant(sf, v.tag);
   if (!sv.payload) return { [v.tag]: null };
@@ -530,7 +530,7 @@ export function detectZeroCopy(fm: FieldMap, buf: Buffer): string[] {
 
 // The protocol revision this library speaks. The runner requires an exact
 // match and refuses to start a worker reporting anything else.
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 
 // --- Serify decorators (requires experimentalDecorators, no reflect-metadata) ---
 
@@ -576,12 +576,12 @@ export namespace Serify {
     };
   }
 
-  // ── oneof ─────────────────────────────────────────────────────────────
+  // ── sum ─────────────────────────────────────────────────────────────
   //
   // Every other serify binding reads the arms off the language's own sum type.
   // TypeScript cannot: a union type is erased before the code runs — even
   // emitDecoratorMetadata reports nothing for `Silent | Sms` — so the arms are
-  // the one thing that has to be named at runtime, and @Serify.oneof is the
+  // the one thing that has to be named at runtime, and @Serify.sum is the
   // whole of it.
   //
   // Each arm is a plain class; its own properties are the payload, and the arity
@@ -609,7 +609,7 @@ export namespace Serify {
       return Object.keys(new arm());
     } catch (e) {
       throw new Error(
-        `serify: cannot inspect oneof arm ${arm.name} — its constructor parameters ` +
+        `serify: cannot inspect sum arm ${arm.name} — its constructor parameters ` +
         `need defaults so the arm can be constructed empty (${e})`);
     }
   }
@@ -638,7 +638,7 @@ export namespace Serify {
     const arm = arms.find((a) => armTag(a) === v.tag);
     if (!arm) {
       throw new Error(
-        `unknown oneof variant "${v.tag}" (declared: ${arms.map(armTag).join(', ')})`);
+        `unknown variant "${v.tag}" (declared: ${arms.map(armTag).join(', ')})`);
     }
     const props = armProps(arm);
     if (props.length === 0) return new arm();
@@ -650,13 +650,13 @@ export namespace Serify {
   }
 
   /**
-   * Property decorator: marks a property as a `oneof`, naming its arms.
+   * Property decorator: marks a property as a `sum`, naming its arms.
    *
    * TypeScript erases the union type, so unlike every other serify binding the
    * arms cannot be discovered and must be listed here — in the case file's
    * declaration order.
    */
-  export function oneof(arms: Ctor[], opts?: FieldOptions): PropertyDecorator {
+  export function sum(arms: Ctor[], opts?: FieldOptions): PropertyDecorator {
     return function (target: Object, propertyKey: string | symbol) {
       const key = typeof propertyKey === 'string' ? propertyKey : String(propertyKey);
       field(opts)(target, propertyKey);

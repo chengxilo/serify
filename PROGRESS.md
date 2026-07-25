@@ -65,9 +65,9 @@ Brand new library in `lib/php/`:
 | Model-binding | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Model-binding *exercised by a worker* | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `ledger` byte-parity vs Go, incl. ±2^127 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `oneof<...>` sum types | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `oneof` bound onto a *model* (no hand FieldMap access) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `notification` byte-parity vs Go (oneof) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `sum<...>` sum types | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `sum` bound onto a *model* (no hand FieldMap access) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `notification` byte-parity vs Go (sum) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Encoder-free (user owns serialization) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Audit test worker (`test/cases/audit/`) | ✅ | ✅ | — | — | — | — | — | — | — |
 
@@ -83,21 +83,21 @@ Coverage per type, as of the container/binding work below:
 A type implemented by *no* worker is now reported under the results grid — every
 result for it is SKIP, which otherwise reads exactly like a healthy run.
 
-`notification` is the `oneof` type. Its four cases cover the three payload
+`notification` is the `sum` type. Its four cases cover the three payload
 arities the type system allows — a unit variant, a scalar payload, a u64 payload
 that must survive as a decimal string, and a struct payload — and each language
 reaches them through its own sum type: an `enum` (Rust), a sealed interface
 (Java), a union of dataclasses (Python), a property union (PHP), an `abstract
 record` hierarchy (C#), a tagged tuple (Elixir), a `std::variant` (C++), a
-declared arm list (Node), or a `Converter` (Go). See "`oneof` model binding in
+declared arm list (Node), or a `Converter` (Go). See "`sum` model binding in
 every language" below. `TestExamples_Notification` asserts all nine agree
 byte-for-byte.
 
-## `--audit` and `oneof` payloads (fixed July 2026)
+## `--audit` and `sum` payloads (fixed July 2026)
 
 Every library's audit walkers enumerate FieldMap value kinds explicitly, and
-none of them had a case for that language's Variant type when `oneof` landed. A
-oneof payload is aliasing-capable (bytes, string, a nested FieldMap), so the
+none of them had a case for that language's Variant type when `sum` landed. A
+sum payload is aliasing-capable (bytes, string, a nested FieldMap), so the
 audit silently skipped it. Surveyed per language, the picture was not uniform:
 
 | Language | Zero-copy collector | Mutation snapshot |
@@ -112,13 +112,13 @@ is the only one that snapshots a FieldMap rather than the encoded JSON.
 
 Regression tests, each confirmed to fail before its fix:
 
-- Go — `TestOneOf_SnapshotDeepCopiesPayload`, `TestOneOf_DetectZeroCopyOnPayload`
-  (`lib/go/serify/oneof_test.go`)
-- Rust — `oneof_detect_zero_copy_on_payload` (pins behaviour that was already
+- Go — `TestSum_SnapshotDeepCopiesPayload`, `TestSum_DetectZeroCopyOnPayload`
+  (`lib/go/serify/sum_test.go`)
+- Rust — `sum_detect_zero_copy_on_payload` (pins behaviour that was already
   correct, so a future refactor cannot regress it silently)
-- Python — `test_oneof_detect_zero_copy_on_payload` plus an
+- Python — `test_sum_detect_zero_copy_on_payload` plus an
   `..._ignores_owned_payload` counterpart
-- Node — `detectZeroCopy sees an aliased oneof payload` plus an owned-payload
+- Node — `detectZeroCopy sees an aliased sum payload` plus an owned-payload
   counterpart
 
 C#, Java and C++ have no unit-test harness in this repo (they never have), so
@@ -259,7 +259,7 @@ would reintroduce them:
 
 A newtype that exists to *validate* — iggy's `WireName(String)`, 1–255 bytes —
 used to need a hand-written `#[serify(with = "...")]` module on every field that
-held one, plus a second module for the oneof-payload case. Two modules, ~30
+held one, plus a second module for the sum-payload case. Two modules, ~30
 lines, repeated per newtype.
 
 The derive now handles a single-field tuple struct directly:
@@ -277,7 +277,7 @@ pub struct WireName(String);
   a newtype could be constructed from wire bytes in a state its own constructor
   would have rejected. Omit it and the derive uses `Self(raw)`.
 - Three impls are generated — `SerifyField` (as a field of another model),
-  `SerifyPayload` (as a `oneof` payload), and `SerifyModel` (standalone, as the
+  `SerifyPayload` (as a `sum` payload), and `SerifyModel` (standalone, as the
   one-field record its schema declares, carrying the value under `"value"`).
 
 A newtype without `#[serify(transparent)]` is a compile error naming the
@@ -294,9 +294,9 @@ bare variant. Every other wire type maps itself. Verified at 72 PASS / 32 SKIP /
 exit 0, unchanged; canaried by renaming the standalone key `"value"` → `"walue"`
 in the derive, which turns that into 15 FAIL.
 
-## `oneof` model binding in every language (July 2026)
+## `sum` model binding in every language (July 2026)
 
-Until now `oneof` was the one type serify's schema supported but its model
+Until now `sum` was the one type serify's schema supported but its model
 binding did not: only Rust (a native `enum`, handled by the derive) and Go (a
 hand-written `serify.Converter`) could bind it. The other seven workers read the
 variant off the FieldMap by hand.
@@ -313,8 +313,8 @@ nothing declared at all:
 | PHP | property union type | `ReflectionUnionType::getTypes()` | nothing |
 | C# | `abstract record` + nested sealed records | `GetNestedTypes(Public\|NonPublic)` | nothing |
 | Elixir | tagged tuple | the tag *is* the data | nothing |
-| C++ | `std::variant` | alternatives yes, **names no** | `SERIFY_ONEOF(T, "a", "b")` |
-| Node/TS | — | union types are erased; `emitDecoratorMetadata` reports nothing | `@Serify.oneof([A, B])` |
+| C++ | `std::variant` | alternatives yes, **names no** | `SERIFY_SUM(T, "a", "b")` |
+| Node/TS | — | union types are erased; `emitDecoratorMetadata` reports nothing | `@Serify.sum([A, B])` |
 | Go | interface | cannot enumerate implementations | a `serify.Converter` |
 
 Each probe was a real compiled/run program, not a recollection — the C# one is
@@ -322,7 +322,7 @@ why the implementation passes `BindingFlags.NonPublic`, since `GetNestedTypes()`
 alone returns only *public* nested types and an `internal` hierarchy is ordinary.
 
 All nine share one arity rule, the same one the Rust derive already used, since a
-`oneof` is a sum-of-products: **0 fields → unit variant, 1 field → that value is
+`sum` is a sum-of-products: **0 fields → unit variant, 1 field → that value is
 the payload, N fields → the payload is a struct.** Tags are the arm's type name
 in snake_case. C++ needs no wrapper structs at all because each `std::variant`
 alternative *is* its payload (`std::monostate`, `std::string`, `uint64_t`, a
@@ -402,15 +402,15 @@ models (`address`, `money`) that more than one type nests.
 Where a model exists, the byte layout is now a method on it (`marshal` /
 `unmarshal`) and the worker file only bridges FieldMap ↔ model. At the time of
 the split `notification` was the exception in seven of the nine languages —
-only Go (a `Converter`) and Rust (a native enum) could bind a `oneof` onto a
+only Go (a `Converter`) and Rust (a native enum) could bind a `sum` onto a
 model, so the other seven read and write the active variant against the FieldMap
-directly. That gap is now closed in every language; see "`oneof` model binding in
+directly. That gap is now closed in every language; see "`sum` model binding in
 every language" above, which is what the seven were waiting on.
 
 No behaviour changed: all nine workers still agree byte-for-byte.
 
 **Follow-up in the same pass — schema tag names deleted from user code.** The
-split exposed that Go and Rust, the two languages with a real `oneof` model, were
+split exposed that Go and Rust, the two languages with a real `sum` model, were
 each re-deriving what the binding already owned. Rust had `CHANNEL_TAGS`, a
 `tag()` and an `ordinal()`; Go had a `channelTag()` marker method, a
 `channelTags` slice and a `channelOrdinal()` lookup — so `"silent"`, `"sms"`,
@@ -521,7 +521,7 @@ by deleting the `uint16`/`float64`/`bytes` arms — it fails with exactly the
 pre-fix error. C#, Java, C++ and PHP still have no harness in this repo, so each
 was driven by a standalone program asserting the same fifteen round-trips; all
 four print `ALL 15 ELEMENT TYPES ROUND-TRIP`. Giving those four a committed test
-remains the same open problem recorded under the `--audit`/`oneof` work.
+remains the same open problem recorded under the `--audit`/`sum` work.
 
 ### Promoted into the shipped suite: `signals`
 
@@ -682,7 +682,7 @@ run that compared one worker against itself.
   to work inside a clone, gives a command that runs as written, and shows the
   copy-a-worker flow inside `examples/` where the relative paths still resolve.
 - Audit section said "four unsafe behaviours"; there are six.
-- Model binding section had no `oneof` entry at all, despite that being the
+- Model binding section had no `sum` entry at all, despite that being the
   feature all nine libraries had most recently gained.
 - The language table implied nine published libraries. Nothing is published; the
   table now states how a worker actually takes each library today.
@@ -704,9 +704,9 @@ type they did not recognise:
 | PHP | **`break`** — dropped the field | fell through |
 | C++ | **fell off the chain** — dropped the field | dropped the field |
 
-This is not hypothetical: it is exactly what happened when `oneof` landed, when
+This is not hypothetical: it is exactly what happened when `sum` landed, when
 every library's audit walker silently skipped the new Variant kind (see
-"`--audit` and `oneof` payloads" above). Adding a type to the schema and
+"`--audit` and `sum` payloads" above). Adding a type to the schema and
 forgetting one library should be a hard error in that library, not a field that
 quietly goes missing.
 
@@ -858,9 +858,9 @@ A simulated leg now runs six real tests where it ran none:
 - The unit-test job ran `go test ./lib/... ./internal/...`, missing `./cmd/...`
   entirely — `cmd/serify/schema_test.go` was never run in CI. Added.
 - `mypy --strict lib/python/serify.py` **fails at HEAD** with 46 errors, so the
-  `test-python` job is red before any recent work; the uncommitted `oneof` work
+  `test-python` job is red before any recent work; the uncommitted `sum` work
   adds ~16 more (untyped `_get_type_hints`, bare `tuple` annotations in the
-  oneof helpers). None come from the container/dispatch work. Left alone: it is
+  sum helpers). None come from the container/dispatch work. Left alone: it is
   a pre-existing failure and a separate, mechanical annotation pass.
 - `test-rust` uses `working-directory: lib/rust`, which has no `Cargo.toml`;
   cargo walks up to the root workspace, so it works but tests the whole
@@ -872,7 +872,7 @@ A simulated leg now runs six real tests where it ran none:
 
 CI's `test-python` job runs `mypy --strict lib/python/serify.py`. That has been
 **failing at HEAD** — 46 errors in the committed file, ~16 more from the
-uncommitted `oneof` work — so the job was red before any of this session's work,
+uncommitted `sum` work — so the job was red before any of this session's work,
 which erodes the signal from every other check. Brought to **zero**.
 
 Most were annotation gaps in the `@serify_model` machinery, fixed with `Any`/
@@ -883,7 +883,7 @@ helps. **Two were real:** `_run_loop` called `serialize_fn`/`deserialize_fn`
 without checking they were set, so a serialize message before a successful init
 would crash on `None(...)`; both branches now raise a clear error instead. None
 of the 62 came from the container/dispatch/optional work — every one was
-pre-existing or from the oneof binding.
+pre-existing or from the sum binding.
 
 Verified behaviour-neutral: unit tests still 14/14, and the Python worker still
 agrees with Go across a full conformance run including `--audit` (the guards and

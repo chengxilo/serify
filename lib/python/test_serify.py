@@ -116,14 +116,14 @@ def test_large_int_precision():
     assert User.from_field_map(fm).user_id == 18446744073709551615
 
 
-# --- oneof ------------------------------------------------------------------
+# --- sum ------------------------------------------------------------------
 
 
-def oneof_schema():
-    """A oneof carrying a bytes payload — the shape zero-copy detection must see."""
+def sum_schema():
+    """A sum carrying a bytes payload — the shape zero-copy detection must see."""
     return [{
         "name": "channel",
-        "type": "oneof<silent, receipt: bytes>",
+        "type": "sum<silent, receipt: bytes>",
         "fields": [],
         "variants": [
             {"name": "silent"},
@@ -132,15 +132,15 @@ def oneof_schema():
     }]
 
 
-def test_oneof_round_trip():
-    schema = oneof_schema()
+def test_sum_round_trip():
+    schema = sum_schema()
     for data in ({"channel": {"silent": None}}, {"channel": {"receipt": "deadbeef"}}):
         fm = decode_field_map(data, schema)
         assert encode_field_map(fm, schema) == data
 
 
-def test_oneof_detect_zero_copy_on_payload():
-    # A deserializer that aliases the input buffer into a oneof bytes payload
+def test_sum_detect_zero_copy_on_payload():
+    # A deserializer that aliases the input buffer into a sum bytes payload
     # must be reported. Before _collect_bytes_snaps grew a Variant branch the
     # walker never descended into the variant and this returned [].
     buf = bytearray(b"\x01\x02\x03\x04")
@@ -150,7 +150,7 @@ def test_oneof_detect_zero_copy_on_payload():
     assert _detect_zero_copy(fm, buf) == ["channel"]
 
 
-def test_oneof_detect_zero_copy_ignores_owned_payload():
+def test_sum_detect_zero_copy_ignores_owned_payload():
     # The mirror image: a payload that copied out of the buffer is not aliasing
     # and must stay silent, or every correct worker would be warned at.
     buf = bytearray(b"\x01\x02\x03\x04")
@@ -270,7 +270,7 @@ def test_unknown_field_type_raises_both_directions():
     FieldMap) and encoding used to `return v` untouched. Both surface far
     downstream as a missing or wrong value rather than as "this library does not
     know that type" — which is exactly what happened to every library's audit
-    walker when `oneof` was added.
+    walker when `sum` was added.
     """
     schema = [{"name": "v", "type": "nope"}]
     try:

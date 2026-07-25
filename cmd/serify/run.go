@@ -192,9 +192,10 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 		records, err := rep.Records()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to get csv record: %v\n", err)
-		} else if err := writeCSVFile(opts.csvPath, records); err != nil {
-			return fmt.Errorf("write csv: %w", err)
 		} else {
+			if err := writeCSVFile(opts.csvPath, records); err != nil {
+				return fmt.Errorf("write csv: %w", err)
+			}
 			fmt.Printf("Wrote results to %s\n", opts.csvPath)
 		}
 	}

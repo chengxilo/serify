@@ -105,25 +105,25 @@ public sealed class FieldMap
     public void SetMap(string key, Dictionary<string, object?> v) => _fields[key] = v;
 
     /// <summary>
-    /// Stores a oneof value: the active variant's tag and payload (null for a unit variant).
+    /// Stores a sum value: the active variant's tag and payload (null for a unit variant).
     /// </summary>
     public void SetVariant(string key, string tag, object? value = null) => _fields[key] = new Variant(tag, value);
 
     /// <summary>
-    /// Returns the oneof value stored at key.
+    /// Returns the sum value stored at key.
     /// </summary>
     public Variant GetVariant(string key)
     {
         if (_fields.TryGetValue(key, out var v) && v is Variant variant) return variant;
-        throw new InvalidOperationException($"field \"{key}\" is not a oneof variant");
+        throw new InvalidOperationException($"field \"{key}\" is not a variant");
     }
 
     internal Dictionary<string, object?> Fields => _fields;
 }
 
 /// <summary>
-/// One arm of a oneof: a tag and its decoded payload (null for a unit variant).
-/// A oneof field stores a Variant.
+/// One arm of a sum: a tag and its decoded payload (null for a unit variant).
+/// A sum field stores a Variant.
 /// </summary>
 public sealed record Variant(string Tag, object? Value = null);
 
@@ -150,13 +150,13 @@ public sealed class SchemaField
     }
 
     /// <summary>
-    /// Returns the oneof arm named <paramref name="tag"/>.
+    /// Returns the sum arm named <paramref name="tag"/>.
     /// </summary>
     public SchemaVariant FindVariant(string tag)
     {
         foreach (var sv in Variants)
             if (sv.Name == tag) return sv;
-        throw new InvalidOperationException($"unknown oneof variant \"{tag}\"");
+        throw new InvalidOperationException($"unknown variant \"{tag}\"");
     }
 
     public static IReadOnlyList<SchemaField> ParseArray(JsonElement arr)
@@ -201,7 +201,7 @@ public sealed class SchemaField
 }
 
 /// <summary>
-/// One arm of a oneof: a tag and its payload schema (null for a unit variant).
+/// One arm of a sum: a tag and its payload schema (null for a unit variant).
 /// </summary>
 public sealed record SchemaVariant(string Name, SchemaField? Payload);
 
@@ -213,7 +213,7 @@ public static class Worker
     /// The protocol revision this library speaks. The runner requires an exact
     /// match and refuses to start a worker reporting anything else.
     /// </summary>
-    private const int ProtocolVersion = 1;
+    private const int ProtocolVersion = 2;
 
     // --- audit helpers --------------------------------------------------------
 
@@ -570,7 +570,7 @@ public static class Worker
                 }
                 // enum<a,b,c>: the variant name travels as a string.
                 if (type.StartsWith("enum<")) { fm.SetString(name, el.GetString()!); return; }
-                if (type.StartsWith("oneof<")) { DecodeOneOf(fm, sf, el); return; }
+                if (type.StartsWith("sum<")) { DecodeSum(fm, sf, el); return; }
                 if (type.StartsWith("map<"))
                 {
                     var (_, valType) = SplitMapTypes(type);
@@ -585,14 +585,14 @@ public static class Worker
     }
 
     /// <summary>
-    /// Decodes a oneof wire value {tag: payload} (payload null for a unit variant)
+    /// Decodes a sum wire value {tag: payload} (payload null for a unit variant)
     /// into a Variant, decoding the payload per the variant's own schema.
     /// </summary>
-    private static void DecodeOneOf(FieldMap fm, SchemaField sf, JsonElement el)
+    private static void DecodeSum(FieldMap fm, SchemaField sf, JsonElement el)
     {
         var props = el.EnumerateObject().ToArray();
         if (props.Length != 1)
-            throw new InvalidOperationException($"oneof must name exactly one variant, got {props.Length}");
+            throw new InvalidOperationException($"sum must name exactly one variant, got {props.Length}");
         var tag = props[0].Name;
         var sv  = sf.FindVariant(tag);
         if (sv.Payload is null) { fm.SetVariant(sf.Name, tag); return; }
@@ -725,19 +725,19 @@ public static class Worker
             _ when type.StartsWith("optional<") => EncodeOptional(sf, type[9..^1], v),
             _ when type.StartsWith("array<")   => EncodeList(sf, SplitArrayType(type).Item1, v),
             _ when type.StartsWith("enum<") => v,
-            _ when type.StartsWith("oneof<") => EncodeOneOf(sf, v),
+            _ when type.StartsWith("sum<") => EncodeSum(sf, v),
             _ when type.StartsWith("map<") => EncodeMap(SplitMapTypes(type).Item2, sf.Fields, v),
             _ => throw new InvalidOperationException($"unknown type \"{type}\""),
         };
     }
 
     /// <summary>
-    /// Inverse of DecodeOneOf: a Variant becomes {tag: payload}.
+    /// Inverse of DecodeSum: a Variant becomes {tag: payload}.
     /// </summary>
-    private static object? EncodeOneOf(SchemaField sf, object? v)
+    private static object? EncodeSum(SchemaField sf, object? v)
     {
         if (v is not Variant variant)
-            throw new InvalidOperationException($"expected a Variant for oneof field \"{sf.Name}\"");
+            throw new InvalidOperationException($"expected a Variant for sum field \"{sf.Name}\"");
         var sv = sf.FindVariant(variant.Tag);
         return new Dictionary<string, object?>
         {
@@ -912,8 +912,8 @@ public static class SerifyModel
             var key = (Attribute.GetCustomAttribute(prop, typeof(SerifyFieldAttribute)) as SerifyFieldAttribute)?.Name ?? DefaultKey(prop.Name);
             var val = prop.GetValue(obj);
             // A closed record hierarchy is C#'s sum type, so a member declared
-            // with one is a oneof — see ToVariant.
-            if (OneofArms(prop.PropertyType) is { } arms) fm.Fields[key] = ToVariant(arms, key, val);
+            // with one is a sum — see ToVariant.
+            if (SumArms(prop.PropertyType) is { } arms) fm.Fields[key] = ToVariant(arms, key, val);
             else SetFieldMapValue(fm, key, val);
         }
         foreach (var fld in typeof(T).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
@@ -937,7 +937,7 @@ public static class SerifyModel
             if (fm.Fields.TryGetValue(key, out var val))
             {
                 if (!prop.CanWrite) continue;
-                if (OneofArms(prop.PropertyType) is { } arms && val is Variant variant)
+                if (SumArms(prop.PropertyType) is { } arms && val is Variant variant)
                     prop.SetValue(obj, FromVariant(arms, prop.PropertyType, variant));
                 else
                     prop.SetValue(obj, ConvertValue(val, prop.PropertyType));
@@ -953,7 +953,7 @@ public static class SerifyModel
         return obj;
     }
 
-    // ── oneof ───────────────────────────────────────────────────────────────
+    // ── sum ───────────────────────────────────────────────────────────────
     //
     // C# has no discriminated union keyword, but an abstract record with a
     // private constructor and nested sealed records is the closed hierarchy that
@@ -961,7 +961,7 @@ public static class SerifyModel
     // the arms and each arm's primary-constructor parameters give its payload.
     // No converter, no registration.
     //
-    // The arity rule is the same one every serify binding uses, because a oneof
+    // The arity rule is the same one every serify binding uses, because a sum
     // is a sum-of-products:
     //
     //     0 parameters -> a unit variant, no payload
@@ -969,7 +969,7 @@ public static class SerifyModel
     //     N parameters -> the payload is a struct holding the N parameters
 
     /// <summary>The arms of a closed record hierarchy, or null if <paramref name="t"/> is not one.</summary>
-    private static Type[]? OneofArms(Type t)
+    private static Type[]? SumArms(Type t)
     {
         if (!t.IsAbstract || t.IsInterface || t == typeof(object)) return null;
         // NonPublic too: GetNestedTypes() alone returns only public nested types,
@@ -1036,7 +1036,7 @@ public static class SerifyModel
             return Activator.CreateInstance(arm, args)!;
         }
         throw new InvalidOperationException(
-            $"unknown oneof variant \"{v.Tag}\" for {declared.Name} " +
+            $"unknown variant \"{v.Tag}\" for {declared.Name} " +
             $"(declared: {string.Join(", ", Array.ConvertAll(arms, ArmTag))})");
     }
 

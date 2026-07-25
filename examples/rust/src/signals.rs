@@ -25,17 +25,28 @@ use serify::SerifyModel;
 
 use crate::wire::{append_len_str, read_bytes, read_len_str};
 
-/// The `mode` enum from signals.yaml. An enum field maps straight onto a Rust
-/// enum: the default `#[derive(SerifyModel)]` carries it as a payload-less
-/// Variant — the same shape a `oneof` uses — so no `str`/`repr` marker is
-/// needed. The wire form is a u8 ordinal in declaration order; the byte layout
-/// (Go's to own) is mapped by hand in marshal/unmarshal below.
-#[derive(SerifyModel, Clone, Copy, PartialEq)]
-enum Mode {
-    Idle,
-    Active,
-    Fault,
-    Calibrating,
+/// The `mode` enum from signals.yaml. An enum is a named constant, not a sum:
+/// its value is just the variant *name*, and on the wire it travels as a plain
+/// string (exactly as the Go reference and every other worker treat it). So the
+/// field is a `String`; the binary layout (Go's to own) maps the name to a u8
+/// ordinal by hand in marshal/unmarshal below. (A Rust `enum` is reserved for a
+/// `sum` — see notification.rs — which is what `#[derive(SerifyModel)]` maps an
+/// enum type onto.)
+const MODE_VARIANTS: [&str; 4] = ["idle", "active", "fault", "calibrating"];
+
+fn mode_ordinal(s: &str) -> Result<u8, String> {
+    MODE_VARIANTS
+        .iter()
+        .position(|v| *v == s)
+        .map(|i| i as u8)
+        .ok_or_else(|| format!("unknown mode {s:?}"))
+}
+
+fn mode_name(i: u8) -> Result<String, String> {
+    MODE_VARIANTS
+        .get(i as usize)
+        .map(|s| (*s).to_string())
+        .ok_or_else(|| format!("mode ordinal {i} out of range"))
 }
 
 #[derive(SerifyModel)]
@@ -59,7 +70,7 @@ pub struct SignalCapture {
     checksum: [u8; 4],
     window: [i16; 3],
     dropped_frames: Option<u32>,
-    mode: Mode,
+    mode: String,
 }
 
 /// Write a list's u32 element count. Every list carries one, even when empty.
@@ -157,13 +168,7 @@ impl SignalCapture {
         }
 
         // enum: a u8 ordinal, the variant's position in the case file.
-        let ord: u8 = match self.mode {
-            Mode::Idle => 0,
-            Mode::Active => 1,
-            Mode::Fault => 2,
-            Mode::Calibrating => 3,
-        };
-        buf.push(ord);
+        buf.push(mode_ordinal(&self.mode)?);
 
         Ok(buf)
     }
@@ -226,13 +231,7 @@ impl SignalCapture {
         };
 
         let ord = read_bytes!(data, p, 1)[0];
-        let mode = match ord {
-            0 => Mode::Idle,
-            1 => Mode::Active,
-            2 => Mode::Fault,
-            3 => Mode::Calibrating,
-            other => return Err(format!("unknown signal mode ordinal {other}")),
-        };
+        let mode = mode_name(ord)?;
 
         Ok(SignalCapture {
             capture_id,

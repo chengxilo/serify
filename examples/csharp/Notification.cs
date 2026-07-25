@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // NotificationRecord mirrors examples/cases/notification.yaml, whose `channel`
-// field is a `oneof`.
+// field is a `sum`.
 //
 // C# has no discriminated union keyword, but an abstract record with a private
 // constructor and nested sealed records is the closed hierarchy that stands in
@@ -27,7 +27,7 @@ using System.Buffers.Binary;
 using System.IO;
 using Serify;
 
-/// <summary>The `oneof` from the case file.</summary>
+/// <summary>The `sum` from the case file.</summary>
 internal abstract record Channel
 {
     internal sealed record Silent : Channel;                            // arity 0 — a unit variant
@@ -54,7 +54,7 @@ internal sealed class NotificationRecord
         BinaryPrimitives.WriteUInt32LittleEndian(buf, NotificationId);
         ms.Write(buf[..4]);
 
-        // The tag ordinal is the variant's position in the case file's oneof,
+        // The tag ordinal is the variant's position in the case file's sum,
         // which is the declaration order of the four arms above. The schema tag
         // *names* are the binding's business, and never appear here.
         switch (Channel)

@@ -43,7 +43,7 @@ class Worker
      * The protocol revision this library speaks. The runner requires an exact
      * match and refuses to start a worker reporting anything else.
      */
-    private const PROTOCOL_VERSION = 1;
+    private const PROTOCOL_VERSION = 2;
 
     /** Single-type worker: handles whatever type/format the runner asks for. */
     public static function run(callable $serialize, callable $deserialize, array $schema = []): void
@@ -218,7 +218,7 @@ class Worker
         return $result;
     }
 
-    /** One arm of a oneof: a tag and its payload schema (null for a unit variant). */
+    /** One arm of a sum: a tag and its payload schema (null for a unit variant). */
     private static function parseSchemaVariants(?array $arr): array
     {
         $result = [];
@@ -240,7 +240,7 @@ class Worker
                 return $sv;
             }
         }
-        throw new \RuntimeException("unknown oneof variant \"$tag\"");
+        throw new \RuntimeException("unknown variant \"$tag\"");
     }
 
     // ── Decode ────────────────────────────────────────────────────────────
@@ -324,8 +324,8 @@ class Worker
                 } elseif (str_starts_with($type, 'enum<')) {
                     // enum<a,b,c>: the variant name travels as a string.
                     $fm->setString($name, (string) $v);
-                } elseif (str_starts_with($type, 'oneof<')) {
-                    self::decodeOneOf($fm, $sf, (array) $v);
+                } elseif (str_starts_with($type, 'sum<')) {
+                    self::decodeSum($fm, $sf, (array) $v);
                 } elseif (str_starts_with($type, 'map<')) {
                     [, $valType] = self::splitMapTypes($type);
                     $fm->setMap($name, self::decodeMap($valType, $sf['fields'], (array) $v));
@@ -340,13 +340,13 @@ class Worker
     }
 
     /**
-     * Decode a oneof wire value {tag: payload} (payload null for a unit variant)
+     * Decode a sum wire value {tag: payload} (payload null for a unit variant)
      * into a Variant, decoding the payload per the variant's own schema.
      */
-    private static function decodeOneOf(FieldMap $fm, array $sf, array $v): void
+    private static function decodeSum(FieldMap $fm, array $sf, array $v): void
     {
         if (count($v) !== 1) {
-            throw new \RuntimeException('oneof must name exactly one variant, got ' . count($v));
+            throw new \RuntimeException('sum must name exactly one variant, got ' . count($v));
         }
         $tag = array_key_first($v);
         $sv = self::findSchemaVariant($sf, (string) $tag);
@@ -500,8 +500,8 @@ class Worker
                 } elseif (str_starts_with($type, 'enum<')) {
                     // enum<a,b,c>: the variant name travels as a string.
                     return (string) $v;
-                } elseif (str_starts_with($type, 'oneof<')) {
-                    return self::encodeOneOf($sf, $v);
+                } elseif (str_starts_with($type, 'sum<')) {
+                    return self::encodeSum($sf, $v);
                 } elseif (str_starts_with($type, 'map<')) {
                     [, $valType] = self::splitMapTypes($type);
                     return self::encodeMap($valType, $sf['fields'], (array) $v);
@@ -512,11 +512,11 @@ class Worker
         }
     }
 
-    /** Inverse of decodeOneOf: a Variant becomes {tag: payload}. */
-    private static function encodeOneOf(array $sf, $v): array
+    /** Inverse of decodeSum: a Variant becomes {tag: payload}. */
+    private static function encodeSum(array $sf, $v): array
     {
         if (!$v instanceof Variant) {
-            throw new \RuntimeException("expected a Variant for oneof field \"{$sf['name']}\"");
+            throw new \RuntimeException("expected a Variant for sum field \"{$sf['name']}\"");
         }
         $sv = self::findSchemaVariant($sf, $v->tag);
         return [$v->tag => $sv['payload'] === null ? null : self::encodeField($sv['payload'], $v->value)];

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """`NotificationRecord` mirrors examples/cases/notification.yaml, whose
-`channel` field is a `oneof`.
+`channel` field is a `sum`.
 
 Python has no `enum` with payloads, but a union of dataclasses is its sum type,
 and that is all `@serify_model` needs: the union names the arms, and each arm's
@@ -67,7 +67,7 @@ class NotificationRecord:
     def marshal(self) -> bytes:
         buf = bytearray(struct.pack("<I", self.notification_id))
 
-        # The tag ordinal is the variant's position in the case file's oneof,
+        # The tag ordinal is the variant's position in the case file's sum,
         # which is the declaration order of the four arms above. The schema tag
         # *names* are the binding's business, and never appear here.
         match self.channel:

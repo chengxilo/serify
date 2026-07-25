@@ -22,10 +22,10 @@ Understanding this split is essential — they are different audiences with thei
 2. **The worker libraries** — what a worker author imports, one implementation per language:
    - `lib/go/serify` (package `serify`, imported as `github.com/chengxilo/serify/lib/go/serify`) — the **Go** worker lib: `serify.Run`, `Suite`/`Type`/`Format`, `FieldMap`, reflection-based field mapping, and the NDJSON loop. Same module as the CLI (`cmd/serify/`); the Thrift-style `lib/go/serify` path keeps the import's last element equal to the package name.
    - `lib/<lang>/` — equivalents for rust/python/node/csharp/cpp/elixir/java/php. `lib/rust/serify` is the Rust crate (`serify`); `lib/rust/derive` is the proc-macro for `#[derive(SerifyModel)]`.
-   - `examples/<lang>/` — reference worker implementations; the Go + Rust examples are exercised by the integration tests. `examples/cases/` holds the shared conformance suite (one `.yaml` file per type; tested: `customer`, `order`, `telemetry`, `ledger`, `notification`, `signals`, plus reusable `address`/`money`/`line_item`). `notification` is the `oneof` type and is implemented by **all nine** example workers, so `TestExamples_Notification` is what actually guards sum-type parity across the libraries. `signals` plays the same role for `list<T>` and `array<T,N>`: its fields use every scalar the schema allows as a list element, so `TestExamples_Signals` is what keeps a library from quietly dropping one (see PROGRESS.md — three libraries used to fail *silently* on the element types they did not handle). `telemetry` (Go + Rust) carries the only `optional<scalar>` and the float NaN/Inf cases; `order` (Go) is the only type combining `enum`, `list<struct>`, `map<string,struct>` and `optional<struct>`. A type no worker implements is now called out under the results grid, because a column of SKIP otherwise reads exactly like a passing run. Each file carries a `fields:` (or `variants:`) section plus `formats:`/`cases:`; generated JSON Schemas (`.schemas/*.schema.json`, from `scripts/gen-schemas.sh`) give editors save-time validation of case data.
+   - `examples/<lang>/` — reference worker implementations; the Go + Rust examples are exercised by the integration tests. `examples/cases/` holds the shared conformance suite (one `.yaml` file per type; tested: `customer`, `order`, `telemetry`, `ledger`, `notification`, `signals`, plus reusable `address`/`money`/`line_item`). `notification` is the `sum` type and is implemented by **all nine** example workers, so `TestExamples_Notification` is what actually guards sum-type parity across the libraries. `signals` plays the same role for `list<T>` and `array<T,N>`: its fields use every scalar the schema allows as a list element, so `TestExamples_Signals` is what keeps a library from quietly dropping one (see PROGRESS.md — three libraries used to fail *silently* on the element types they did not handle). `telemetry` (Go + Rust) carries the only `optional<scalar>` and the float NaN/Inf cases; `order` (Go) is the only type combining `enum`, `list<struct>`, `map<string,struct>` and `optional<struct>`. A type no worker implements is now called out under the results grid, because a column of SKIP otherwise reads exactly like a passing run. Each file carries a `fields:` (or `variants:`) section plus `formats:`/`cases:`; generated JSON Schemas (`.schemas/*.schema.json`, from `scripts/gen-schemas.sh`) give editors save-time validation of case data.
    - There is **no `serify init` / `templates/` scaffolding** — it was removed (see PROGRESS.md) and will be rebuilt once libraries/protocol stabilize; new workers start by copying an `examples/<lang>` worker.
 
-**Go and Rust are the reference implementations.** When changing protocol or library behavior, update Go (`lib/go/serify`) and Rust (`lib/rust/`) first, then propagate to the other languages. All 9 libraries are currently at parity for core features (audit, `map<K,V>`, `oneof<...>`, FieldMap types).
+**Go and Rust are the reference implementations.** When changing protocol or library behavior, update Go (`lib/go/serify`) and Rust (`lib/rust/`) first, then propagate to the other languages. All 9 libraries are currently at parity for core features (audit, `map<K,V>`, `sum<...>`, FieldMap types).
 
 ## Model-binding mechanisms per language
 
@@ -149,20 +149,20 @@ class User
 // SerifyModelHelper::toFieldMap($user) / SerifyModelHelper::fromFieldMap($fm, User::class)
 ```
 
-### `oneof` fields
+### `sum` fields
 
-A `oneof` binds onto whatever sum type the language already has — a Rust `enum`,
+A `sum` binds onto whatever sum type the language already has — a Rust `enum`,
 a Java `sealed interface`, a Python union of dataclasses, a PHP property union
 type, a C# `abstract record` hierarchy, an Elixir tagged tuple. Those six need
 **nothing declared**: the binding reads the arms off the type itself. The three
-that cannot be introspected declare the arms instead — C++ `SERIFY_ONEOF(T,
-"a", "b")` (no reflection), Node `@Serify.oneof([A, B])` (union types are erased
+that cannot be introspected declare the arms instead — C++ `SERIFY_SUM(T,
+"a", "b")` (no reflection), Node `@Serify.sum([A, B])` (union types are erased
 at runtime), Go a `serify.Converter` (implementations of an interface cannot be
 enumerated).
 
 All nine share one arity rule: **0 fields → unit variant, 1 field → that value is
 the payload, N fields → the payload is a struct**; tags are the arm's type name
-in snake_case. See "`oneof` and your own types" in `docs/protocol.md` for the
+in snake_case. See "`sum` and your own types" in `docs/protocol.md` for the
 full table, and `examples/*/notification.*` for a worked example per language.
 
 ## How a run works (the data flow)
@@ -198,10 +198,10 @@ The terminal table is **not** a separate code path — it's a view of the same d
 
 - **Case files** are YAML: one type per file, named after the file. Reusable-only types (e.g. `address`, `money`) have a `fields:` (or `variants:`) but no `cases:` and are pulled in by other files via `import:` — there is **no implicit registry**; every cross-file type reference must be imported explicitly.
 - A **tested type** (one with `cases:`) **must declare `formats:`** — `config` rejects it otherwise.
-- **A type file declares either a `fields:` (record) or a `variants:` (sum), never both** — the section name is the declaration, there is no flag, and `checkSections` enforces exactly one. `oneof<...>` is a *wire* spelling only: `FieldType.String()` renders it for workers, and `typeOf` rejects it as input with a message pointing at `variants:`. Under `variants:` an entry with **no type** is a unit variant; the same untyped entry under `fields:` is a missing-type error. A sum referenced as a field *is* that field's type — no wrapping struct — so `transparent:` (which inlines a one-field record) is rejected on a sum. As the type under test the sum is carried under the single key `value` (`sumValueKey`), because a schema's top level is a field list and a bare sum is not one; the worker libraries' model bindings hardcode the same name. `checkKeys` rejects any top-level key outside the allowed set, so a stale `sum:`/`schema:` or a misspelled `feilds:` is a load error rather than a silently-empty type.
+- **A type file declares either a `fields:` (record) or a `variants:` (sum), never both** — the section name is the declaration, there is no flag, and `checkSections` enforces exactly one. `sum<...>` is a *wire* spelling only: `FieldType.String()` renders it for workers, and `typeOf` rejects it as input with a message pointing at `variants:`. Under `variants:` an entry with **no type** is a unit variant; the same untyped entry under `fields:` is a missing-type error. A sum referenced as a field *is* that field's type — no wrapping struct — so `transparent:` (which inlines a one-field record) is rejected on a sum. As the type under test the sum is carried under the single key `value` (`sumValueKey`), because a schema's top level is a field list and a bare sum is not one; the worker libraries' model bindings hardcode the same name. `checkKeys` rejects any top-level key outside the allowed set, so a stale `sum:`/`schema:` or a misspelled `feilds:` is a load error rather than a silently-empty type.
 - **64/128-bit integer case values are decoded schema-directed from their literal text** (`internal/config/casedata.go`): bare literals of any size and quoted decimal strings are both exact; float forms (`1e3`) and out-of-range values are load-time errors. There is no quoting requirement.
 - The **`bind` message requires a non-empty `type` AND `format`**. Empty values are errors on both the runner side (`internal/worker`) and inside each worker library — do not re-add single-type/single-format auto-selection.
-- **Startup is `ping`, not a binding message.** The worker answers with `protocol_version` and the runner requires an exact match against `protocol.ProtocolVersion`; bump that constant on any breaking wire change. Workers report no standing capability list — whether a worker implements a type is answered per (type, format) by a `SKIPPED` bind. A hardcoded list is exactly what drifted before: the Rust lib spent an unknown stretch declaring it did not support `map`/`enum`/`oneof` while passing every one of those cases.
+- **Startup is `ping`, not a binding message.** The worker answers with `protocol_version` and the runner requires an exact match against `protocol.ProtocolVersion`; bump that constant on any breaking wire change. Workers report no standing capability list — whether a worker implements a type is answered per (type, format) by a `SKIPPED` bind. A hardcoded list is exactly what drifted before: the Rust lib spent an unknown stretch declaring it did not support `map`/`enum`/`sum` while passing every one of those cases.
 - JSON byte-parity across languages is achievable but needs care: Go's `encoding/json` vs Rust's `serde_json` differ on `[]byte`→base64, map-key ordering, and trailing `.0` on floats. See the hand-written `to_json`/`from_json` in `examples/rust/src/customer.rs` for how the Rust example matches Go exactly.
 
 ## Self-tests: the `wrong` meta-fixture (`test/cases/wrong`)

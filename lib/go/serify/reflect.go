@@ -550,7 +550,7 @@ func storeNative(fm *FieldMap, key string, val any) {
 		// in wire order before it can be compared.
 		fm.SetListStruct(key, v)
 	case *Variant:
-		// Go has no sum type, so a oneof field is always a converter's job: the
+		// Go has no sum type, so a sum field is always a converter's job: the
 		// model holds whatever shape the SDK uses and the converter names the
 		// active variant.
 		fm.fields[key] = v

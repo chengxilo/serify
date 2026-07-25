@@ -87,20 +87,20 @@ class FieldMap:
     def set_map(self, key: str, v: dict[str, Any]) -> None:   self._fields[key] = v
 
     def set_variant(self, key: str, tag: str, value: Any = None) -> None:
-        """Store a oneof value: the active variant's tag and payload (None for a unit variant)."""
+        """Store a sum value: the active variant's tag and payload (None for a unit variant)."""
         self._fields[key] = Variant(tag, value)
 
     def get_variant(self, key: str) -> "Variant":
-        """Return the oneof value stored at key."""
+        """Return the sum value stored at key."""
         v = self._fields[key]
         if not isinstance(v, Variant):
-            raise ValueError(f"field {key!r} is not a oneof variant (got {type(v).__name__})")
+            raise ValueError(f"field {key!r} is not a variant (got {type(v).__name__})")
         return v
 
 
 @dataclasses.dataclass(frozen=True)
 class Variant:
-    """One arm of a oneof: a tag and its decoded payload (None for a unit variant)."""
+    """One arm of a sum: a tag and its decoded payload (None for a unit variant)."""
     tag: str
     value: Any = None
 
@@ -116,14 +116,14 @@ _LIST_ELEMS: frozenset[str] = frozenset((*_SCALARS, "struct"))
 
 # The protocol revision this library speaks. The runner requires an exact
 # match and refuses to start a worker reporting anything else.
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 
 
 def _find_schema_variant(sf: dict[str, Any], tag: str) -> dict[str, Any]:
     for sv in sf.get("variants") or []:
         if sv["name"] == tag:
             return cast(dict[str, Any], sv)
-    raise ValueError(f"unknown oneof variant {tag!r}")
+    raise ValueError(f"unknown variant {tag!r}")
 
 
 
@@ -193,11 +193,11 @@ def _decode_field(fm: FieldMap, name: str, typ: str, sf: dict[str, Any], v: Any)
     # type, so a worker can map the name onto an ordinal for its byte layout.
     elif typ.startswith("enum<"):
         fm.set_string(name, str(v))
-    # oneof<a, b: T>: {tag: payload} on the wire (payload null for a unit
+    # sum<a, b: T>: {tag: payload} on the wire (payload null for a unit
     # variant); the payload is decoded per the variant's own schema.
-    elif typ.startswith("oneof<"):
+    elif typ.startswith("sum<"):
         if len(v) != 1:
-            raise ValueError(f"oneof must name exactly one variant, got {len(v)}")
+            raise ValueError(f"sum must name exactly one variant, got {len(v)}")
         tag, payload = next(iter(v.items()))
         sv = _find_schema_variant(sf, tag)
         psf = sv.get("payload")
@@ -322,9 +322,9 @@ def _encode_field(typ: str, sf: dict[str, Any], v: Any) -> Any:
         return _encode_list(elem_type, sf.get("fields", []), v)
     if typ.startswith("enum<"):
         return v
-    if typ.startswith("oneof<"):
+    if typ.startswith("sum<"):
         if not isinstance(v, Variant):
-            raise ValueError(f"expected a Variant for oneof, got {type(v).__name__}")
+            raise ValueError(f"expected a Variant for sum, got {type(v).__name__}")
         sv = _find_schema_variant(sf, v.tag)
         psf = sv.get("payload")
         if psf is None:
@@ -458,7 +458,7 @@ def _type_info(hint: Any) -> tuple[str, Any]:
        list_scalar/optional_string
        struct/list_struct/optional_struct/map
 
-    `extra` is deliberately Any: it is a class for struct/list_struct/oneof, an
+    `extra` is deliberately Any: it is a class for struct/list_struct/sum, an
     inner type hint for optionals, and None otherwise — a union a caller reads
     reflectively (`.from_field_map`, etc.), not something a static type helps.
     """
@@ -484,11 +484,11 @@ def _type_info(hint: Any) -> tuple[str, Any]:
     if isinstance(hint, str) and hint.lower() in _kind_map:
         return (_kind_map[hint.lower()], None)
 
-    # oneof: a union of dataclasses. Checked before the optional branch, which
+    # sum: a union of dataclasses. Checked before the optional branch, which
     # claims every union mentioning None.
-    arms = _oneof_arms(hint)
+    arms = _sum_arms(hint)
     if arms is not None:
-        return ("oneof", arms)
+        return ("sum", arms)
 
     # Optional (Union[X, None] / X | None)
     if _is_union_with_none(hint):
@@ -543,20 +543,20 @@ def _unwrap_optional(args: tuple[Any, ...]) -> Any:
     return None
 
 
-# oneof: a union of dataclasses is Python's sum type
+# sum: a union of dataclasses is Python's sum type
 #
 # `Channel = Silent | Sms | Push | Invoice` says everything the binding needs, so
-# a `oneof` field needs no converter and no registration — the union names the
+# a `sum` field needs no converter and no registration — the union names the
 # arms and each arm's own dataclass fields give its payload. This mirrors what
 # the Rust derive does with a native `enum`; the arity rule is identical, because
-# a serify `oneof` is a sum-of-products:
+# a serify `sum` is a sum-of-products:
 #
 #     0 fields  -> a unit variant, no payload
 #     1 field   -> that field's value is the payload
 #     N fields  -> the payload is a struct holding the N fields
 
 
-def _oneof_arms(hint: Any) -> tuple[Any, ...] | None:
+def _sum_arms(hint: Any) -> tuple[Any, ...] | None:
     """Return the arm classes if *hint* is a union of dataclasses, else None.
 
     `str | None` is an `optional<string>`, not a sum type, so any union
@@ -592,10 +592,10 @@ def _arm_by_tag(arms: tuple[Any, ...], tag: str) -> type:
         if _arm_tag(arm) == tag:
             return cast(type, arm)
     known = ", ".join(_arm_tag(a) for a in arms)
-    raise ValueError(f"unknown oneof variant {tag!r} (declared: {known})")
+    raise ValueError(f"unknown variant {tag!r} (declared: {known})")
 
 
-def _set_oneof(fm: FieldMap, key: str, val: Any, arms: tuple[Any, ...]) -> None:
+def _set_sum(fm: FieldMap, key: str, val: Any, arms: tuple[Any, ...]) -> None:
     """Write the active arm as a Variant. The wire encoding of the payload is
     driven by the schema, so this only has to hand over the right Python value."""
     arm = type(val)
@@ -622,7 +622,7 @@ def _set_oneof(fm: FieldMap, key: str, val: Any, arms: tuple[Any, ...]) -> None:
         fm.set_variant(key, _arm_tag(arm), payload)
 
 
-def _get_oneof(fm: FieldMap, key: str, arms: tuple[Any, ...]) -> Any:
+def _get_sum(fm: FieldMap, key: str, arms: tuple[Any, ...]) -> Any:
     """Rebuild the active arm from a Variant."""
     var = fm.get_variant(key)
     arm = _arm_by_tag(arms, var.tag)
@@ -675,8 +675,8 @@ def _set_fm(fm: FieldMap, key: str, val: Any, hint: Any) -> None:
         fm.set_optional_struct(key, extra.to_field_map(val) if val else None)
     elif kind == "map":
         _set_map_fm(fm, key, val, extra)
-    elif kind == "oneof" and extra:
-        _set_oneof(fm, key, val, extra)
+    elif kind == "sum" and extra:
+        _set_sum(fm, key, val, extra)
     else:
         fm.set_string(key, str(val) if val is not None else "")
 
@@ -733,8 +733,8 @@ def _get_fm(fm: FieldMap, key: str, hint: Any) -> Any:
         return extra.from_field_map(inner) if inner else None
     if kind == "map":
         return _get_map_fm(fm, key, extra)
-    if kind == "oneof" and extra:
-        return _get_oneof(fm, key, extra)
+    if kind == "sum" and extra:
+        return _get_sum(fm, key, extra)
     return fm.get_string(key) if key in fm._fields else ""
 
 

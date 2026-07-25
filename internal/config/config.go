@@ -42,17 +42,17 @@ const (
 
 // FieldType represents a parsed type from the schema.
 type FieldType struct {
-	Base     string     // uint8/16/32/64, int8/16/32/64, float32, float64, bool, string, bytes, optional, list, array, struct, map, enum, oneof
+	Base     string     // uint8/16/32/64, int8/16/32/64, float32, float64, bool, string, bytes, optional, list, array, struct, map, enum, sum
 	Elem     *FieldType // for optional<T>, list<T>, array<T,N>, map value type
 	Key      *FieldType // for map<K,V> key type
 	ArrayN   int        // for array<T,N>
 	Fields   []Field    // for struct (and list<struct> / optional<struct> / map<K,struct> via Elem)
 	Values   []string   // for enum
-	Variants []Variant  // for oneof
+	Variants []Variant  // for sum
 }
 
-// Variant is one arm of a oneof<...>: a tag name and its payload type.
-// A oneof is a sum-of-products — each variant is a product of 0..N fields:
+// Variant is one arm of a sum<...>: a tag name and its payload type.
+// A sum is a sum-of-products — each variant is a product of 0..N fields:
 //   - Type == nil            → a unit variant (no payload), e.g. `balanced`
 //   - Type is a scalar/etc.  → a single-payload variant, e.g. `numeric: uint32`
 //   - Type is a struct       → a multi-field variant (the struct holds the N args)
@@ -76,7 +76,7 @@ func (ft FieldType) String() string {
 		// so it can derive an ordinal for its byte layout. The *value* still travels
 		// as the variant name.
 		return fmt.Sprintf("%s<%s>", typekind.Enum, strings.Join(ft.Values, ","))
-	case typekind.OneOf:
+	case typekind.Sum:
 		parts := make([]string, len(ft.Variants))
 		for i, v := range ft.Variants {
 			if v.Type == nil {
@@ -85,7 +85,7 @@ func (ft FieldType) String() string {
 				parts[i] = fmt.Sprintf("%s: %s", v.Name, v.Type.String())
 			}
 		}
-		return fmt.Sprintf("%s<%s>", typekind.OneOf, strings.Join(parts, ", "))
+		return fmt.Sprintf("%s<%s>", typekind.Sum, strings.Join(parts, ", "))
 	default:
 		return ft.Base
 	}

@@ -49,10 +49,11 @@ const (
 	Array    = "array"
 	Map      = "map"
 	Enum     = "enum"
-	// OneOf is a native sum type: a tagged union oneof<name: T, name: T, …>.
+	// Sum is a native sum type (a.k.a. tagged union / coproduct): sum<name: T, …>.
 	// A value is exactly one variant (its tag + typed payload), so there are no
 	// inactive fields to default — unlike an enum tag plus separate flat fields.
-	OneOf = "oneof"
+	// "sum" is the whole type; each of its arms is a variant (see config.Variant).
+	Sum = "sum"
 )
 
 // Scalars lists every scalar kind, in declaration order.
@@ -65,11 +66,11 @@ var Scalars = []string{
 
 // AllBases lists every base kind a schema field can have (scalars + struct +
 // the composite bases).
-var AllBases = slices.Concat(Scalars, []string{Struct, Optional, List, Array, Map, Enum, OneOf})
+var AllBases = slices.Concat(Scalars, []string{Struct, Optional, List, Array, Map, Enum, Sum})
 
 // SplitTopLevel splits s on every comma that is not nested inside <> or [],
 // leaving each part untrimmed. A parameterized type's arguments may themselves
-// be parameterized — map<string, map<uint8,uint8>>, oneof<a: map<K,V>, b> — so
+// be parameterized — map<string, map<uint8,uint8>>, sum<a: map<K,V>, b> — so
 // the split has to track depth rather than scan for a plain comma.
 //
 // The runner (which parses type strings out of case files) and the worker

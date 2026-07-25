@@ -42,11 +42,11 @@ type SchemaField struct {
 	Type     string            `json:"type"`
 	Fields   []SchemaField     `json:"fields,omitempty"`   // nested schema for struct / list<struct> / optional<struct> / map<K,struct>
 	KeyType  string            `json:"key_type,omitempty"` // map key type, e.g. "string"
-	Variants []SchemaVariant   `json:"variants,omitempty"` // for oneof<...>
+	Variants []SchemaVariant   `json:"variants,omitempty"` // for sum<...>
 	Tags     map[string]string `json:"tags,omitempty"`
 }
 
-// SchemaVariant is one arm of a oneof: a tag and its payload schema (Payload is
+// SchemaVariant is one arm of a sum: a tag and its payload schema (Payload is
 // nil for a unit variant).
 type SchemaVariant struct {
 	Name    string       `json:"name"`
@@ -98,8 +98,8 @@ func decodeField(fm *FieldMap, sf SchemaField, r json.RawMessage) error {
 		}
 		fm.fields[sf.Name] = v
 		return nil
-	case strings.HasPrefix(typ, "oneof<"):
-		return decodeOneOf(fm, sf, r)
+	case strings.HasPrefix(typ, "sum<"):
+		return decodeSum(fm, sf, r)
 	default:
 		v, err := decodeScalar(typ, sf.Fields, r)
 		if err != nil {
@@ -110,20 +110,20 @@ func decodeField(fm *FieldMap, sf SchemaField, r json.RawMessage) error {
 	}
 }
 
-// decodeOneOf decodes a oneof wire value {tag: payload} (payload null for a
+// decodeSum decodes a sum wire value {tag: payload} (payload null for a
 // unit variant) into a *Variant, decoding the payload per the variant's schema.
-func decodeOneOf(fm *FieldMap, sf SchemaField, r json.RawMessage) error {
+func decodeSum(fm *FieldMap, sf SchemaField, r json.RawMessage) error {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(r, &obj); err != nil {
 		return err
 	}
 	if len(obj) != 1 {
-		return fmt.Errorf("oneof must name exactly one variant, got %d", len(obj))
+		return fmt.Errorf("sum must name exactly one variant, got %d", len(obj))
 	}
 	for tag, payload := range obj {
 		sv := findSchemaVariant(sf.Variants, tag)
 		if sv == nil {
-			return fmt.Errorf("unknown oneof variant %q", tag)
+			return fmt.Errorf("unknown variant %q", tag)
 		}
 		if sv.Payload == nil {
 			fm.fields[sf.Name] = &Variant{Tag: tag}
@@ -386,8 +386,8 @@ func encodeField(sf SchemaField, v any) (any, error) {
 			return nil, fmt.Errorf("expected a string enum variant, got %T", v)
 		}
 		return sv, nil
-	case strings.HasPrefix(typ, "oneof<"):
-		return encodeOneOf(sf, v)
+	case strings.HasPrefix(typ, "sum<"):
+		return encodeSum(sf, v)
 	case strings.HasPrefix(typ, "array<"):
 		// An array encodes exactly like the list it is.
 		return encodeList(sf, arrayElemType(typ), v)
@@ -411,15 +411,15 @@ func encodeField(sf SchemaField, v any) (any, error) {
 	}
 }
 
-// encodeOneOf is the inverse of decodeOneOf: a *Variant becomes {tag: payload}.
-func encodeOneOf(sf SchemaField, v any) (any, error) {
+// encodeSum is the inverse of decodeSum: a *Variant becomes {tag: payload}.
+func encodeSum(sf SchemaField, v any) (any, error) {
 	variant, ok := v.(*Variant)
 	if !ok {
-		return nil, fmt.Errorf("expected *Variant for oneof, got %T", v)
+		return nil, fmt.Errorf("expected *Variant for sum, got %T", v)
 	}
 	sv := findSchemaVariant(sf.Variants, variant.Tag)
 	if sv == nil {
-		return nil, fmt.Errorf("unknown oneof variant %q", variant.Tag)
+		return nil, fmt.Errorf("unknown variant %q", variant.Tag)
 	}
 	if sv.Payload == nil {
 		return map[string]any{variant.Tag: nil}, nil

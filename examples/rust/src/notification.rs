@@ -13,15 +13,15 @@
 // limitations under the License.
 
 //! `NotificationRecord` mirrors examples/cases/notification.yaml, whose
-//! `channel` field is a `oneof`.
+//! `channel` field is a `sum`.
 
 use serify::SerifyModel;
 
 use crate::common::Money;
 use crate::wire::{append_len_str, read_len_str};
 
-/// Channel is the `oneof` from the case file. Rust has a native sum type, so it
-/// maps straight onto an enum — and because a sum type is exactly what `oneof`
+/// Channel is the `sum` from the case file. Rust has a native sum type, so it
+/// maps straight onto an enum — and because a sum type is exactly what `sum`
 /// describes, the same derive handles it. Variant names become schema tags in
 /// snake_case; no converter, no marker trait, and no way to build a notification
 /// carrying two targets at once.
@@ -45,7 +45,7 @@ impl NotificationRecord {
         let mut buf = Vec::new();
         buf.extend_from_slice(&self.notification_id.to_le_bytes());
 
-        // The tag ordinal is the variant's position in the case file's oneof,
+        // The tag ordinal is the variant's position in the case file's sum,
         // which is this enum's declaration order. The schema tag *names* are the
         // derive's business, and never appear here.
         match &self.channel {

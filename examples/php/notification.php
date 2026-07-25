@@ -17,7 +17,7 @@
 
 /**
  * NotificationRecord mirrors examples/cases/notification.yaml, whose `channel`
- * field is a `oneof`.
+ * field is a `sum`.
  *
  * PHP has no enum with payloads, but a property union type is its sum type, and
  * that is all the binding needs: the union names the arms and each arm's own
@@ -69,7 +69,7 @@ class NotificationRecord
     {
         $out = pack('V', $this->notificationId);
 
-        // The tag ordinal is the variant's position in the case file's oneof,
+        // The tag ordinal is the variant's position in the case file's sum,
         // which is the declaration order of the four arms above. The schema tag
         // *names* are the binding's business, and never appear here.
         $out .= match (true) {

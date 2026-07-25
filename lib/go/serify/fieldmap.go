@@ -152,20 +152,20 @@ func (f *FieldMap) SetListBig(key string, v []*big.Int)     { f.fields[key] = v 
 func (f *FieldMap) SetListStruct(key string, v []*FieldMap) { f.fields[key] = v }
 func (f *FieldMap) SetStruct(key string, v *FieldMap)       { f.fields[key] = v }
 
-// Variant is one arm of a oneof: a tag and its decoded payload (nil for a unit
-// variant). A oneof field stores a *Variant.
+// Variant is one arm of a sum: a tag and its decoded payload (nil for a unit
+// variant). A sum field stores a *Variant.
 type Variant struct {
 	Tag   string
 	Value any
 }
 
-// SetVariant stores a oneof value: the active variant's tag and payload (pass a
+// SetVariant stores a sum value: the active variant's tag and payload (pass a
 // nil value for a unit variant).
 func (f *FieldMap) SetVariant(key, tag string, value any) {
 	f.fields[key] = &Variant{Tag: tag, Value: value}
 }
 
-// GetVariant returns the oneof value stored at key.
+// GetVariant returns the sum value stored at key.
 func (f *FieldMap) GetVariant(key string) (*Variant, error) {
 	v, ok := f.fields[key]
 	if !ok {
@@ -173,7 +173,7 @@ func (f *FieldMap) GetVariant(key string) (*Variant, error) {
 	}
 	vr, ok := v.(*Variant)
 	if !ok {
-		return nil, fmt.Errorf("field %q is not a oneof variant (got %T)", key, v)
+		return nil, fmt.Errorf("field %q is not a variant (got %T)", key, v)
 	}
 	return vr, nil
 }

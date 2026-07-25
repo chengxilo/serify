@@ -109,7 +109,7 @@ func cloneValue(v any) any {
 		}
 		return out
 	case *Variant:
-		// A oneof payload is aliasing-capable (bytes, string, nested struct), so
+		// A sum payload is aliasing-capable (bytes, string, nested struct), so
 		// the snapshot needs its own copy or a mutation would show up in both.
 		if x == nil {
 			return nil

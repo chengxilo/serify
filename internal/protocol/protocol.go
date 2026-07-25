@@ -59,7 +59,7 @@ const (
 // worker library ship from this repository together, so a mismatch always means
 // one side was built from different sources — there is no version range to
 // negotiate. Bump this on any breaking change to the messages below.
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 
 // PingRequest is the startup health check. It names no type and carries no
 // schema: it only asks whether the worker is up and which protocol it speaks.
@@ -85,11 +85,11 @@ type SchemaField struct {
 	Type     string            `json:"type"`
 	Fields   []SchemaField     `json:"fields,omitempty"`   // nested schema for struct / map<K,struct>
 	KeyType  string            `json:"key_type,omitempty"` // map key type, e.g. "string"
-	Variants []SchemaVariant   `json:"variants,omitempty"` // for oneof<...>
+	Variants []SchemaVariant   `json:"variants,omitempty"` // for sum<...>
 	Tags     map[string]string `json:"tags,omitempty"`     // metadata forwarded from cases.yaml
 }
 
-// SchemaVariant is one arm of a oneof on the wire: a tag and its payload schema
+// SchemaVariant is one arm of a sum on the wire: a tag and its payload schema
 // (Payload is nil for a unit variant).
 type SchemaVariant struct {
 	Name    string       `json:"name"`
@@ -186,7 +186,7 @@ func (r *Reader) Read() (*Response, error) {
 	return &resp, nil
 }
 
-func findOneOfVariant(vs []config.Variant, tag string) *config.Variant {
+func findVariant(vs []config.Variant, tag string) *config.Variant {
 	for i := range vs {
 		if vs[i].Name == tag {
 			return &vs[i]
@@ -317,28 +317,28 @@ func encodeValue(v any, ft config.FieldType) (any, error) {
 		}
 		return s, nil
 
-	case typekind.OneOf:
+	case typekind.Sum:
 		// A variant travels as a single-key map {tag: encoded_payload}; the
 		// payload is encoded per that variant's type (nil for a unit variant).
 		obj, ok := toStringMap(v)
 		if !ok || len(obj) != 1 {
-			return nil, fmt.Errorf("expected a single-variant object for oneof, got %T", v)
+			return nil, fmt.Errorf("expected a single-key object for a sum, got %T", v)
 		}
 		for tag, payload := range obj {
-			variant := findOneOfVariant(ft.Variants, tag)
+			variant := findVariant(ft.Variants, tag)
 			if variant == nil {
-				return nil, fmt.Errorf("unknown oneof variant %q", tag)
+				return nil, fmt.Errorf("unknown variant %q", tag)
 			}
 			if variant.Type == nil {
 				return map[string]any{tag: nil}, nil
 			}
 			enc, err := encodeValue(payload, *variant.Type)
 			if err != nil {
-				return nil, fmt.Errorf("oneof %q: %w", tag, err)
+				return nil, fmt.Errorf("variant %q: %w", tag, err)
 			}
 			return map[string]any{tag: enc}, nil
 		}
-		return nil, fmt.Errorf("empty oneof value")
+		return nil, fmt.Errorf("empty sum value")
 
 	default:
 		// u8, u16, u32, i8..i32, bool, string, bytes - pass through
@@ -414,7 +414,7 @@ func toStringMap(v any) (map[string]any, bool) {
 }
 
 // SchemaFields converts a config.Field slice to wire SchemaFields, recursing
-// into struct/oneof types.
+// into struct/sum types.
 func SchemaFields(fields []config.Field) []SchemaField {
 	out := make([]SchemaField, len(fields))
 	for i, f := range fields {
@@ -426,7 +426,7 @@ func SchemaFields(fields []config.Field) []SchemaField {
 }
 
 // schemaFieldOfType builds a SchemaField for a named field of the given type,
-// carrying the structured shape (nested struct fields, map key, oneof variants).
+// carrying the structured shape (nested struct fields, map key, variants).
 func schemaFieldOfType(name string, ft config.FieldType) SchemaField {
 	sf := SchemaField{Name: name, Type: ft.String()}
 	switch ft.Base {
@@ -441,7 +441,7 @@ func schemaFieldOfType(name string, ft config.FieldType) SchemaField {
 		if ft.Elem != nil && ft.Elem.Base == typekind.Struct {
 			sf.Fields = SchemaFields(ft.Elem.Fields)
 		}
-	case typekind.OneOf:
+	case typekind.Sum:
 		sf.Variants = make([]SchemaVariant, len(ft.Variants))
 		for j, v := range ft.Variants {
 			sv := SchemaVariant{Name: v.Name}

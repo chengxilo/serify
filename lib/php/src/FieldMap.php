@@ -304,26 +304,26 @@ class FieldMap
         $this->fields[$k] = $v;
     }
 
-    /** Store a oneof value: the active variant's tag and payload (null for a unit variant). */
+    /** Store a sum value: the active variant's tag and payload (null for a unit variant). */
     public function setVariant(string $k, string $tag, $v = null): void
     {
         $this->fields[$k] = new Variant($tag, $v);
     }
 
-    /** Return the oneof value stored at $k. */
+    /** Return the sum value stored at $k. */
     public function getVariant(string $k): Variant
     {
         $v = $this->fields[$k] ?? null;
         if (!$v instanceof Variant) {
-            throw new \RuntimeException("field \"$k\" is not a oneof variant");
+            throw new \RuntimeException("field \"$k\" is not a variant");
         }
         return $v;
     }
 }
 
 /**
- * One arm of a oneof: a tag and its decoded payload (null for a unit variant).
- * A oneof field stores a Variant.
+ * One arm of a sum: a tag and its decoded payload (null for a unit variant).
+ * A sum field stores a Variant.
  */
 final class Variant
 {

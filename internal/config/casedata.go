@@ -175,7 +175,7 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 		}
 		return decodeCaseData(ft.Fields, m)
 
-	case typekind.OneOf:
+	case typekind.Sum:
 		// A variant is either a bare tag (unit variant) or a single-key map
 		// {tag: payload}. Canonical in-memory form is always {tag: payload}
 		// (payload nil for unit), so it travels uniformly.
@@ -186,10 +186,10 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 			}
 			v := findVariant(ft.Variants, tag)
 			if v == nil {
-				return nil, fmt.Errorf("unknown oneof variant %q", tag)
+				return nil, fmt.Errorf("unknown variant %q", tag)
 			}
 			if v.Type != nil {
-				return nil, fmt.Errorf("oneof variant %q needs a payload {%s: ...}", tag, tag)
+				return nil, fmt.Errorf("variant %q needs a payload {%s: ...}", tag, tag)
 			}
 			return map[string]any{tag: nil}, nil
 		}
@@ -198,12 +198,12 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 			return nil, err
 		}
 		if len(m) != 1 {
-			return nil, fmt.Errorf("oneof value must name exactly one variant, got %d keys", len(m))
+			return nil, fmt.Errorf("sum value must name exactly one variant, got %d keys", len(m))
 		}
 		for tag := range m {
 			v := findVariant(ft.Variants, tag)
 			if v == nil {
-				return nil, fmt.Errorf("unknown oneof variant %q", tag)
+				return nil, fmt.Errorf("unknown variant %q", tag)
 			}
 			if v.Type == nil {
 				return map[string]any{tag: nil}, nil // unit written as {tag: null}
@@ -211,7 +211,7 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 			node := m[tag]
 			payload, err := decodeDataValue(*v.Type, &node)
 			if err != nil {
-				return nil, fmt.Errorf("oneof variant %q: %w", tag, err)
+				return nil, fmt.Errorf("variant %q: %w", tag, err)
 			}
 			return map[string]any{tag: payload}, nil
 		}
@@ -226,7 +226,7 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 	return v, nil
 }
 
-// findVariant returns the oneof variant with the given tag, or nil.
+// findVariant returns the variant with the given tag, or nil.
 func findVariant(vs []Variant, tag string) *Variant {
 	for i := range vs {
 		if vs[i].Name == tag {

@@ -32,7 +32,7 @@ while read line; do
   op=$(echo "$line" | sed 's/.*"op":"\([^"]*\)".*/\1/')
   id=$(echo "$line" | sed 's/.*"id":"\([^"]*\)".*/\1/')
   case "$op" in
-    ping) echo '{"op":"ping","protocol_version":1,"status":"OK"}' ;;
+    ping) echo '{"op":"ping","protocol_version":2,"status":"OK"}' ;;
     bind) echo '{"op":"bind","status":"OK"}' ;;
     serialize) echo "{\"id\":\"$id\",\"op\":\"serialize\",\"status\":\"OK\",\"hex\":\"deadbeef\"}" ;;
     deserialize) echo "{\"id\":\"$id\",\"op\":\"deserialize\",\"status\":\"OK\",\"data\":{\"x\":1}}" ;;
@@ -46,7 +46,7 @@ const hangingWorkerScript = `#!/bin/sh
 while read line; do
   op=$(echo "$line" | sed 's/.*"op":"\([^"]*\)".*/\1/')
   case "$op" in
-    ping) echo '{"op":"ping","protocol_version":1,"status":"OK"}' ;;
+    ping) echo '{"op":"ping","protocol_version":2,"status":"OK"}' ;;
     bind) echo '{"op":"bind","status":"OK"}' ;;
     exit) exit 0 ;;
     *) sleep 60 ;;
@@ -60,7 +60,7 @@ const skippingWorkerScript = `#!/bin/sh
 while read line; do
   op=$(echo "$line" | sed 's/.*"op":"\([^"]*\)".*/\1/')
   case "$op" in
-    ping) echo '{"op":"ping","protocol_version":1,"status":"OK"}' ;;
+    ping) echo '{"op":"ping","protocol_version":2,"status":"OK"}' ;;
     bind) echo '{"op":"bind","status":"SKIPPED","reason":"type not registered"}' ;;
     exit) exit 0 ;;
   esac
@@ -73,7 +73,7 @@ const dyingWorkerScript = `#!/bin/sh
 while read line; do
   op=$(echo "$line" | sed 's/.*"op":"\([^"]*\)".*/\1/')
   case "$op" in
-    ping) echo '{"op":"ping","protocol_version":1,"status":"OK"}' ;;
+    ping) echo '{"op":"ping","protocol_version":2,"status":"OK"}' ;;
     bind) exit 1 ;;
     exit) exit 0 ;;
   esac
