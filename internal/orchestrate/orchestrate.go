@@ -447,7 +447,7 @@ func runMatrix(
 			g.Go(func() error {
 				resp, err := w.Send(gctx, protocol.DeserializeRequest{
 					ID:  fmt.Sprintf("%s/matrix-%s→%s", tc.Name, srcLang, dstLang),
-					Op:  "deserialize",
+					Op:  report.OpDeserialize,
 					Hex: srcHex,
 				}, opts.TimeoutSec)
 				status, detail := resolveResult(dstLang, tc.Name, resp, err, opts.KnownFails)
