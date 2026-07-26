@@ -25,4 +25,3 @@ type resultGrid = testutil.ResultGrid
 var readResultGrid = testutil.ReadResultGrid
 
 func ptr[T any](v T) *T { return &v }
-

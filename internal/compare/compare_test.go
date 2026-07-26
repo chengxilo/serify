@@ -75,7 +75,7 @@ func TestHexDiff_ContextWindow(t *testing.T) {
 
 	// Should include bytes around offset 64 (context window of 16).
 	// Byte 64-16 = 48 should be visible, byte 64+16 = 80 should be too.
-	assert.Contains(t, diff, "00000030", "context window should include bytes near divergence:\n%s", diff) // offset 48
+	assert.Contains(t, diff, "00000030", "context window should include bytes near divergence:\n%s", diff)  // offset 48
 	assert.Contains(t, diff, "00000050", "context window should include bytes after divergence:\n%s", diff) // offset 80
 }
 

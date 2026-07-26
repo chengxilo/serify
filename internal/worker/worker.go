@@ -45,7 +45,7 @@ var (
 	errOpMismatch = errors.New("response op mismatch")
 )
 
-// ErrTypeNotSupported means the worker answered bind with SKIPPED: it is 
+// ErrTypeNotSupported means the worker answered bind with SKIPPED: it is
 // running fine but does not implement that (type, format). Only bind operation
 // can produce it.
 var ErrTypeNotSupported = errors.New("worker does not support this type/format")
