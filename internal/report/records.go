@@ -38,7 +38,7 @@ type Record struct {
 	Case      string `json:"case"`
 	Language  string `json:"language"`
 	Operation string `json:"operation"`
-	Status    string `json:"status"`
+	Status    Status `json:"status"`
 	Detail    string `json:"detail"`
 }
 
@@ -158,7 +158,7 @@ func (r *Report) Records() ([]Record, error) {
 					Case:      caseName,
 					Language:  lang,
 					Operation: op,
-					Status:    string(res.Status),
+					Status:    res.Status,
 					Detail:    res.Detail,
 				})
 			}
@@ -177,7 +177,7 @@ func WriteCSV(w io.Writer, recs []Record) error {
 	for _, rec := range recs {
 		if err := cw.Write([]string{
 			rec.TestID, rec.Type, rec.Format, rec.Case,
-			rec.Language, rec.Operation, rec.Status, rec.Detail,
+			rec.Language, rec.Operation, string(rec.Status), rec.Detail,
 		}); err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ func ReadCSV(r io.Reader) ([]Record, error) {
 	for _, row := range rows[1:] {
 		recs = append(recs, Record{
 			TestID: row[0], Type: row[1], Format: row[2], Case: row[3],
-			Language: row[4], Operation: row[5], Status: row[6], Detail: row[7],
+			Language: row[4], Operation: row[5], Status: Status(row[6]), Detail: row[7],
 		})
 	}
 	return recs, nil
@@ -227,7 +227,7 @@ func RenderTable(w io.Writer, recs []Record) error {
 	seenLang := map[string]bool{}
 	var order []gkey
 	seenGroup := map[gkey]bool{}
-	data := map[gkey]map[string]map[string]string{} // group → op → lang → status
+	data := map[gkey]map[string]map[string]Status{} // group → op → lang → status
 
 	for _, rec := range recs {
 		if rec.Operation != OpSerialize && rec.Operation != OpDeserialize {
@@ -245,10 +245,10 @@ func RenderTable(w io.Writer, recs []Record) error {
 		if !seenGroup[k] {
 			seenGroup[k] = true
 			order = append(order, k)
-			data[k] = map[string]map[string]string{}
+			data[k] = map[string]map[string]Status{}
 		}
 		if data[k][rec.Operation] == nil {
-			data[k][rec.Operation] = map[string]string{}
+			data[k][rec.Operation] = map[string]Status{}
 		}
 		data[k][rec.Operation][rec.Language] = rec.Status
 	}
@@ -275,7 +275,7 @@ func RenderTable(w io.Writer, recs []Record) error {
 			row = append(row, op)
 			for _, lang := range langs {
 				if st, ok := data[k][op][lang]; ok {
-					row = append(row, statusColored(Status(st)))
+					row = append(row, statusColored(st))
 				} else {
 					row = append(row, "-")
 				}

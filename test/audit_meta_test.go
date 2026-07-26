@@ -71,51 +71,54 @@ func TestAuditWarningsAreReported(t *testing.T) {
 	assertNoAuditRow(t, grid, cleanID, language.Go)
 
 	// Mutating format: mutation WARN on serialize.
-	assertAuditCell(t, grid, mutID, language.Go, report.OpAuditMutation, "mutated fields: value")
+	testutil.AssertCell(t, grid, mutID, language.Go, report.OpAuditMutation, report.StatusWarn, ptr("mutated fields: value"))
 
 	// Value-mutating: mutation WARN (payload[0] was flipped) + stability WARN
 	// (shared backing corruption affects the second serialize call).
-	assertAuditCell(t, grid, valMutID, language.Go, report.OpAuditMutation, "mutated fields: payload")
-	assertAuditCell(
+	testutil.AssertCell(t, grid, valMutID, language.Go, report.OpAuditMutation, report.StatusWarn, ptr("mutated fields: payload"))
+	testutil.AssertCell(
 		t,
 		grid,
 		valMutID,
 		language.Go,
 		report.OpAuditStability,
-		"serializer produced different output on repeat call",
+		report.StatusWarn,
+		ptr("serializer produced different output on repeat call"),
 	)
 
 	// Zero-copy format: zero-copy WARN on deserialize.
-	assertAuditCell(t, grid, zcID, language.Go, report.OpAuditZeroCopy, "zero-copy fields: payload")
+	testutil.AssertCell(t, grid, zcID, language.Go, report.OpAuditZeroCopy, report.StatusWarn, ptr("zero-copy fields: payload"))
 
 	// List-zero-copy: zero-copy WARN for tags field.
-	assertAuditCell(t, grid, listZcID, language.Go, report.OpAuditZeroCopy, "zero-copy fields: tags")
+	testutil.AssertCell(t, grid, listZcID, language.Go, report.OpAuditZeroCopy, report.StatusWarn, ptr("zero-copy fields: tags"))
 
 	// Unstable format: stability WARN on serialize.
-	assertAuditCell(
+	testutil.AssertCell(
 		t,
 		grid,
 		unsID,
 		language.Go,
 		report.OpAuditStability,
-		"serializer produced different output on repeat call",
+		report.StatusWarn,
+		ptr("serializer produced different output on repeat call"),
 	)
 
 	// Deser-unstable: deser-stability WARN on deserialize.
-	assertAuditCell(
+	testutil.AssertCell(
 		t,
 		grid,
 		deserUnsID,
 		language.Go,
 		report.OpAuditDeserStability,
-		"deserializer produced different result on repeat call",
+		report.StatusWarn,
+		ptr("deserializer produced different result on repeat call"),
 	)
 
 	// Input-mutating: input-mutation WARN on deserialize.
-	assertAuditCell(t, grid, inputMutID, language.Go, report.OpAuditInputMut, "deserializer modified input buffer")
+	testutil.AssertCell(t, grid, inputMutID, language.Go, report.OpAuditInputMut, report.StatusWarn, ptr("deserializer modified input buffer"))
 
 	// Output-zero-copy: output-ZC WARN on serialize.
-	assertAuditCell(t, grid, outZcID, language.Go, report.OpAuditOutputZeroCopy, "output aliases model fields: payload")
+	testutil.AssertCell(t, grid, outZcID, language.Go, report.OpAuditOutputZeroCopy, report.StatusWarn, ptr("output aliases model fields: payload"))
 
 	// --- Rust worker -----------------------------------------------------
 
@@ -123,59 +126,63 @@ func TestAuditWarningsAreReported(t *testing.T) {
 	assertNoAuditRow(t, grid, cleanID, language.Rust)
 
 	// Mutating format: mutation WARN + stability WARN.
-	assertAuditCell(t, grid, mutID, language.Rust, report.OpAuditMutation, "mutated fields: value")
-	assertAuditCell(
+	testutil.AssertCell(t, grid, mutID, language.Rust, report.OpAuditMutation, report.StatusWarn, ptr("mutated fields: value"))
+	testutil.AssertCell(
 		t,
 		grid,
 		mutID,
 		language.Rust,
 		report.OpAuditStability,
-		"serializer produced different output on repeat call",
+		report.StatusWarn,
+		ptr("serializer produced different output on repeat call"),
 	)
 
 	// Value-mutating: Rust worker does NOT register this format → SKIP rows.
-	assertAuditCell(t, grid, valMutID, language.Rust, report.OpSerialize, "SKIP")
-	assertAuditCell(t, grid, valMutID, language.Rust, report.OpDeserialize, "SKIP")
+	testutil.AssertCell(t, grid, valMutID, language.Rust, report.OpSerialize, report.StatusSkip, nil)
+	testutil.AssertCell(t, grid, valMutID, language.Rust, report.OpDeserialize, report.StatusSkip, nil)
 	// No audit rows for SKIP format.
 	assertNoAuditRow(t, grid, valMutID, language.Rust)
 
 	// Zero-copy format: zero-copy WARN on deserialize.
-	assertAuditCell(t, grid, zcID, language.Rust, report.OpAuditZeroCopy, "zero-copy fields: payload")
+	testutil.AssertCell(t, grid, zcID, language.Rust, report.OpAuditZeroCopy, report.StatusWarn, ptr("zero-copy fields: payload"))
 
 	// List-zero-copy: zero-copy WARN for tags field.
-	assertAuditCell(t, grid, listZcID, language.Rust, report.OpAuditZeroCopy, "zero-copy fields: tags")
+	testutil.AssertCell(t, grid, listZcID, language.Rust, report.OpAuditZeroCopy, report.StatusWarn, ptr("zero-copy fields: tags"))
 
 	// Unstable format: stability WARN on serialize.
-	assertAuditCell(
+	testutil.AssertCell(
 		t,
 		grid,
 		unsID,
 		language.Rust,
 		report.OpAuditStability,
-		"serializer produced different output on repeat call",
+		report.StatusWarn,
+		ptr("serializer produced different output on repeat call"),
 	)
 
 	// Deser-unstable: deser-stability WARN on deserialize.
-	assertAuditCell(
+	testutil.AssertCell(
 		t,
 		grid,
 		deserUnsID,
 		language.Rust,
 		report.OpAuditDeserStability,
-		"deserializer produced different result on repeat call",
+		report.StatusWarn,
+		ptr("deserializer produced different result on repeat call"),
 	)
 
 	// Input-mutating: input-mutation WARN on deserialize.
-	assertAuditCell(t, grid, inputMutID, language.Rust, report.OpAuditInputMut, "deserializer modified input buffer")
+	testutil.AssertCell(t, grid, inputMutID, language.Rust, report.OpAuditInputMut, report.StatusWarn, ptr("deserializer modified input buffer"))
 
 	// Output-zero-copy: output-ZC WARN on serialize.
-	assertAuditCell(
+	testutil.AssertCell(
 		t,
 		grid,
 		outZcID,
 		language.Rust,
 		report.OpAuditOutputZeroCopy,
-		"output aliases model fields: payload",
+		report.StatusWarn,
+		ptr("output aliases model fields: payload"),
 	)
 }
 
@@ -197,19 +204,3 @@ func assertNoAuditRow(t *testing.T, grid resultGrid, id, lang string) {
 	}
 }
 
-func assertAuditCell(t *testing.T, grid resultGrid, id, lang, op, wantDetail string) {
-	t.Helper()
-	rec, ok := grid[id][lang][op]
-	if !assert.True(t, ok, "[%s / %s / %s] expected audit row, not found", id, lang, op) {
-		return
-	}
-	if wantDetail == "SKIP" {
-		assert.Equal(t, string(report.StatusSkip), rec.Status,
-			"[%s / %s / %s] status = %s, want SKIP (detail: %s)", id, lang, op, rec.Status, rec.Detail)
-		return
-	}
-	assert.Equal(t, string(report.StatusWarn), rec.Status,
-		"[%s / %s / %s] status = %s, want %s (detail: %s)", id, lang, op, rec.Status, report.StatusWarn, rec.Detail)
-	assert.Equal(t, wantDetail, rec.Detail,
-		"[%s / %s / %s] detail = %q, want %q", id, lang, op, rec.Detail, wantDetail)
-}

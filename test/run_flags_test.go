@@ -49,13 +49,13 @@ func TestCLI_Run_FullMatrix(t *testing.T) {
 			if !assert.True(t, ok, "[%s / %s→%s / %s] no row in CSV", id, src, dst, op) {
 				continue
 			}
-			assert.Equal(t, string(report.StatusPass), rec.Status, "[%s / %s→%s] status = %s, want PASS", id, src, dst, rec.Status)
+			assert.Equal(t, report.StatusPass, rec.Status, "[%s / %s→%s] status = %s, want PASS", id, src, dst, rec.Status)
 		}
 	}
 
 	// Serialize + deserialize rows still PASS.
-	assertCell(t, grid, id, "go", report.OpSerialize, report.StatusPass)
-	assertCell(t, grid, id, "rust", report.OpSerialize, report.StatusPass)
+	testutil.AssertCell(t, grid, id, "go", report.OpSerialize, report.StatusPass, nil)
+	testutil.AssertCell(t, grid, id, "rust", report.OpSerialize, report.StatusPass, nil)
 }
 
 // TestCLI_Run_JSONOutput verifies --output json produces parseable JSON records.
@@ -77,7 +77,7 @@ func TestCLI_Run_JSONOutput(t *testing.T) {
 	found := false
 	for _, r := range records {
 		if r.TestID == "all_types/json/basic" && r.Language == "go" && r.Operation == "serialize" &&
-			r.Status == "PASS" {
+			r.Status == report.StatusPass {
 			found = true
 			break
 		}

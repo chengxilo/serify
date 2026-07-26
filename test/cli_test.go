@@ -76,8 +76,8 @@ func TestCLI_Run_AllLanguages(t *testing.T) {
 		for _, format := range []string{"binary", "json"} {
 			for _, name := range cases {
 				id := "all_types/" + format + "/" + name
-				assertCell(t, grid, id, lang, report.OpSerialize, report.StatusPass)
-				assertCell(t, grid, id, lang, report.OpDeserialize, report.StatusPass)
+				testutil.AssertCell(t, grid, id, lang, report.OpSerialize, report.StatusPass, nil)
+				testutil.AssertCell(t, grid, id, lang, report.OpDeserialize, report.StatusPass, nil)
 			}
 		}
 	}
@@ -95,8 +95,8 @@ func TestCLI_RunCSVAndTable(t *testing.T) {
 
 	// Verify CSV via the grid helpers (structured, not raw substring checks).
 	grid := readResultGrid(t, csv)
-	assertCell(t, grid, "all_types/json/basic", "go", "serialize", "PASS")
-	assertCell(t, grid, "all_types/json/basic", "rust", "serialize", "PASS")
+	testutil.AssertCell(t, grid, "all_types/json/basic", "go", "serialize", report.StatusPass, nil)
+	testutil.AssertCell(t, grid, "all_types/json/basic", "rust", "serialize", report.StatusPass, nil)
 
 	tableOut, code := testutil.RunSerify(t, "table", csv)
 	require.Equal(t, 0, code, "serify table exit = %d, want 0\n%s", code, tableOut)

@@ -56,20 +56,20 @@ func TestCLI_KnownFailures(t *testing.T) {
 	grid1 := readResultGrid(t, csv1)
 
 	// err_ser/boom: serialize FAIL both langs, deserialize SKIP.
-	assertCell(t, grid1, "wrong/err_ser/boom", language.Go, report.OpSerialize, report.StatusFail)
-	assertCell(t, grid1, "wrong/err_ser/boom", language.Rust, report.OpSerialize, report.StatusFail)
-	assertCell(t, grid1, "wrong/err_ser/boom", language.Go, report.OpDeserialize, report.StatusSkip)
-	assertCell(t, grid1, "wrong/err_ser/boom", language.Rust, report.OpDeserialize, report.StatusSkip)
+	testutil.AssertCell(t, grid1, "wrong/err_ser/boom", language.Go, report.OpSerialize, report.StatusFail, nil)
+	testutil.AssertCell(t, grid1, "wrong/err_ser/boom", language.Rust, report.OpSerialize, report.StatusFail, nil)
+	testutil.AssertCell(t, grid1, "wrong/err_ser/boom", language.Go, report.OpDeserialize, report.StatusSkip, nil)
+	testutil.AssertCell(t, grid1, "wrong/err_ser/boom", language.Rust, report.OpDeserialize, report.StatusSkip, nil)
 	// Verify detail contains the injected error.
 	rec := grid1["wrong/err_ser/boom"][language.Go][report.OpSerialize]
 	assert.Contains(t, rec.Detail, "injected serialize error",
 		"err_ser detail = %q, want injected serialize error", rec.Detail)
 
 	// err_deser/boom: serialize PASS, deserialize FAIL.
-	assertCell(t, grid1, "wrong/err_deser/boom", language.Go, report.OpSerialize, report.StatusPass)
-	assertCell(t, grid1, "wrong/err_deser/boom", language.Rust, report.OpSerialize, report.StatusPass)
-	assertCell(t, grid1, "wrong/err_deser/boom", language.Go, report.OpDeserialize, report.StatusFail)
-	assertCell(t, grid1, "wrong/err_deser/boom", language.Rust, report.OpDeserialize, report.StatusFail)
+	testutil.AssertCell(t, grid1, "wrong/err_deser/boom", language.Go, report.OpSerialize, report.StatusPass, nil)
+	testutil.AssertCell(t, grid1, "wrong/err_deser/boom", language.Rust, report.OpSerialize, report.StatusPass, nil)
+	testutil.AssertCell(t, grid1, "wrong/err_deser/boom", language.Go, report.OpDeserialize, report.StatusFail, nil)
+	testutil.AssertCell(t, grid1, "wrong/err_deser/boom", language.Rust, report.OpDeserialize, report.StatusFail, nil)
 
 	// Run 2: with --known-failures — must exit 0 with XFAILs.
 	kfDir := wrong.CasePathNamed("known_failures")
@@ -80,23 +80,23 @@ func TestCLI_KnownFailures(t *testing.T) {
 	assert.Contains(t, out2, "XFAIL:", "known-failures summary missing XFAIL:\n%s", out2)
 
 	grid2 := readResultGrid(t, csv2)
-	assertCell(t, grid2, "wrong/err_ser/boom", language.Go, report.OpSerialize, report.StatusXFail)
-	assertCell(t, grid2, "wrong/err_ser/boom", language.Rust, report.OpSerialize, report.StatusXFail)
-	assertCell(t, grid2, "wrong/err_deser/boom", language.Go, report.OpDeserialize, report.StatusXFail)
-	assertCell(t, grid2, "wrong/err_deser/boom", language.Rust, report.OpDeserialize, report.StatusXFail)
+	testutil.AssertCell(t, grid2, "wrong/err_ser/boom", language.Go, report.OpSerialize, report.StatusXFail, nil)
+	testutil.AssertCell(t, grid2, "wrong/err_ser/boom", language.Rust, report.OpSerialize, report.StatusXFail, nil)
+	testutil.AssertCell(t, grid2, "wrong/err_deser/boom", language.Go, report.OpDeserialize, report.StatusXFail, nil)
+	testutil.AssertCell(t, grid2, "wrong/err_deser/boom", language.Rust, report.OpDeserialize, report.StatusXFail, nil)
 
 	// err_deser's serialize op succeeds despite its known-failures entry: that
 	// must surface as XPASS (a warning), not blend into PASS.
-	assertCell(t, grid2, "wrong/err_deser/boom", language.Go, report.OpSerialize, report.StatusXPass)
-	assertCell(t, grid2, "wrong/err_deser/boom", language.Rust, report.OpSerialize, report.StatusXPass)
+	testutil.AssertCell(t, grid2, "wrong/err_deser/boom", language.Go, report.OpSerialize, report.StatusXPass, nil)
+	testutil.AssertCell(t, grid2, "wrong/err_deser/boom", language.Rust, report.OpSerialize, report.StatusXPass, nil)
 	rec2 := grid2["wrong/err_deser/boom"][language.Go][report.OpSerialize]
 	assert.Contains(t, rec2.Detail, "expected to fail",
 		"XPASS detail = %q, want mention of expected-to-fail reason", rec2.Detail)
 
 	// err_ser's deserialize op is skipped (nothing was serialized); a
 	// known-failures entry must not convert SKIP into anything else.
-	assertCell(t, grid2, "wrong/err_ser/boom", language.Go, report.OpDeserialize, report.StatusSkip)
-	assertCell(t, grid2, "wrong/err_ser/boom", language.Rust, report.OpDeserialize, report.StatusSkip)
+	testutil.AssertCell(t, grid2, "wrong/err_ser/boom", language.Go, report.OpDeserialize, report.StatusSkip, nil)
+	testutil.AssertCell(t, grid2, "wrong/err_ser/boom", language.Rust, report.OpDeserialize, report.StatusSkip, nil)
 }
 
 // TestCLI_Run_TimeoutOnHungWorker verifies that --timeout kills a hung worker.
@@ -113,13 +113,13 @@ func TestCLI_Run_TimeoutOnHungWorker(t *testing.T) {
 	grid := readResultGrid(t, csv)
 
 	// Both languages ERROR on serialize; deserialize SKIP (reference serialize failed).
-	assertCell(t, grid, "wrong/hang/sleeper", language.Go, report.OpSerialize, report.StatusError)
-	assertCell(t, grid, "wrong/hang/sleeper", language.Rust, report.OpSerialize, report.StatusError)
+	testutil.AssertCell(t, grid, "wrong/hang/sleeper", language.Go, report.OpSerialize, report.StatusError, nil)
+	testutil.AssertCell(t, grid, "wrong/hang/sleeper", language.Rust, report.OpSerialize, report.StatusError, nil)
 	rec := grid["wrong/hang/sleeper"][language.Go][report.OpSerialize]
 	assert.Contains(t, rec.Detail, "timeout after 1s",
 		"hang detail = %q, want timeout after 1s", rec.Detail)
-	assertCell(t, grid, "wrong/hang/sleeper", language.Go, report.OpDeserialize, report.StatusSkip)
-	assertCell(t, grid, "wrong/hang/sleeper", language.Rust, report.OpDeserialize, report.StatusSkip)
+	testutil.AssertCell(t, grid, "wrong/hang/sleeper", language.Go, report.OpDeserialize, report.StatusSkip, nil)
+	testutil.AssertCell(t, grid, "wrong/hang/sleeper", language.Rust, report.OpDeserialize, report.StatusSkip, nil)
 }
 
 // TestCLI_Run_WorkerCrash verifies that a crashing worker produces ERROR results.
@@ -134,11 +134,11 @@ func TestCLI_Run_WorkerCrash(t *testing.T) {
 	grid := readResultGrid(t, csv)
 
 	// Both languages ERROR on serialize with non-empty detail; deserialize SKIP.
-	assertCell(t, grid, "wrong/crash/abort", language.Go, report.OpSerialize, report.StatusError)
-	assertCell(t, grid, "wrong/crash/abort", language.Rust, report.OpSerialize, report.StatusError)
+	testutil.AssertCell(t, grid, "wrong/crash/abort", language.Go, report.OpSerialize, report.StatusError, nil)
+	testutil.AssertCell(t, grid, "wrong/crash/abort", language.Rust, report.OpSerialize, report.StatusError, nil)
 	// Detail is platform-dependent (EOF/pipe/exit), just check non-empty.
 	rec := grid["wrong/crash/abort"][language.Go][report.OpSerialize]
 	assert.NotEmpty(t, rec.Detail, "crash detail is empty, want non-empty transport error")
-	assertCell(t, grid, "wrong/crash/abort", language.Go, report.OpDeserialize, report.StatusSkip)
-	assertCell(t, grid, "wrong/crash/abort", language.Rust, report.OpDeserialize, report.StatusSkip)
+	testutil.AssertCell(t, grid, "wrong/crash/abort", language.Go, report.OpDeserialize, report.StatusSkip, nil)
+	testutil.AssertCell(t, grid, "wrong/crash/abort", language.Rust, report.OpDeserialize, report.StatusSkip, nil)
 }

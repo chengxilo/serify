@@ -34,13 +34,14 @@ import (
 type Status string
 
 const (
-	StatusPass  Status = "PASS"
-	StatusFail  Status = "FAIL"
-	StatusXFail Status = "XFAIL"
-	StatusXPass Status = "XPASS"
-	StatusSkip  Status = "SKIP"
-	StatusError Status = "ERROR"
-	StatusWarn  Status = "WARN"
+	StatusPass    Status = "PASS"
+	StatusFail    Status = "FAIL"
+	StatusXFail   Status = "XFAIL"
+	StatusXPass   Status = "XPASS"
+	StatusSkip    Status = "SKIP"
+	StatusError   Status = "ERROR"
+	StatusWarn    Status = "WARN"
+	StatusUnknown Status = "UNKNOWN"
 )
 
 // sectionRuleWidth is the width of the "-----" rule under the FAILURES and
@@ -139,21 +140,21 @@ var (
 func statusColored(s Status) string {
 	switch s {
 	case StatusPass:
-		return passColor.Sprint("PASS")
+		return passColor.Sprint(StatusPass)
 	case StatusFail:
-		return failColor.Sprint("FAIL")
+		return failColor.Sprint(StatusFail)
 	case StatusXFail:
-		return xfailColor.Sprint("XFAIL")
+		return xfailColor.Sprint(StatusXFail)
 	case StatusXPass:
-		return xpassColor.Sprint("XPASS")
+		return xpassColor.Sprint(StatusXPass)
 	case StatusSkip:
-		return skipColor.Sprint("SKIP")
+		return skipColor.Sprint(StatusSkip)
 	case StatusWarn:
-		return warnColor.Sprint("WARN")
+		return warnColor.Sprint(StatusWarn)
 	case StatusError:
-		return errColor.Sprint("ERROR")
+		return errColor.Sprint(StatusError)
 	}
-	return errColor.Sprint("UNKNOWN")
+	return errColor.Sprint(StatusUnknown)
 }
 
 //nolint:gocognit // prints the failure and warning sections, then tallies every status

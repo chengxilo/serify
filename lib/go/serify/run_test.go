@@ -303,7 +303,7 @@ func TestRun_UnknownOp(t *testing.T) {
 		`{"op":"bogus","id":"x"}`,
 	)
 	require.Len(t, resps, 2, "expected 2 responses (bind + unknown-op error), got %d: %v", len(resps), resps)
-	assert.Equal(t, "ERROR", resps[1]["status"], "status: %v, want ERROR", resps[1]["status"])
+	assert.Equal(t, string(protocol.StatusError), resps[1]["status"], "status: %v, want ERROR", resps[1]["status"])
 	assert.Equal(t, "x", resps[1]["id"], "id: %v, want x", resps[1]["id"])
 }
 
@@ -445,7 +445,7 @@ func TestRun_PingDoesNotBind(t *testing.T) {
 		`{"id":"t1","op":"serialize","data":{}}`,
 	)
 	require.Len(t, resps, 2, "expected 2 responses, got %d", len(resps))
-	assert.Equal(t, "ERROR", resps[1]["status"], "serialize after a bare ping should be an ERROR, got %v", resps[1])
+	assert.Equal(t, string(protocol.StatusError), resps[1]["status"], "serialize after a bare ping should be an ERROR, got %v", resps[1])
 }
 
 func TestRun_UnknownType_Skipped(t *testing.T) {
@@ -503,7 +503,7 @@ func TestRun_MultipleTypes_RequiresTypeField(t *testing.T) {
 	resps := exchange(t, suite,
 		`{"op":"bind","schema":[{"name":"user_id","type":"uint64"}]}`,
 	)
-	assert.Equal(t, "ERROR", resps[0]["status"], "expected ERROR for missing type, got %v", resps[0])
+	assert.Equal(t, string(protocol.StatusError), resps[0]["status"], "expected ERROR for missing type, got %v", resps[0])
 
 	// Bind with explicit type and format works
 	resps2 := exchange(t, suite,

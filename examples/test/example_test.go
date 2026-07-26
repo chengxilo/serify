@@ -23,6 +23,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
 
@@ -60,9 +61,9 @@ func TestExamples_GoRust(t *testing.T) {
 		for _, op := range []string{"serialize", "deserialize"} {
 			// customer: the json format is where encoder quirks (HTML escaping,
 			// float formatting, base64) diverge between languages.
-			testutil.AssertCell(t, grid, "customer/json/text_escapes", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "customer/json/boundary", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "customer/binary/typical", lang, op, "PASS")
+			testutil.AssertCell(t, grid, "customer/json/text_escapes", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "customer/json/boundary", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "customer/binary/typical", lang, op, report.StatusPass, nil)
 		}
 	}
 }
@@ -120,9 +121,9 @@ func TestExamples_Ledger(t *testing.T) {
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
 		for _, op := range []string{"serialize", "deserialize"} {
-			testutil.AssertCell(t, grid, "ledger/binary/i128_boundaries", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "ledger/binary/deposit", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "ledger/binary/genesis", lang, op, "PASS")
+			testutil.AssertCell(t, grid, "ledger/binary/i128_boundaries", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "ledger/binary/deposit", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "ledger/binary/genesis", lang, op, report.StatusPass, nil)
 		}
 	}
 }
@@ -144,10 +145,10 @@ func TestExamples_Notification(t *testing.T) {
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
 		for _, op := range []string{"serialize", "deserialize"} {
-			testutil.AssertCell(t, grid, "notification/binary/unit_variant", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "notification/binary/scalar_payload", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "notification/binary/u64_payload", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "notification/binary/struct_payload", lang, op, "PASS")
+			testutil.AssertCell(t, grid, "notification/binary/unit_variant", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "notification/binary/scalar_payload", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "notification/binary/u64_payload", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "notification/binary/struct_payload", lang, op, report.StatusPass, nil)
 		}
 	}
 }
@@ -188,10 +189,10 @@ func TestExamples_Signals(t *testing.T) {
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
 		for _, op := range []string{"serialize", "deserialize"} {
-			testutil.AssertCell(t, grid, "signals/binary/typical", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "signals/binary/empty_lists", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "signals/binary/width_boundaries", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "signals/binary/float_extremes", lang, op, "PASS")
+			testutil.AssertCell(t, grid, "signals/binary/typical", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "signals/binary/empty_lists", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "signals/binary/width_boundaries", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "signals/binary/float_extremes", lang, op, report.StatusPass, nil)
 		}
 	}
 }
@@ -219,10 +220,10 @@ func TestExamples_Telemetry(t *testing.T) {
 		for _, op := range []string{"serialize", "deserialize"} {
 			// humidity_pct is present in nominal and null in zero, so both
 			// sides of the optional are compared byte-for-byte.
-			testutil.AssertCell(t, grid, "telemetry/binary/nominal", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "telemetry/binary/zero", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "telemetry/binary/float_nan", lang, op, "PASS")
-			testutil.AssertCell(t, grid, "telemetry/binary/int_boundaries", lang, op, "PASS")
+			testutil.AssertCell(t, grid, "telemetry/binary/nominal", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/zero", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/float_nan", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/int_boundaries", lang, op, report.StatusPass, nil)
 		}
 	}
 }

@@ -119,8 +119,8 @@ func TestWrongWorkerErrorsAreReported(t *testing.T) {
 				if wantDeser == report.StatusFail {
 					expectedFails++
 				}
-				assertCell(t, grid, id, lang, report.OpSerialize, wantSer)
-				assertCell(t, grid, id, lang, report.OpDeserialize, wantDeser)
+				testutil.AssertCell(t, grid, id, lang, report.OpSerialize, wantSer, nil)
+				testutil.AssertCell(t, grid, id, lang, report.OpDeserialize, wantDeser, nil)
 			}
 		}
 	}

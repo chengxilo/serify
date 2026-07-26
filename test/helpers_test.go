@@ -15,9 +15,6 @@
 package test
 
 import (
-	"testing"
-
-	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
 
@@ -27,7 +24,5 @@ type resultGrid = testutil.ResultGrid
 // readResultGrid reads a CSV and indexes it (delegates to testutil).
 var readResultGrid = testutil.ReadResultGrid
 
-// assertCell checks one cell of the CSV grid (Status-typed wrapper).
-func assertCell(t *testing.T, grid resultGrid, id, lang, op string, want report.Status) {
-	testutil.AssertCell(t, grid, id, lang, op, string(want))
-}
+func ptr[T any](v T) *T { return &v }
+

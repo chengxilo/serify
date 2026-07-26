@@ -50,7 +50,8 @@ func ReadResultGrid(t *testing.T, csvPath string) ResultGrid {
 }
 
 // AssertCell checks one cell of a ResultGrid. A FAIL must carry non-empty detail.
-func AssertCell(t *testing.T, grid ResultGrid, id, lang, op, wantStatus string) {
+// If wantDetail is non-nil, the cell's detail must match exactly.
+func AssertCell(t *testing.T, grid ResultGrid, id, lang, op string, wantStatus report.Status, wantDetail *string) {
 	t.Helper()
 	rec, ok := grid[id][lang][op]
 	if !ok {
@@ -61,7 +62,10 @@ func AssertCell(t *testing.T, grid ResultGrid, id, lang, op, wantStatus string) 
 		t.Errorf("[%s / %s / %s] status = %s, want %s (detail: %s)", id, lang, op, rec.Status, wantStatus, rec.Detail)
 		return
 	}
-	if wantStatus == "FAIL" && rec.Detail == "" {
+	if wantStatus == report.StatusFail && rec.Detail == "" {
 		t.Errorf("[%s / %s / %s] FAIL carries no diagnostic detail", id, lang, op)
+	}
+	if wantDetail != nil && rec.Detail != *wantDetail {
+		t.Errorf("[%s / %s / %s] detail = %q, want %q", id, lang, op, rec.Detail, *wantDetail)
 	}
 }
