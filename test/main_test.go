@@ -80,8 +80,8 @@ func (c Case) runArgs(ref, casesDir string, extra ...string) []string {
 
 var (
 	happy         = NewCase("happy", language.All...)
-	wrong         = NewCase("wrong", language.Go, language.Rust)
-	audit         = NewCase("audit", language.Go, language.Rust)
+	wrong         = NewCase("wrong", language.All...)
+	audit         = NewCase("audit", language.All...)
 	invalidSchema = NewCase("invalid_schema", language.Go, language.Rust)
 )
 

@@ -50,7 +50,7 @@ defmodule WrongWorker do
   defp binary_deserialize(data) do
     <<bs, bd, js, jd, n::little-32, rest::binary>> = data
     {langs, _} = take_strs(rest, n, [])
-    langs = if jd != 0, do: langs, else: to_upper_self(langs)
+    langs = if bd != 0, do: langs, else: to_upper_self(langs)
     %{
       "binary_serialize" => bs != 0, "binary_deserialize" => bd != 0,
       "json_serialize" => js != 0, "json_deserialize" => jd != 0,
@@ -65,15 +65,21 @@ defmodule WrongWorker do
 
   # --- json ------------------------------------------------------------------
 
+  # Go's encoding/json emits struct fields in declaration order, and an Elixir
+  # map has no order to emit — handing this map to Jason puts the keys in the
+  # map's internal order, which is not the reference one. So the object is
+  # built by hand in schema order.
   defp json_serialize(fm) do
     langs = if fm["json_serialize"], do: fm["langs"], else: to_upper_self(fm["langs"])
-    Jason.encode!(%{
-      "binary_serialize" => fm["binary_serialize"],
-      "binary_deserialize" => fm["binary_deserialize"],
-      "json_serialize" => fm["json_serialize"],
-      "json_deserialize" => fm["json_deserialize"],
-      "langs" => langs,
-    })
+    IO.iodata_to_binary([
+      "{\"binary_serialize\":#{fm["binary_serialize"]}",
+      ",\"binary_deserialize\":#{fm["binary_deserialize"]}",
+      ",\"json_serialize\":#{fm["json_serialize"]}",
+      ",\"json_deserialize\":#{fm["json_deserialize"]}",
+      ",\"langs\":[",
+      Enum.map_join(langs, ",", &Jason.encode!/1),
+      "]}",
+    ])
   end
 
   defp json_deserialize(data) do

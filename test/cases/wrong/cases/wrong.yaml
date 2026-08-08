@@ -46,6 +46,7 @@ _langs: &langs
   - elixir
   - java
   - node
+  - php
   - python
   - rust
   - go

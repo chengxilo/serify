@@ -101,10 +101,7 @@ func TestWrongWorkerErrorsAreReported(t *testing.T) {
 		for _, format := range cf.Formats {
 			fs, fd := formatFlags(t, tc.Data, format)
 			id := config.TestIDFmt(cf.Name, format, tc.Name)
-			for _, lang := range []string{
-				language.Go,
-				language.Rust,
-			} {
+			for _, lang := range wrong.langs {
 				wantSer := report.StatusPass
 				if lang != language.Go && !fs {
 					wantSer = report.StatusFail
@@ -127,7 +124,7 @@ func TestWrongWorkerErrorsAreReported(t *testing.T) {
 
 	// Non-vacuity guard: the matrix must actually exercise failures, otherwise a
 	// worker that silently passed everything would masquerade as correct. This
-	// holds only because every case's langs contains both go and rust (each worker
-	// drops its own name, so the output diverges).
-	require.Greater(t, expectedFails, 0, "vacuous test: no failures expected (does every case's langs include go and rust?)")
+	// holds only because every case's langs lists every worker language (each
+	// worker drops its own name, so the output diverges).
+	require.Greater(t, expectedFails, 0, "vacuous test: no failures expected (does every case's langs list every worker language?)")
 }

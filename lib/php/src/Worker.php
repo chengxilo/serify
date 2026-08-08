@@ -638,7 +638,10 @@ class Worker
     private static function isPrintableUtf8(string $s): bool
     {
         // Heuristic: if the string is valid UTF-8 and mostly printable, it's not binary bytes.
-        return mb_check_encoding($s, 'UTF-8') && !preg_match('/[^\x20-\x7E\r\n\t]/u', $s);
+        // The UTF-8 test goes through PCRE's /u flag rather than mb_check_encoding:
+        // ext-mbstring is not a declared dependency of this package, and calling it
+        // where it is absent takes down every deserialize with a fatal error.
+        return preg_match('//u', $s) === 1 && !preg_match('/[^\x20-\x7E\r\n\t]/u', $s);
     }
 
     /**

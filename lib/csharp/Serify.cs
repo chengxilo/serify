@@ -279,9 +279,55 @@ public static class Worker
         {
             var bv = before.TryGetValue(k, out var b) ? b : null;
             var av = after.TryGetValue(k, out var a) ? a : null;
-            if (!Equals(bv, av)) diffs.Add(k);
+            if (!ValuesEqual(bv, av)) diffs.Add(k);
         }
         return diffs.ToArray();
+    }
+
+    /// <summary>
+    /// Structural equality for encoded FieldMap values.
+    /// </summary>
+    /// <remarks>
+    /// object.Equals is value equality for the boxed scalars but reference
+    /// equality for arrays, lists and dictionaries. Encoding the same FieldMap
+    /// twice yields fresh collection instances, so a list or map field would
+    /// never compare equal and a perfectly clean worker got reported as
+    /// mutating, unstable and output-aliasing at once.
+    /// </remarks>
+    private static bool ValuesEqual(object? a, object? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+
+        if (a is byte[] ab && b is byte[] bb) return ab.AsSpan().SequenceEqual(bb);
+
+        if (a is System.Collections.IDictionary ad && b is System.Collections.IDictionary bd)
+        {
+            if (ad.Count != bd.Count) return false;
+            foreach (System.Collections.DictionaryEntry e in ad)
+            {
+                if (!bd.Contains(e.Key)) return false;
+                if (!ValuesEqual(e.Value, bd[e.Key])) return false;
+            }
+            return true;
+        }
+
+        // Strings are IEnumerable; let them fall through to Equals below.
+        if (a is System.Collections.IEnumerable ae && b is System.Collections.IEnumerable be
+            && a is not string && b is not string)
+        {
+            var ai = ae.GetEnumerator();
+            var bi = be.GetEnumerator();
+            while (true)
+            {
+                bool an = ai.MoveNext(), bn = bi.MoveNext();
+                if (an != bn) return false;
+                if (!an) return true;
+                if (!ValuesEqual(ai.Current, bi.Current)) return false;
+            }
+        }
+
+        return Equals(a, b);
     }
 
     /// <summary>
