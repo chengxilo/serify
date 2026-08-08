@@ -168,7 +168,10 @@ jobs:
         run: go test -count=1 -v ./examples/test/
 
   # Integration meta-tests (wrong-worker detection, audit mode, CLI tests).
-  # Requires Go + Rust for the meta-fixture workers.
+  # happy, wrong and audit all run in every language now, and requireWorkers
+  # treats a missing toolchain as a failure rather than a skip, so this job has
+  # to install all nine. python3, node, g++, dotnet and php ship with the
+  # runner; only java, elixir and the php extensions need setting up.
   test-integration:
     runs-on: ubuntu-latest
     steps:
@@ -177,5 +180,20 @@ jobs:
         with:
           go-version: '1.25'
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.16'
+          otp-version: '26'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: gmp
+      # No SERIFY_REQUIRE here: that variable is read by examples/test, whose
+      # TestMain skips absent languages by default. ./test's requireWorkers
+      # already fails on a missing toolchain, so the guarantee is unconditional.
       - name: Integration tests
         run: go test -v ./test/...
