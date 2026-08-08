@@ -103,25 +103,32 @@ func TestCLI_KnownFailures(t *testing.T) {
 
 // TestCLI_Run_TimeoutOnHungWorker verifies that --timeout kills a hung worker.
 // The hang format sleeps 3 s; --timeout 1 ensures the race is always won by timeout.
-func TestCLI_Run_TimeoutOnHungWorker(t *testing.T) {
-	requireWorkers(t, wrong.langs...)
+//
+// Go and Rust only, on purpose. --timeout also bounds the start-up ping, and a
+// second is not enough for the JVM, the CLR or the BEAM to answer it: the run
+// would die with "failed to ping csharp worker" before writing a CSV. What is
+// under test is the runner's timeout handling, and one hung worker proves that.
+var hang = wrong.With(language.Go, language.Rust)
 
-	hangCases := wrong.CasePathNamed("cases_hang")
+func TestCLI_Run_TimeoutOnHungWorker(t *testing.T) {
+	requireWorkers(t, hang.langs...)
+
+	hangCases := hang.CasePathNamed("cases_hang")
 	csv := filepath.Join(t.TempDir(), "out.csv")
-	out, code := testutil.RunSerify(t, wrong.runArgs(language.Go, hangCases,
+	out, code := testutil.RunSerify(t, hang.runArgs(language.Go, hangCases,
 		"--csv", csv, "--timeout", "1")...)
 	require.Equal(t, 1, code, "serify exit = %d, want 1 (timeout must fail)\n%s", code, out)
 
 	grid := readResultGrid(t, csv)
 
 	// Both languages ERROR on serialize; deserialize SKIP (reference serialize failed).
-	for _, lang := range wrong.langs {
+	for _, lang := range hang.langs {
 		testutil.AssertCell(t, grid, "wrong/hang/sleeper", lang, report.OpSerialize, report.StatusError, nil)
 	}
 	rec := grid["wrong/hang/sleeper"][language.Go][report.OpSerialize]
 	assert.Contains(t, rec.Detail, "timeout after 1s",
 		"hang detail = %q, want timeout after 1s", rec.Detail)
-	for _, lang := range wrong.langs {
+	for _, lang := range hang.langs {
 		testutil.AssertCell(t, grid, "wrong/hang/sleeper", lang, report.OpDeserialize, report.StatusSkip, nil)
 	}
 }

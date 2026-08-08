@@ -39,6 +39,13 @@ func NewCase(name string, langs ...string) Case {
 	}
 }
 
+// With narrows a case to a subset of its languages. Use it for tests that
+// exercise the runner rather than the libraries: driving all nine workers there
+// buys no extra coverage and makes the test hostage to runtime start-up times.
+func (c Case) With(langs ...string) Case {
+	return Case{path: c.path, langs: langs}
+}
+
 // CasePath return the path of case.
 func (c Case) CasePath() string {
 	return filepath.Join(c.path, "cases")
