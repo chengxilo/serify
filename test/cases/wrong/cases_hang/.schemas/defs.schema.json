@@ -18,6 +18,19 @@
         }
       ]
     },
+    "fieldsSection": {
+      "description": "Record type: one `name: type` pair per field.",
+      "items": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "maxProperties": 1,
+        "minProperties": 1,
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
     "int128": {
       "maximum": 170141183460469231731687303715884105727,
       "minimum": -170141183460469231731687303715884105728,
@@ -51,19 +64,6 @@
       "minimum": -128,
       "type": "integer"
     },
-    "schemaSection": {
-      "description": "Compact schema: one `name: type` pair per entry.",
-      "items": {
-        "additionalProperties": {
-          "type": "string"
-        },
-        "maxProperties": 1,
-        "minProperties": 1,
-        "type": "object"
-      },
-      "minItems": 1,
-      "type": "array"
-    },
     "uint128": {
       "maximum": 340282366920938463463374607431768211455,
       "minimum": 0,
@@ -96,6 +96,22 @@
       "maximum": 255,
       "minimum": 0,
       "type": "integer"
+    },
+    "variantsSection": {
+      "description": "Sum type: one `tag: payload-type` pair per entry. An entry with no type is a unit variant.",
+      "items": {
+        "additionalProperties": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "maxProperties": 1,
+        "minProperties": 1,
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
     }
   },
   "description": "Scalar bounds, file-level helpers, and shared structs. Regenerate with `serify schema`.",
