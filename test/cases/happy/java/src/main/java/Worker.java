@@ -32,6 +32,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.serify.WorkerLib;
 import io.serify.WorkerLib.FieldMap;
 import io.serify.WorkerLib.FormatPair;
+import io.serify.WorkerLib.TypeEntry;
 
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
@@ -394,7 +395,7 @@ public final class Worker {
 
     public static void main(String[] args) {
         WorkerLib.runSuite(Map.of(
-                "all_types", Map.of(
+                "all_types", TypeEntry.formats(Map.of(
                         "binary", new FormatPair(Worker::binarySerialize, Worker::binaryDeserialize),
                         "json", new FormatPair(fm -> {
                             try {
@@ -408,7 +409,7 @@ public final class Worker {
                             } catch (Exception e) {
                                 throw new RuntimeException(e);
                             }
-                        }))));
+                        })))));
     }
 
     private Worker() {}

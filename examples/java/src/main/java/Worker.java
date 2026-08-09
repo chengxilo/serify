@@ -15,8 +15,8 @@
  */
 
 import io.serify.WorkerLib;
-import io.serify.WorkerLib.FormatPair;
-import io.serify.WorkerLib.SerifyModelHelper;
+import io.serify.WorkerLib.ModelFormatPair;
+import io.serify.WorkerLib.TypeEntry;
 
 import java.util.Map;
 
@@ -35,15 +35,12 @@ public final class Worker {
 
     public static void main(String[] args) {
         WorkerLib.runSuite(Map.of(
-                "ledger", Map.of("binary", new FormatPair(
-                        fm -> SerifyModelHelper.fromFieldMap(fm, LedgerEntry.class).marshal(),
-                        data -> SerifyModelHelper.toFieldMap(LedgerEntry.unmarshal(data)))),
-                "signals", Map.of("binary", new FormatPair(
-                        fm -> SerifyModelHelper.fromFieldMap(fm, SignalCapture.class).marshal(),
-                        data -> SerifyModelHelper.toFieldMap(SignalCapture.unmarshal(data)))),
-                "notification", Map.of("binary", new FormatPair(
-                        fm -> SerifyModelHelper.fromFieldMap(fm, Notification.class).marshal(),
-                        data -> SerifyModelHelper.toFieldMap(Notification.unmarshal(data))))));
+                "ledger", TypeEntry.model(LedgerEntry.class, Map.of(
+                        "binary", new ModelFormatPair<>(LedgerEntry::marshal, LedgerEntry::unmarshal))),
+                "signals", TypeEntry.model(SignalCapture.class, Map.of(
+                        "binary", new ModelFormatPair<>(SignalCapture::marshal, SignalCapture::unmarshal))),
+                "notification", TypeEntry.model(Notification.class, Map.of(
+                        "binary", new ModelFormatPair<>(Notification::marshal, Notification::unmarshal)))));
     }
 
     private Worker() {}

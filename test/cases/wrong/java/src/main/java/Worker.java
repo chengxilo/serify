@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.serify.WorkerLib;
 import io.serify.WorkerLib.FieldMap;
 import io.serify.WorkerLib.FormatPair;
+import io.serify.WorkerLib.TypeEntry;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -124,7 +125,7 @@ public final class Worker {
     private static byte[] crashSer(FieldMap fm) { System.exit(3); return null; }
 
     public static void main(String[] args) {
-        WorkerLib.runSuite(Map.of("wrong", Map.of(
+        WorkerLib.runSuite(Map.of("wrong", TypeEntry.formats(Map.of(
             "binary", new FormatPair(Worker::binarySerialize, Worker::binaryDeserialize),
             "json", new FormatPair(fm -> { try { return jsonSerialize(fm); } catch (Exception e) { throw new RuntimeException(e); } },
                                     data -> { try { return jsonDeserialize(data); } catch (Exception e) { throw new RuntimeException(e); } }),
@@ -132,7 +133,7 @@ public final class Worker {
             "err_deser", new FormatPair(Worker::binarySerialize, Worker::errDeser),
             "hang", new FormatPair(fm -> { try { return hangSer(fm); } catch (Exception e) { throw new RuntimeException(e); } }, Worker::binaryDeserialize),
             "crash", new FormatPair(Worker::crashSer, Worker::binaryDeserialize)
-        )));
+        ))));
     }
 
     private Worker() {}

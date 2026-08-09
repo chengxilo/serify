@@ -334,7 +334,7 @@ public final class WorkerLib {
         return aliased;
     }
 
-    /** One (serialize, deserialize) pair for a single format. */
+    /** One (serialize, deserialize) pair for a single format, at FieldMap level. */
     public record FormatPair(Function<FieldMap, byte[]> serialize,
                              Function<byte[], FieldMap> deserialize) {
         public FormatPair(Function<FieldMap, byte[]> serialize) {
@@ -342,27 +342,92 @@ public final class WorkerLib {
         }
     }
 
+    /** One format of a type registered with a model: the functions speak {@code M}. */
+    public record ModelFormatPair<M>(Function<M, byte[]> serialize,
+                                     Function<byte[], M> deserialize) {
+        public ModelFormatPair(Function<M, byte[]> serialize) {
+            this(serialize, null);
+        }
+    }
+
+    /**
+     * One registered type: it answers a format name with the FieldMap-level pair
+     * the run loop calls, or null if it does not implement that format.
+     *
+     * <p>{@link #model} carries a model class, and the format functions then take
+     * and return that class — the FieldMap never reaches the worker:
+     *
+     * <pre>{@code
+     * "ledger", TypeEntry.model(LedgerEntry.class,
+     *     Map.of("binary", new ModelFormatPair<>(LedgerEntry::marshal, LedgerEntry::unmarshal)))
+     * }</pre>
+     *
+     * <p>{@link #formats} is the other path, for a type with no natural class
+     * (the audit fixtures mutate a FieldMap on purpose).
+     *
+     * <p>Which of the two a worker wrote is settled by the compiler, not by a
+     * shape test at run time as in python and node. That matters: an unresolved
+     * (type, format) is reported SKIPPED, so a lookup that quietly understood
+     * neither spelling would produce a green run made entirely of SKIPs.
+     */
+    @FunctionalInterface
+    public interface TypeEntry {
+        /** null means this type does not implement {@code format}. */
+        FormatPair resolve(String format);
+
+        /** The model-less path: the functions take and return the FieldMap itself. */
+        static TypeEntry formats(Map<String, FormatPair> formats) {
+            return formats::get;
+        }
+
+        /**
+         * A model, and the formats whose functions speak it. serify converts
+         * FieldMap &lt;-&gt; model on the way in and out, using the
+         * {@code @SerifyModel}/{@code @SerifyField} binding on {@code model}.
+         */
+        static <M> TypeEntry model(Class<M> model, Map<String, ModelFormatPair<M>> formats) {
+            return format -> {
+                var pair = formats.get(format);
+                if (pair == null) return null;
+                var ser   = pair.serialize();
+                var deser = pair.deserialize();
+                return new FormatPair(
+                        ser == null ? null
+                                : fm -> ser.apply(SerifyModelHelper.fromFieldMap(fm, model)),
+                        deser == null ? null
+                                : data -> SerifyModelHelper.toFieldMap(deser.apply(data)));
+            };
+        }
+    }
+
     /** Single-type worker: handles whatever type/format the runner asks for. */
     public static void run(
             Function<FieldMap, byte[]> serialize,
             Function<byte[], FieldMap> deserialize) {
-        runSuite(Map.of(), (t, f) -> new FormatPair(serialize, deserialize));
+        runLoop((t, f) -> new FormatPair(serialize, deserialize));
     }
 
     /**
-     * Multi-type worker. `suite` maps type name -> format name -> FormatPair. A
-     * (type, format) that is not registered is reported to the runner as SKIPPED
-     * rather than failing the run.
+     * Look one (type, format) up. null means the worker does not implement it,
+     * which the run loop reports to the runner as SKIPPED.
      */
-    public static void runSuite(Map<String, Map<String, FormatPair>> suite) {
-        runSuite(suite, (t, f) -> {
-            var formats = suite.get(t);
-            return formats == null ? null : formats.get(f);
-        });
+    public static FormatPair resolveRegistered(
+            Map<String, TypeEntry> suite, String typeName, String formatName) {
+        var entry = suite.get(typeName);
+        return entry == null ? null : entry.resolve(formatName);
     }
 
-    private static void runSuite(
-            Map<String, Map<String, FormatPair>> suite,
+    /**
+     * Multi-type worker. `suite` maps a type name to a {@link TypeEntry} — either
+     * {@code TypeEntry.model} or {@code TypeEntry.formats}. A (type, format) that
+     * is not registered is reported to the runner as SKIPPED rather than failing
+     * the run.
+     */
+    public static void runSuite(Map<String, TypeEntry> suite) {
+        runLoop((t, f) -> resolveRegistered(suite, t, f));
+    }
+
+    private static void runLoop(
             java.util.function.BiFunction<String, String, FormatPair> resolve) {
 
         Function<FieldMap, byte[]> serialize = null;

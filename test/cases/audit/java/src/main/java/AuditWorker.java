@@ -41,5 +41,5 @@ public final class AuditWorker {
     static byte[] unstableSer(FieldMap fm){var b=marshal(fm);var out=Arrays.copyOf(b,b.length+1);out[b.length]=(byte)unstableCtr++;return out;}
     static FieldMap duDeser(byte[] d){var fm=unmarshal(d,true);if(deserUnstableCtr++>0)fm.setU32("value",fm.getU32("value")+1);return fm;}
     static FieldMap imDeser(byte[] d){var fm=unmarshal(d,true);if(d.length>0)d[0]^=0xFF;return fm;}
-    public static void main(String[]a){WorkerLib.runSuite(Map.of("audit",Map.of("clean",new FormatPair(AuditWorker::cleanSer,AuditWorker::cleanDeser),"mutating",new FormatPair(AuditWorker::mutSer,AuditWorker::cleanDeser),"unstable",new FormatPair(AuditWorker::unstableSer,AuditWorker::cleanDeser),"deser-unstable",new FormatPair(AuditWorker::cleanSer,AuditWorker::duDeser),"input-mutating",new FormatPair(AuditWorker::cleanSer,AuditWorker::imDeser))));}
+    public static void main(String[]a){WorkerLib.runSuite(Map.of("audit",TypeEntry.formats(Map.of("clean",new FormatPair(AuditWorker::cleanSer,AuditWorker::cleanDeser),"mutating",new FormatPair(AuditWorker::mutSer,AuditWorker::cleanDeser),"unstable",new FormatPair(AuditWorker::unstableSer,AuditWorker::cleanDeser),"deser-unstable",new FormatPair(AuditWorker::cleanSer,AuditWorker::duDeser),"input-mutating",new FormatPair(AuditWorker::cleanSer,AuditWorker::imDeser)))));}
 }

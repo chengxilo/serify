@@ -18,5 +18,5 @@ import io.serify.WorkerLib; import io.serify.WorkerLib.*; import java.nio.charse
 public final class ISWorker {
     static byte[] ser(FieldMap fm){return fm.getString("id").getBytes(StandardCharsets.UTF_8);}
     static FieldMap deser(byte[] d){var fm=new FieldMap();fm.setString("id",new String(d,StandardCharsets.UTF_8));return fm;}
-    public static void main(String[]a){WorkerLib.runSuite(Map.of("invalid_schema",Map.of("byte",new FormatPair(ISWorker::ser,ISWorker::deser))));}
+    public static void main(String[]a){WorkerLib.runSuite(Map.of("invalid_schema",TypeEntry.formats(Map.of("byte",new FormatPair(ISWorker::ser,ISWorker::deser)))));}
 }
