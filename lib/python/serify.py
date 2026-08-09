@@ -29,7 +29,7 @@ import struct
 import sys
 import time
 import typing
-from typing import Any, Callable, Sequence, cast
+from typing import Any, Callable, Sequence, Union, cast
 
 SerializeFn = Callable[["FieldMap"], bytes]
 DeserializeFn = Callable[[bytes], "FieldMap"]
@@ -839,19 +839,99 @@ def run(serialize_fn: SerializeFn, deserialize_fn: DeserializeFn) -> None:
     _run_loop(lambda _type, _format: (serialize_fn, deserialize_fn))
 
 
-def run_suite(types: dict[str, dict[str, tuple[SerializeFn, DeserializeFn]]]) -> None:
-    """Multi-type worker. `types` maps type name -> format name -> (serialize,
-    deserialize). A (type, format) that is not registered is reported to the
-    runner as SKIPPED rather than failing the run."""
-    def resolve(type_name: str, format_name: str) -> tuple[SerializeFn, DeserializeFn] | None:
-        formats = types.get(type_name)
-        if formats is None:
+class Format:
+    """One named format: a serializer, and optionally a deserializer.
+
+    Under a `Type` that carries a model, the functions speak that model and
+    never see a FieldMap — serify converts on the way in and out:
+
+        Format(LedgerEntry.marshal, LedgerEntry.unmarshal)
+
+    Under a `Type` with no model, they take and return the FieldMap itself,
+    which is what a type with no natural class needs (the audit fixtures
+    mutate a FieldMap on purpose).
+    """
+
+    def __init__(self, serializer: Any, deserializer: Any = None) -> None:
+        self.serializer = serializer
+        self.deserializer = deserializer
+
+    def _bind(self, model: type | None) -> tuple[SerializeFn | None, DeserializeFn | None]:
+        """Wrap the worker's functions into the FieldMap-typed pair the run loop
+        calls. With no model the functions already are that pair."""
+        ser, deser = self.serializer, self.deserializer
+
+        if model is None:
+            return cast("SerializeFn | None", ser), cast("DeserializeFn | None", deser)
+
+        from_fm = model.from_field_map  # type: ignore[attr-defined]
+
+        def _serialize(fm: FieldMap) -> bytes:
+            return cast(bytes, ser(from_fm(fm)))
+
+        def _deserialize(data: bytes) -> FieldMap:
+            return cast(FieldMap, deser(data).to_field_map())
+
+        return (
+            _serialize if ser is not None else None,
+            _deserialize if deser is not None else None,
+        )
+
+
+class Type:
+    """One data type: a model and its named formats.
+
+    `model` is the class the format functions speak — anything with
+    `from_field_map`/`to_field_map`, which `@serify_model` generates. Pass
+    None to register FieldMap-typed functions instead.
+    """
+
+    def __init__(self, model: type | None, formats: dict[str, Format]) -> None:
+        self.model = model
+        self.formats = formats
+
+    def _resolve(self, format_name: str) -> tuple[SerializeFn | None, DeserializeFn | None] | None:
+        fmt = self.formats.get(format_name)
+        if fmt is None:
             return None
-        return formats.get(format_name)
-    _run_loop(resolve)
+        return fmt._bind(self.model)
 
 
-def _run_loop(resolve: Callable[[str, str], tuple[SerializeFn, DeserializeFn] | None]) -> None:
+# A registered type is either a Type, or the plain nested dict of
+# (serialize, deserialize) tuples that workers used before Type existed.
+_Registered = Union["Type", dict[str, tuple[SerializeFn, DeserializeFn]]]
+
+
+def _resolve_registered(
+    types: dict[str, _Registered], type_name: str, format_name: str
+) -> tuple[SerializeFn | None, DeserializeFn | None] | None:
+    """Look one (type, format) up across both registration spellings.
+
+    Separate from run_suite so it can be tested without stdin: an unresolved
+    (type, format) is reported SKIPPED, so a registration shape this function
+    silently fails to understand produces a *green* conformance run made
+    entirely of SKIPs. Nothing downstream can tell that apart from a worker
+    that legitimately does not implement the type.
+    """
+    entry = types.get(type_name)
+    if entry is None:
+        return None
+    if isinstance(entry, Type):
+        return entry._resolve(format_name)
+    return entry.get(format_name)
+
+
+def run_suite(types: dict[str, _Registered]) -> None:
+    """Multi-type worker. `types` maps a type name to a `Type`, or to the older
+    format-name -> (serialize, deserialize) dict, which still works. A (type,
+    format) that is not registered is reported to the runner as SKIPPED rather
+    than failing the run."""
+    _run_loop(lambda t, f: _resolve_registered(types, t, f))
+
+
+def _run_loop(
+    resolve: Callable[[str, str], tuple[SerializeFn | None, DeserializeFn | None] | None],
+) -> None:
     serialize_fn: SerializeFn | None = None
     deserialize_fn: DeserializeFn | None = None
 

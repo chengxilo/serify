@@ -33,22 +33,19 @@ sys.path.insert(0, _lib_dir)
 
 from ledger import LedgerEntry  # noqa: E402  (imports serify, so it follows the path setup)
 from notification import NotificationRecord  # noqa: E402
-from serify import run_suite  # noqa: E402
+from serify import Format, Type, run_suite  # noqa: E402
 from signals import SignalCapture  # noqa: E402
 
 
 def _binary(model):
-    """One (serializer, deserializer) pair for a model that carries its own
-    byte layout: FieldMap in, model, bytes out — and back."""
-    return (
-        lambda fm: model.from_field_map(fm).marshal(),
-        lambda data: model.unmarshal(data).to_field_map(),
-    )
+    """The one format each of these models carries: its own byte layout. serify
+    converts FieldMap <-> model, so marshal/unmarshal speak the model alone."""
+    return Type(model, {"binary": Format(model.marshal, model.unmarshal)})
 
 
 if __name__ == '__main__':
     run_suite({
-        "ledger": {"binary": _binary(LedgerEntry)},
-        "signals": {"binary": _binary(SignalCapture)},
-        "notification": {"binary": _binary(NotificationRecord)},
+        "ledger": _binary(LedgerEntry),
+        "signals": _binary(SignalCapture),
+        "notification": _binary(NotificationRecord),
     })

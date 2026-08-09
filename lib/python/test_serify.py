@@ -25,7 +25,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from serify import FieldMap, Variant, _detect_zero_copy, decode_field_map, encode_field_map, serify_model
+from serify import (FieldMap, Format, Type, Variant, _detect_zero_copy, _resolve_registered,
+                    decode_field_map, encode_field_map, serify_model)
 
 
 @serify_model
@@ -288,3 +289,95 @@ def test_unknown_field_type_raises_both_directions():
         assert "nope" in str(exc)
     else:
         raise AssertionError("expected ValueError encoding an unknown type")
+
+
+# ─── Type / Format registration ──────────────────────────────────────────────
+#
+# run_suite accepts a Type carrying a model, and also the older
+# format -> (serialize, deserialize) dict that the test fixtures still use.
+# A conformance run passes under either spelling, so the difference between
+# "both shapes work" and "one silently resolves to nothing" is only visible
+# here.
+
+
+@serify_model
+@dataclass
+class _Rec:
+    n: int = 0
+
+
+def _rec_schema():
+    return [{"name": "n", "type": "uint32"}]
+
+
+def _marshal(r: _Rec) -> bytes:
+    return r.n.to_bytes(4, "little")
+
+
+def _unmarshal(data: bytes) -> _Rec:
+    return _Rec(n=int.from_bytes(data[:4], "little"))
+
+
+def test_type_with_model_binds_through_the_model():
+    """The registered functions speak _Rec; serify does both conversions."""
+    t = Type(_Rec, {"binary": Format(_marshal, _unmarshal)})
+    ser, deser = t._resolve("binary")
+
+    fm = FieldMap()
+    fm.set_u32("n", 7)
+    assert ser(fm) == (7).to_bytes(4, "little")
+
+    out = deser((9).to_bytes(4, "little"))
+    assert isinstance(out, FieldMap)
+    assert encode_field_map(out, _rec_schema()) == {"n": 9}
+
+
+def test_type_without_model_passes_the_field_map_through():
+    """model=None is the path for a type with no natural class: the functions
+    are already FieldMap-typed and must not be wrapped."""
+    def ser(fm: FieldMap) -> bytes:
+        return fm.get_u32("n").to_bytes(4, "little")
+
+    def deser(data: bytes) -> FieldMap:
+        fm = FieldMap()
+        fm.set_u32("n", int.from_bytes(data[:4], "little"))
+        return fm
+
+    t = Type(None, {"binary": Format(ser, deser)})
+    got_ser, got_deser = t._resolve("binary")
+    assert got_ser is ser, "a model-less Format must hand back the function unwrapped"
+    assert got_deser is deser
+
+
+def test_format_without_deserializer_reports_none():
+    """A serialize-only format must yield None, not a wrapper that calls None."""
+    t = Type(_Rec, {"binary": Format(_marshal)})
+    ser, deser = t._resolve("binary")
+    assert ser is not None
+    assert deser is None, "no deserializer registered, so the pair's second half must be None"
+
+
+def test_unknown_format_and_type_resolve_to_none():
+    t = Type(_Rec, {"binary": Format(_marshal, _unmarshal)})
+    assert t._resolve("json") is None
+
+
+def test_run_suite_resolves_both_registration_shapes():
+    """The Type spelling and the older nested-dict spelling must both resolve.
+
+    This is the test that a conformance run cannot replace. An unresolved
+    (type, format) is reported SKIPPED, so dropping either branch yields a run
+    of all-SKIP cells that still exits 0 — measured: 40 SKIP, 0 FAIL, exit 0.
+    """
+    as_type = {"rec": Type(_Rec, {"binary": Format(_marshal, _unmarshal)})}
+    as_dict = {"rec": {"binary": (lambda fm: b"", lambda data: FieldMap())}}
+
+    for name, types in (("Type", as_type), ("dict", as_dict)):
+        pair = _resolve_registered(types, "rec", "binary")
+        assert pair is not None, f"{name} registration resolved to nothing"
+        ser, deser = pair
+        assert ser is not None and deser is not None, f"{name} registration lost a direction"
+
+    assert _resolve_registered(as_type, "rec", "json") is None
+    assert _resolve_registered(as_type, "nope", "binary") is None
+    assert _resolve_registered(as_dict, "nope", "binary") is None
