@@ -913,3 +913,92 @@ the same virtuous exposure that has run through this whole session.
 `./cmd/...` unrun mean CI was, in aggregate, not verifying: the parity matrix ran
 nothing, a red type-check job trained everyone to ignore red, and cmd tests never
 ran. With these fixed the CI signal is worth trusting again.
+
+## Three red CI jobs, none of them about the nine-language wiring (August 2026)
+
+Turning CI back on exposed a backlog rather than a regression: `test-integration`
+failed on Elixir, `test-rust` on formatting, and a third finding came out of the
+one audit cell the suite had been leaving deliberately blank. All three are
+fixed here.
+
+### Elixir: OTP 26 eats control characters out of stdin
+
+`all_types/escapes` failed for elixir — and only for elixir, and only on CI. The
+byte diff was two bytes short on the `string` field, and the JSON side named the
+missing pair exactly:
+
+```
+expected  ... del : 7f "     |del:.",...|
+got       ... del "         |del",...|
+```
+
+The `:` and the `0x7f` after it were both gone. That is DEL behaving as
+backspace: it erased the character before it and then itself.
+
+Reproduced under `docker run elixir:1.16-otp-26`, which also showed the blast
+radius is much wider than DEL. Feeding `A<byte>B\n` through `IO.read(:line)`:
+
+| runtime | 0x01–0x1F | 0x08, 0x7F | 0x0D | UTF-8 |
+|---------|-----------|------------|------|-------|
+| OTP 26  | dropped   | dropped *and* erase the previous character | truncates the line | intact |
+| OTP 27  | intact    | intact     | intact | intact |
+
+So on OTP 26 the standard input device is simply not byte-transparent, and a
+worker library that reads NDJSON through it cannot see its own input. The suite
+only caught DEL because Go's `encoding/json` escapes `0x00–0x1F` and leaves
+`0x7f` raw — DEL is the one control byte that reaches the wire unescaped.
+
+Ruled out first, all still corrupt on OTP 26: `IO.binread/2`,
+`io:setopts(encoding: latin1)`, `io:setopts(binary: true)`, and
+`io:setopts(line_editing: false)` (`{:error, :enotsup}` — that option arrives in
+OTP 27). Reopening `/dev/stdin` or opening a `{:fd, 0, 1}` port both return
+`:eof`, because the emulator has already claimed and drained the descriptor.
+
+The fix is to stop the emulator claiming it: `escript: [emu_args: "-noinput"]`,
+plus a port reader in `WorkerLib` with its own line buffer. Verified end to end
+by running the happy suite go-vs-elixir inside the OTP 26 container — `FAIL: 0`,
+against `FAIL: 2` for the same tree with `-noinput` removed, which is the
+negative control for the whole diagnosis.
+
+Two deliberate choices around it:
+
+- **The runner still sends raw DEL.** Escaping `0x7f` in `internal/protocol`
+  would have made this failure go away in one line, and it is the wrong fix:
+  serify exists to push hostile bytes at workers, so the harness keeps sending
+  the byte that found this.
+- **CI stays on OTP 26.** It is pinned to the oldest release the library
+  supports, not the newest, and that pin is what makes `escapes` mean anything
+  for Elixir. Both `setup-beam` steps now say so, because the obvious
+  maintenance move on a red Elixir job is to bump the version and lose the
+  coverage.
+
+If a worker skips `-noinput` the library falls back to the standard device and
+warns on stderr on OTP < 27, so the lossy path is never silent.
+
+### Python: the deserialize audit reported the serializer's findings
+
+`deser-unstable` was the one cell `TestAuditWarningsAreReported` refused to
+assert: eight languages raised the warning and python did not, for reasons not
+then established. The cause is a one-word bug in `_run_loop` — the deserialize
+branch builds its findings in `daudit`, then attaches the *serialize* branch's
+dict to the response:
+
+```python
+if daudit:
+    resp["audit"] = audit   # -> daudit
+```
+
+`audit` is left over from the previous serialize message, and for a clean
+serializer it is empty, so every deserialize-side finding python made was
+computed and then thrown away. `input-mutating` was masked by a true statement:
+python's deserializer really does get immutable `bytes` and really cannot write
+through them, so that cell being blank never pointed at this.
+
+`deser-unstable` now asserts `language.All`, and the blank-cell comment is gone.
+
+### Rust: `cargo fmt`, not clippy
+
+`test-rust` reported as a clippy failure and was not one — the job runs `cargo
+fmt --all --check` and `cargo clippy` in the same step, and fmt failed first on
+one stray blank line in `lib/rust/serify/src/lib.rs`. Clippy at
+`-D warnings` is clean, as are `cargo test` and the no-default-features build.

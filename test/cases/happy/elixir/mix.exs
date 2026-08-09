@@ -20,7 +20,7 @@ defmodule HappyWorker.MixProject do
       app: :worker,
       version: "0.1.0",
       elixir: "~> 1.14",
-      escript: [main_module: HappyWorker],
+      escript: [main_module: HappyWorker, emu_args: "-noinput"],
       deps: deps()
     ]
   end

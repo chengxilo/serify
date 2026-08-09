@@ -150,7 +150,7 @@ func TestProtocol_Bytes_Empty(t *testing.T) {
 
 func TestProtocol_String_Unicode(t *testing.T) {
 	sc := []SchemaField{{Name: "v", Type: "string"}}
-	for _, s := range []string{"", "hello", "ä¸­æ–‡ç”¨æˆ·ðŸ˜‰", "Ã±oÃ±o", "æ—¥æœ¬èªžãƒ†ã‚¹ãƒˆ"} {
+	for _, s := range []string{"", "hello", "中文用户😉", "ñoño", "日本語テスト"} {
 		fm := mustDecode(t, mkRaw(t, "v", s), sc)
 		got, err := fm.GetString("v")
 		if err != nil || got != s {
@@ -232,14 +232,14 @@ func TestProtocol_Array_U32_Numbers(t *testing.T) {
 
 func TestProtocol_ListString(t *testing.T) {
 	sc := []SchemaField{{Name: "v", Type: "list<string>"}}
-	raw := mkRaw(t, "v", []string{"alpha", "beta", "ÃŽÂ³ÃŽÂ´ÃŽÂµ"})
+	raw := mkRaw(t, "v", []string{"alpha", "beta", "γδε"})
 	fm := mustDecode(t, raw, sc)
 	got, err := fm.GetListString("v")
-	if err != nil || len(got) != 3 || got[2] != "ÃŽÂ³ÃŽÂ´ÃŽÂµ" {
+	if err != nil || len(got) != 3 || got[2] != "γδε" {
 		assert.NoError(t, err, "ListString: %v %v", got, err)
 		assert.Len(t, got, 3, "ListString: %v %v", got, err)
 		if len(got) == 3 {
-			assert.Equal(t, "ÃŽÂ³ÃŽÂ´ÃŽÂµ", got[2], "ListString: %v %v", got, err)
+			assert.Equal(t, "γδε", got[2], "ListString: %v %v", got, err)
 		}
 	}
 }

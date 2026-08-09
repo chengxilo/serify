@@ -18,6 +18,17 @@ defmodule WorkerLib do
 
   FieldMap is a plain Elixir map with string keys.
   Struct fields are nested maps. list<struct> fields are lists of maps.
+
+  ## Worker setup
+
+  Build the worker as an escript and pass `-noinput` to the emulator:
+
+      escript: [main_module: MyWorker, emu_args: "-noinput"]
+
+  That hands fd 0 to this library instead of to the standard input device,
+  which is what makes the NDJSON stream byte-exact on OTP 26 and older. Without
+  it the worker still runs, but on those releases every control character in the
+  case data is silently eaten before it arrives.
   """
 
   # The protocol revision this library speaks. The runner requires an exact
@@ -47,14 +58,14 @@ defmodule WorkerLib do
   rather than failing the run.
   """
   def run_suite(suite) do
-    loop(suite, nil, nil, [], false)
+    loop(suite, open_input(), nil, nil, [], false)
   end
 
-  defp loop(suite, ser, deser, schema, audit_enabled) do
-    case IO.read(:line) do
+  defp loop(suite, input, ser, deser, schema, audit_enabled) do
+    case read_line(input) do
       :eof -> :ok
       {:error, _} -> :ok
-      line ->
+      {line, input} ->
         line = String.trim(line)
 
         {ser, deser, schema, audit_enabled} =
@@ -80,7 +91,72 @@ defmodule WorkerLib do
             end
           end
 
-        loop(suite, ser, deser, schema, audit_enabled)
+        loop(suite, input, ser, deser, schema, audit_enabled)
+    end
+  end
+
+  # --- stdin ----------------------------------------------------------------
+  #
+  # NDJSON lines carry arbitrary case data, and on OTP 26 and older the standard
+  # input device is not byte-transparent: every C0 control character is dropped
+  # on its way through the input driver, and 0x08/0x7f additionally erase the
+  # character before them (they are read as backspace). A case whose string
+  # holds `del:` therefore reaches the worker as `del`, and the worker
+  # serializes two bytes fewer than every other language. OTP 27 reads the same
+  # bytes untouched, so the corruption only shows up on older runtimes.
+  #
+  # Reading fd 0 through a port instead of the standard input device gets the
+  # bytes verbatim on every release, but the port can only have the descriptor
+  # if the emulator has not already claimed it — hence `-noinput`, which
+  # `escript: [emu_args: "-noinput"]` in the worker's mix.exs supplies. Without
+  # it we fall back to the standard device, which is byte-exact from OTP 27 on.
+  defp open_input do
+    case :init.get_argument(:noinput) do
+      {:ok, _} -> {Port.open({:fd, 0, 1}, [:binary, :in, :eof]), ""}
+      _ -> warn_unless_byte_transparent()
+    end
+  end
+
+  defp warn_unless_byte_transparent do
+    release = List.to_string(:erlang.system_info(:otp_release))
+
+    if String.to_integer(release) < 27 do
+      IO.puts(
+        :stderr,
+        "serify: reading stdin through the standard input device on OTP #{release}, " <>
+          "which drops control characters. Add escript: [emu_args: \"-noinput\"] " <>
+          "to mix.exs for byte-exact input."
+      )
+    end
+
+    :stdio
+  end
+
+  defp read_line(:stdio) do
+    case IO.read(:line) do
+      :eof -> :eof
+      {:error, _} = err -> err
+      line -> {line, :stdio}
+    end
+  end
+
+  defp read_line({port, buf}) do
+    case :binary.split(buf, "\n") do
+      [line, rest] ->
+        {line, {port, rest}}
+
+      [^buf] when port == :closed and buf == "" ->
+        :eof
+
+      # Last line, unterminated: hand it over, then report eof on the next call.
+      [^buf] when port == :closed ->
+        {buf, {:closed, ""}}
+
+      [^buf] ->
+        receive do
+          {^port, {:data, data}} -> read_line({port, buf <> data})
+          {^port, :eof} -> read_line({:closed, buf})
+        end
     end
   end
 

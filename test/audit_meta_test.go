@@ -130,6 +130,12 @@ var auditWarnings = []struct {
 		detail: "output aliases model fields: payload",
 		warn:   []string{language.Go, language.Rust},
 	},
+	{
+		format: "deser-unstable",
+		op:     report.OpAuditDeserStability,
+		detail: "deserializer produced different result on repeat call",
+		warn:   language.All,
+	},
 }
 
 func TestAuditWarningsAreReported(t *testing.T) {
@@ -171,13 +177,6 @@ func TestAuditWarningsAreReported(t *testing.T) {
 			}
 		}
 	}
-
-	// deser-unstable is deliberately absent from auditWarnings. Eight languages
-	// raise the warning; python does not, even though its fixture uses the same
-	// call-counter trick as Go's, which does. Whether that is a gap in the
-	// python library's deser-stability check or something about the fixture is
-	// not yet established, so nothing is asserted here rather than freezing
-	// either answer into the suite.
 }
 
 // assertNoAuditOp checks that one audit op did not fire, quoting why the

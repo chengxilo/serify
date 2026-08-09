@@ -139,6 +139,10 @@ jobs:
         if: matrix.language == 'csharp'
         with:
           dotnet-version: '8.0'
+      # OTP is pinned to the oldest release the Elixir library supports, not
+      # the newest: OTP <= 26 reads stdin through a device that eats control
+      # characters, so this pin is what keeps the all_types/escapes case
+      # honest for the Elixir worker. Bumping it drops that coverage.
       - uses: erlef/setup-beam@v1
         if: matrix.language == 'elixir'
         with:
@@ -184,6 +188,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # Pinned to the oldest supported OTP on purpose — see the conformance job.
       - uses: erlef/setup-beam@v1
         with:
           elixir-version: '1.16'

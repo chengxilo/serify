@@ -976,7 +976,7 @@ def _run_loop(resolve: Callable[[str, str], tuple[SerializeFn, DeserializeFn] | 
                 data = encode_field_map(fm, schema)
                 resp = {"id": msg_id, "op": "deserialize", "status": "OK", "data": data}
                 if daudit:
-                    resp["audit"] = audit
+                    resp["audit"] = daudit
                 _emit(resp)
             except Exception as e:
                 _emit({"id": msg_id, "op": "deserialize", "status": "ERROR", "error": str(e)})

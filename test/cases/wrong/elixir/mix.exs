@@ -16,7 +16,7 @@ defmodule WrongWorker.MixProject do
   use Mix.Project
   def project do
     [app: :wrong_worker, version: "0.1.0", elixir: "~> 1.14",
-     escript: [main_module: WrongWorker], deps: deps()]
+     escript: [main_module: WrongWorker, emu_args: "-noinput"], deps: deps()]
   end
   def application, do: [extra_applications: [:logger]]
   defp deps do
