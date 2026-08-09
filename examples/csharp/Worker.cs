@@ -31,26 +31,20 @@ internal static class Program
 {
     private static void Main()
     {
-        Serify.Worker.RunSuite(new Dictionary<string, Dictionary<string, (Func<FieldMap, byte[]>?, Func<byte[], FieldMap>?)>>
+        Serify.Worker.RunSuite(new Dictionary<string, TypeEntry>
         {
-            ["ledger"] = new()
+            ["ledger"] = TypeEntry.Model<LedgerEntry>(new()
             {
-                ["binary"] = (
-                    fm => SerifyModel.FromFieldMap<LedgerEntry>(fm).Marshal(),
-                    data => SerifyModel.ToFieldMap(LedgerEntry.Unmarshal(data))),
-            },
-            ["signals"] = new()
+                ["binary"] = (e => e.Marshal(), LedgerEntry.Unmarshal),
+            }),
+            ["signals"] = TypeEntry.Model<SignalCapture>(new()
             {
-                ["binary"] = (
-                    fm => SerifyModel.FromFieldMap<SignalCapture>(fm).Marshal(),
-                    data => SerifyModel.ToFieldMap(SignalCapture.Unmarshal(data))),
-            },
-            ["notification"] = new()
+                ["binary"] = (c => c.Marshal(), SignalCapture.Unmarshal),
+            }),
+            ["notification"] = TypeEntry.Model<NotificationRecord>(new()
             {
-                ["binary"] = (
-                    fm => SerifyModel.FromFieldMap<NotificationRecord>(fm).Marshal(),
-                    data => SerifyModel.ToFieldMap(NotificationRecord.Unmarshal(data))),
-            },
+                ["binary"] = (r => r.Marshal(), NotificationRecord.Unmarshal),
+            }),
         });
     }
 }

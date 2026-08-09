@@ -42,5 +42,5 @@ internal static class AuditWorker {
     static byte[] UnstableSer(FieldMap fm){var b=Marshal(fm);Array.Resize(ref b,b.Length+1);b[^1]=(byte)unstableCtr++;return b;}
     static FieldMap DuDeser(byte[] d){var fm=Unmarshal(d,true);if(deserUnstableCtr++>0)fm.SetU32("value",fm.GetU32("value")+1);return fm;}
     static FieldMap ImDeser(byte[] d){var fm=Unmarshal(d,true);if(d.Length>0)d[0]^=0xFF;return fm;}
-    static void Main()=>Worker.RunSuite(new(){["audit"]=new(){["clean"]=(CleanSer,CleanDeser),["mutating"]=(MutSer,CleanDeser),["unstable"]=(UnstableSer,CleanDeser),["deser-unstable"]=(CleanSer,DuDeser),["input-mutating"]=(CleanSer,ImDeser)}});
+    static void Main()=>Worker.RunSuite(new(){["audit"]=TypeEntry.Formats(new(){["clean"]=(CleanSer,CleanDeser),["mutating"]=(MutSer,CleanDeser),["unstable"]=(UnstableSer,CleanDeser),["deser-unstable"]=(CleanSer,DuDeser),["input-mutating"]=(CleanSer,ImDeser)})});
 }

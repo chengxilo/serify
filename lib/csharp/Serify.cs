@@ -205,6 +205,91 @@ public sealed class SchemaField
 /// </summary>
 public sealed record SchemaVariant(string Name, SchemaField? Payload);
 
+// TypeEntry - how a worker registers one data type
+
+/// <summary>
+/// The FieldMap-typed pair the run loop calls. Either half may be null, which
+/// says that direction is not supported.
+/// </summary>
+public readonly record struct FormatPair(
+    Func<FieldMap, byte[]>? Serialize,
+    Func<byte[], FieldMap>? Deserialize);
+
+/// <summary>
+/// One registered type, in one of two spellings.
+///
+/// <see cref="Model{M}"/> carries a model class, and the format functions then
+/// take and return that class — the FieldMap never reaches the worker:
+///
+/// <code>
+/// ["ledger"] = TypeEntry.Model&lt;LedgerEntry&gt;(new()
+/// {
+///     ["binary"] = (e => e.Marshal(), LedgerEntry.Unmarshal),
+/// })
+/// </code>
+///
+/// <see cref="Formats"/> is the other path, for a type with no natural class
+/// (the audit fixtures mutate a FieldMap on purpose): the functions take and
+/// return the FieldMap itself.
+///
+/// Unlike the dynamically-typed libraries, telling the two apart here is the
+/// compiler's job, not a shape test at run time — <c>Model</c> and
+/// <c>Formats</c> are separate factories returning separate subclasses, so a
+/// registration serify cannot resolve does not compile. That matters because an
+/// unresolved (type, format) is reported SKIPPED: a lookup that quietly
+/// understands neither shape would yield a green run made entirely of SKIPs.
+/// </summary>
+public abstract class TypeEntry
+{
+    private protected TypeEntry() { }
+
+    /// <summary>Look one format up; null means this type does not implement it.</summary>
+    internal abstract FormatPair? Resolve(string format);
+
+    /// <summary>
+    /// A model, and the formats whose functions speak it. serify converts
+    /// FieldMap &lt;-&gt; model on the way in and out, using the
+    /// <c>[SerifyModel]</c>/<c>[SerifyField]</c> binding on <typeparamref name="M"/>.
+    /// </summary>
+    public static TypeEntry Model<M>(Dictionary<string, (Func<M, byte[]>? Serialize, Func<byte[], M>? Deserialize)> formats)
+        where M : class, new()
+        => new ModelTypeEntry<M>(formats);
+
+    /// <summary>
+    /// The model-less path: the functions take and return the FieldMap itself.
+    /// </summary>
+    public static TypeEntry Formats(Dictionary<string, (Func<FieldMap, byte[]>? Serialize, Func<byte[], FieldMap>? Deserialize)> formats)
+        => new FieldMapTypeEntry(formats);
+}
+
+internal sealed class FieldMapTypeEntry : TypeEntry
+{
+    private readonly Dictionary<string, (Func<FieldMap, byte[]>?, Func<byte[], FieldMap>?)> _formats;
+
+    internal FieldMapTypeEntry(Dictionary<string, (Func<FieldMap, byte[]>?, Func<byte[], FieldMap>?)> formats)
+        => _formats = formats;
+
+    internal override FormatPair? Resolve(string format)
+        => _formats.TryGetValue(format, out var pair) ? new FormatPair(pair.Item1, pair.Item2) : null;
+}
+
+internal sealed class ModelTypeEntry<M> : TypeEntry where M : class, new()
+{
+    private readonly Dictionary<string, (Func<M, byte[]>?, Func<byte[], M>?)> _formats;
+
+    internal ModelTypeEntry(Dictionary<string, (Func<M, byte[]>?, Func<byte[], M>?)> formats)
+        => _formats = formats;
+
+    internal override FormatPair? Resolve(string format)
+    {
+        if (!_formats.TryGetValue(format, out var pair)) return null;
+        var (ser, deser) = pair;
+        return new FormatPair(
+            ser is null ? null : fm => ser(SerifyModel.FromFieldMap<M>(fm)),
+            deser is null ? null : data => SerifyModel.ToFieldMap(deser(data)));
+    }
+}
+
 // Worker - protocol runner
 
 public static class Worker
@@ -374,21 +459,28 @@ public static class Worker
 
     /// <summary>Single-type worker: handles whatever type/format the runner asks for.</summary>
     public static void Run(Func<FieldMap, byte[]> serialize, Func<byte[], FieldMap>? deserialize = null)
-        => RunSuite(new Dictionary<string, Dictionary<string, (Func<FieldMap, byte[]>?, Func<byte[], FieldMap>?)>>(),
-                    (_, _) => (serialize, deserialize));
+        => RunSuite(new Dictionary<string, TypeEntry>(),
+                    (_, _) => new FormatPair(serialize, deserialize));
 
     /// <summary>
-    /// Multi-type worker. A (type, format) that is not registered is reported to the
-    /// runner as SKIPPED rather than failing the run.
+    /// Look one (type, format) up. Null means the worker does not implement it,
+    /// which the run loop reports to the runner as SKIPPED.
+    /// </summary>
+    public static FormatPair? ResolveRegistered(
+        Dictionary<string, TypeEntry> suite, string typeName, string formatName)
+        => suite.TryGetValue(typeName, out var entry) ? entry.Resolve(formatName) : null;
+
+    /// <summary>
+    /// Multi-type worker. <paramref name="suite"/> maps a type name to a
+    /// <see cref="TypeEntry"/> — either <c>TypeEntry.Model&lt;M&gt;</c> or
+    /// <c>TypeEntry.Formats</c>. A (type, format) that is not registered is
+    /// reported to the runner as SKIPPED rather than failing the run.
     /// </summary>
     public static void RunSuite(
-        Dictionary<string, Dictionary<string, (Func<FieldMap, byte[]>?, Func<byte[], FieldMap>?)>> suite,
-        Func<string, string, (Func<FieldMap, byte[]>?, Func<byte[], FieldMap>?)?>? resolve = null)
+        Dictionary<string, TypeEntry> suite,
+        Func<string, string, FormatPair?>? resolve = null)
     {
-        resolve ??= (t, f) =>
-            suite.TryGetValue(t, out var formats) && formats.TryGetValue(f, out var pair)
-                ? pair
-                : null;
+        resolve ??= (t, f) => ResolveRegistered(suite, t, f);
         Func<FieldMap, byte[]>? serialize = null;
         Func<byte[], FieldMap>? deserialize = null;
         Console.InputEncoding  = Encoding.UTF8;

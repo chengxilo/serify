@@ -327,13 +327,13 @@ internal static class HappyWorker
 
     private static void Main()
     {
-        Serify.Worker.RunSuite(new Dictionary<string, Dictionary<string, (Func<FieldMap, byte[]>, Func<byte[], FieldMap>)>>
+        Serify.Worker.RunSuite(new Dictionary<string, TypeEntry>
         {
-            ["all_types"] = new()
+            ["all_types"] = TypeEntry.Formats(new()
             {
                 ["binary"] = (BinarySerialize, BinaryDeserialize),
                 ["json"] = (JsonSerialize, JsonDeserialize),
-            },
+            }),
         });
     }
 }

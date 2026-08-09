@@ -65,9 +65,9 @@ internal static class WrongWorker {
     static FieldMap ErrDeser(byte[] d)=>throw new InvalidOperationException("injected deserialize error");
     static byte[] HangSer(FieldMap fm){Thread.Sleep(3000);return BinarySerialize(fm);}
     static byte[] CrashSer(FieldMap fm){Environment.Exit(3);return null!;}
-    static void Main()=>Worker.RunSuite(new(){["wrong"]=new(){
+    static void Main()=>Worker.RunSuite(new(){["wrong"]=TypeEntry.Formats(new(){
         ["binary"]=(BinarySerialize,BinaryDeserialize),["json"]=(JsonSerialize,JsonDeserialize),
         ["err_ser"]=(ErrSer,BinaryDeserialize),["err_deser"]=(BinarySerialize,ErrDeser),
         ["hang"]=(HangSer,BinaryDeserialize),["crash"]=(CrashSer,BinaryDeserialize),
-    }});
+    })});
 }
