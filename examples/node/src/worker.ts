@@ -26,27 +26,29 @@
  * to the runner as SKIPPED.
  */
 
-import { FieldMap, Serify, runSuite } from '@chengxilo/serify';
+import { runSuite, type } from '@chengxilo/serify';
 
 import { LedgerEntry } from './ledger';
 import { NotificationRecord } from './notification';
 import { SignalCapture } from './signals';
 
 /**
- * One serializer/deserializer pair for a model that carries its own byte
- * layout: FieldMap in, model, bytes out — and back.
+ * The one format each of these models carries: its own byte layout. serify
+ * converts FieldMap <-> model, so marshal/unmarshal speak the model alone.
  */
 function binary<T extends { marshal(): Buffer }>(
   model: { new (): T; unmarshal(data: Buffer): T },
 ) {
-  return {
-    serialize: (fm: FieldMap) => Serify.fromFieldMap(model, fm).marshal(),
-    deserialize: (data: Buffer) => Serify.toFieldMap(model.unmarshal(data)),
-  };
+  return type(model, {
+    binary: {
+      serialize: (m: T) => m.marshal(),
+      deserialize: (data: Buffer) => model.unmarshal(data),
+    },
+  });
 }
 
 runSuite({
-  ledger: { binary: binary(LedgerEntry) },
-  signals: { binary: binary(SignalCapture) },
-  notification: { binary: binary(NotificationRecord) },
+  ledger: binary(LedgerEntry),
+  signals: binary(SignalCapture),
+  notification: binary(NotificationRecord),
 });

@@ -762,7 +762,77 @@ export type SerializeFn   = (fm: FieldMap) => Buffer;
 export type DeserializeFn = (data: Buffer) => FieldMap;
 
 export type FormatPair = { serialize: SerializeFn; deserialize?: DeserializeFn };
-export type Suite = Record<string, Record<string, FormatPair>>;
+
+/** A format whose functions speak the model `M` and never see a FieldMap. */
+export type ModelFormatPair<M> = {
+  serialize: (model: M) => Buffer;
+  deserialize?: (data: Buffer) => M;
+};
+
+/** A model class: default-constructible, which is what `fromFieldMap` needs. */
+export type ModelCtor<M> = { new (): M };
+
+/**
+ * One data type: a model, and the formats whose functions speak it. serify
+ * converts FieldMap <-> model on the way in and out.
+ *
+ *   type('ledger', LedgerEntry, { binary: {
+ *     serialize: (e) => e.marshal(),
+ *     deserialize: (d) => LedgerEntry.unmarshal(d) } })
+ */
+export type TypeEntry<M> = { model: ModelCtor<M>; formats: Record<string, ModelFormatPair<M>> };
+
+/**
+ * A registered type is either a `TypeEntry` carrying a model, or the plain
+ * format -> FormatPair record that workers used before models — which is what a
+ * type with no natural class needs, the audit fixtures being the case in point.
+ */
+export type Registered = TypeEntry<any> | Record<string, FormatPair>;
+export type Suite = Record<string, Registered>;
+
+/** Build a `TypeEntry`; the helper exists so `M` is inferred from the model. */
+export function type<M>(
+  model: ModelCtor<M>,
+  formats: Record<string, ModelFormatPair<M>>,
+): TypeEntry<M> {
+  return { model, formats };
+}
+
+function isTypeEntry(entry: Registered): entry is TypeEntry<any> {
+  return typeof (entry as TypeEntry<any>).model === 'function'
+    && typeof (entry as TypeEntry<any>).formats === 'object';
+}
+
+/**
+ * Look one (type, format) up across both registration spellings.
+ *
+ * Exported so it can be tested without stdin: an unresolved (type, format) is
+ * reported SKIPPED, so a shape this fails to understand yields a *green*
+ * conformance run made entirely of SKIPs, indistinguishable from a worker that
+ * honestly does not implement the type.
+ */
+export function resolveRegistered(
+  suite: Suite,
+  typeName: string,
+  formatName: string,
+): FormatPair | undefined {
+  const entry = suite[typeName];
+  if (entry === undefined) return undefined;
+
+  if (!isTypeEntry(entry)) return (entry as Record<string, FormatPair>)[formatName];
+
+  const fmt = entry.formats[formatName];
+  if (fmt === undefined) return undefined;
+
+  const { model } = entry;
+  const { serialize, deserialize } = fmt;
+  return {
+    serialize: (fm: FieldMap) => serialize(Serify.fromFieldMap(model as any, fm)),
+    deserialize: deserialize
+      ? (data: Buffer) => Serify.toFieldMap(deserialize(data))
+      : undefined,
+  };
+}
 
 /** Single-type worker: handles whatever type/format the runner asks for. */
 export function run(serialize: SerializeFn, deserialize: DeserializeFn): void {
@@ -776,7 +846,7 @@ export function run(serialize: SerializeFn, deserialize: DeserializeFn): void {
 export function runSuite(
   suite: Suite,
   resolve: (type: string, format: string) => FormatPair | undefined =
-    (t, f) => suite[t]?.[f],
+    (t, f) => resolveRegistered(suite, t, f),
 ): void {
   let schema: SchemaField[] = [];
   let auditEnabled = false;
