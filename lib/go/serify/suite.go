@@ -48,6 +48,17 @@ type Format struct {
 
 // Type describes one data type: Model is used for reflection-based field
 // mapping (FieldMap <-> struct); Formats holds named encode/decode pairs.
+//
+// Model is a pointer to the worker's struct, and the format functions then take
+// and return that struct — the FieldMap never reaches the worker. Leaving Model
+// nil is the other path, for a type with no natural struct (the audit fixtures
+// mutate a FieldMap on purpose): the functions must then be exactly
+//
+//	func(*FieldMap) ([]byte, error)   // serializer
+//	func([]byte) (*FieldMap, error)   // deserializer
+//
+// Audit works either way, measured against whichever of the two the worker
+// actually touches.
 type Type struct {
 	Model   any
 	Formats map[string]Format
@@ -139,6 +150,10 @@ func buildSerializer(
 		return nil, nil, fmt.Errorf("expected function, got %T", fn)
 	}
 	fnType := fnVal.Type()
+
+	if model == nil {
+		return buildFieldMapSerializer(fn)
+	}
 
 	modelVal := reflect.ValueOf(model)
 	if modelVal.Kind() != reflect.Pointer {
@@ -250,6 +265,47 @@ func buildSerializer(
 	return serFunc, holder, nil
 }
 
+// buildFieldMapSerializer handles a Type with no Model: the worker's function
+// takes the FieldMap itself. Audit works one layer down from the model path —
+// there is no struct to compare, so mutation and output aliasing are measured
+// against the FieldMap the worker was handed, which is what it can reach.
+func buildFieldMapSerializer(fn any) (func(*FieldMap) ([]byte, error), *serializeAuditHolder, error) {
+	inner, ok := fn.(func(*FieldMap) ([]byte, error))
+	if !ok {
+		return nil, nil, fmt.Errorf(
+			"with no Type.Model the serializer must be func(*FieldMap) ([]byte, error), got %T", fn)
+	}
+
+	holder := &serializeAuditHolder{}
+
+	serFunc := func(fm *FieldMap) ([]byte, error) {
+		var before *FieldMap
+		if holder.Enabled {
+			before = SnapshotFieldMap(fm)
+		}
+
+		b, err := inner(fm)
+		if err != nil {
+			return nil, err
+		}
+
+		if holder.Enabled {
+			holder.LastMutations = CompareFieldMaps(before, fm)
+
+			holder.LastOutputZC = nil
+			if len(b) > 0 {
+				afterClone := SnapshotFieldMap(fm)
+				xorFlip(b)
+				holder.LastOutputZC = CompareFieldMaps(afterClone, fm)
+				xorFlip(b) // restore (also restores any aliased FieldMap memory)
+			}
+		}
+
+		return b, nil
+	}
+	return serFunc, holder, nil
+}
+
 // parseDeserializer wraps a DeserializeFunc into a typed func([]byte)(*FieldMap,error).
 //
 //nolint:gocognit // reflective signature validation: every accepted param/return shape needs its own check
@@ -265,6 +321,15 @@ func parseDeserializer(
 		return nil, fmt.Errorf("expected function, got %T", fn)
 	}
 	fnType := fnVal.Type()
+
+	if model == nil {
+		inner, ok := fn.(func([]byte) (*FieldMap, error))
+		if !ok {
+			return nil, fmt.Errorf(
+				"with no Type.Model the deserializer must be func([]byte) (*FieldMap, error), got %T", fn)
+		}
+		return inner, nil
+	}
 
 	modelVal := reflect.ValueOf(model)
 	if modelVal.Kind() != reflect.Pointer {

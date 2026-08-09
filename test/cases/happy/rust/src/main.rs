@@ -414,13 +414,13 @@ fn main() {
     run_suite(Suite::new()
         .with_type("all_types",
             Type::new()
-                .with_format("binary", Format::new()
-                    .serializer(|fm| AllTypes::from_field_map(fm)?.marshal())
-                    .deserializer(|data| AllTypes::unmarshal(data).map(|a| a.to_field_map())),
+                .with_format("binary", Format::model::<AllTypes>()
+                    .serializer(AllTypes::marshal)
+                    .deserializer(AllTypes::unmarshal),
                 )
-                .with_format("json", Format::new()
-                    .serializer(|fm| Ok(to_json(&AllTypes::from_field_map(fm)?)))
-                    .deserializer(|data| from_json(data).map(|a| a.to_field_map())),
+                .with_format("json", Format::model::<AllTypes>()
+                    .serializer(|a| Ok(to_json(a)))
+                    .deserializer(from_json),
                 ),
         ),
     );

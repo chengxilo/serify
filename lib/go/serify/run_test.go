@@ -598,3 +598,83 @@ func TestRun_FactoryDeserializer(t *testing.T) {
 	mustStatus(t, resps2[1], "deserialize")
 	assert.Equal(t, "123", resps2[1]["data"].(map[string]any)["user_id"], "factory deserialize: got %v", resps2[1]["data"])
 }
+
+// --- Type with no Model: the worker speaks FieldMap directly -----------------
+
+// fieldMapSuite registers "u64rec" without a Model, so the format functions take
+// and return the FieldMap itself — the path a type with no natural struct uses.
+func fieldMapSuite(mutate bool) Suite {
+	return Suite{
+		Types: map[string]Type{
+			"u64rec": {
+				Formats: map[string]Format{
+					"binary": {
+						Serializer: func(fm *FieldMap) ([]byte, error) {
+							v, _ := fm.GetU64("user_id")
+							if mutate {
+								fm.SetU64("user_id", 0)
+							}
+							return binary.LittleEndian.AppendUint64(nil, v), nil
+						},
+						Deserializer: func(b []byte) (*FieldMap, error) {
+							if len(b) < 8 {
+								return nil, errors.New("too short")
+							}
+							fm := NewFieldMap()
+							fm.SetU64("user_id", binary.LittleEndian.Uint64(b[:8]))
+							return fm, nil
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestRun_NoModel_RoundTrip(t *testing.T) {
+	resps := exchange(t, fieldMapSuite(false),
+		`{"op":"bind","schema":`+u64Schema+`,"type":"u64rec","format":"binary"}`,
+		`{"op":"serialize","id":"s1","data":{"user_id":"42"}}`,
+	)
+	require.Len(t, resps, 2, "expected 2 responses, got %d", len(resps))
+	mustStatus(t, resps[1], "serialize")
+
+	resps2 := exchange(t, fieldMapSuite(false),
+		`{"op":"bind","schema":`+u64Schema+`,"type":"u64rec","format":"binary"}`,
+		`{"op":"deserialize","id":"d1","hex":"`+resps[1]["hex"].(string)+`"}`,
+	)
+	mustStatus(t, resps2[1], "deserialize")
+	data := resps2[1]["data"].(map[string]any)
+	assert.Equal(t, "42", data["user_id"], "user_id: got %v", data["user_id"])
+}
+
+// Audit has no struct to compare on this path, so it must fall back to the
+// FieldMap the worker was handed. Without that, a Model-less worker would be
+// silently exempt from mutation detection.
+func TestRun_NoModel_AuditSeesFieldMapMutation(t *testing.T) {
+	resps := exchange(t, fieldMapSuite(true),
+		`{"op":"bind","schema":`+u64Schema+`,"type":"u64rec","format":"binary","audit":true}`,
+		`{"op":"serialize","id":"s1","data":{"user_id":"42"}}`,
+	)
+	require.Len(t, resps, 2, "expected 2 responses, got %d", len(resps))
+	mustStatus(t, resps[1], "serialize")
+
+	audit, ok := resps[1]["audit"].(map[string]any)
+	require.True(t, ok, "serialize response carried no audit block: %v", resps[1])
+	assert.Contains(t, audit, "mutations", "audit did not report the FieldMap mutation: %v", audit)
+}
+
+func TestRun_NoModel_RejectsModelTypedFunc(t *testing.T) {
+	suite := Suite{
+		Types: map[string]Type{
+			"u64rec": {
+				Formats: map[string]Format{
+					"binary": {Serializer: (*u64Record).toBinary},
+				},
+			},
+		},
+	}
+	_, _, err := buildSerializer(suite.Types["u64rec"].Model, suite.Types["u64rec"].Formats["binary"].Serializer, nil)
+	require.Error(t, err, "a model-typed serializer with no Model must not be accepted")
+	assert.Contains(t, err.Error(), "func(*FieldMap) ([]byte, error)", "error should name the required shape: %v", err)
+}

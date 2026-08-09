@@ -175,15 +175,15 @@ fn main() {
             Type::new()
                 .with_format(
                     "binary",
-                    Format::new()
-                        .serializer(|fm| Wrong::from_field_map(fm)?.marshal_binary())
-                        .deserializer(|data| Wrong::unmarshal_binary(data).map(|w| w.to_field_map())),
+                    Format::model::<Wrong>()
+                        .serializer(Wrong::marshal_binary)
+                        .deserializer(Wrong::unmarshal_binary),
                 )
                 .with_format(
                     "json",
-                    Format::new()
-                        .serializer(|fm| Ok(Wrong::from_field_map(fm)?.to_json()))
-                        .deserializer(|data| Wrong::from_json(data).map(|w| w.to_field_map())),
+                    Format::model::<Wrong>()
+                        .serializer(|w| Ok(w.to_json()))
+                        .deserializer(Wrong::from_json),
                 )
                 .with_format(
                     "err_ser",

@@ -33,7 +33,7 @@ mod signals;
 mod telemetry;
 mod wire;
 
-use serify::{run_suite, Format, SerifyModel, Suite, Type};
+use serify::{run_suite, Format, Suite, Type};
 
 use crate::customer::CustomerRecord;
 use crate::ledger::LedgerEntry;
@@ -49,63 +49,51 @@ fn main() {
                 Type::new()
                     .with_format(
                         "binary",
-                        Format::new()
-                            .serializer(|fm| CustomerRecord::from_field_map(fm)?.marshal())
-                            .deserializer(|data| {
-                                CustomerRecord::unmarshal(data).map(|c| c.to_field_map())
-                            }),
+                        Format::model::<CustomerRecord>()
+                            .serializer(CustomerRecord::marshal)
+                            .deserializer(CustomerRecord::unmarshal),
                     )
                     .with_format(
                         "json",
-                        Format::new()
-                            .serializer(|fm| Ok(CustomerRecord::from_field_map(fm)?.to_json()))
-                            .deserializer(|data| {
-                                CustomerRecord::from_json(data).map(|c| c.to_field_map())
-                            }),
+                        Format::model::<CustomerRecord>()
+                            .serializer(|c| Ok(c.to_json()))
+                            .deserializer(CustomerRecord::from_json),
                     ),
             )
             .with_type(
                 "ledger",
                 Type::new().with_format(
                     "binary",
-                    Format::new()
-                        .serializer(|fm| LedgerEntry::from_field_map(fm)?.marshal())
-                        .deserializer(|data| {
-                            LedgerEntry::unmarshal(data).map(|l| l.to_field_map())
-                        }),
+                    Format::model::<LedgerEntry>()
+                        .serializer(LedgerEntry::marshal)
+                        .deserializer(LedgerEntry::unmarshal),
                 ),
             )
             .with_type(
                 "telemetry",
                 Type::new().with_format(
                     "binary",
-                    Format::new()
-                        .serializer(|fm| TelemetryFrame::from_field_map(fm)?.marshal())
-                        .deserializer(|data| {
-                            TelemetryFrame::unmarshal(data).map(|t| t.to_field_map())
-                        }),
+                    Format::model::<TelemetryFrame>()
+                        .serializer(TelemetryFrame::marshal)
+                        .deserializer(TelemetryFrame::unmarshal),
                 ),
             )
             .with_type(
                 "signals",
                 Type::new().with_format(
                     "binary",
-                    Format::new()
-                        .serializer(|fm| SignalCapture::from_field_map(fm)?.marshal())
-                        .deserializer(|data| {
-                            SignalCapture::unmarshal(data).map(|s| s.to_field_map())
-                        }),
+                    Format::model::<SignalCapture>()
+                        .serializer(SignalCapture::marshal)
+                        .deserializer(SignalCapture::unmarshal),
                 ),
             )
             .with_type(
                 "notification",
                 Type::new().with_format(
                     "binary",
-                    Format::new()
-                        .serializer(|fm| NotificationRecord::from_field_map(fm)?.marshal())
-                        .deserializer(|data| {
-                            NotificationRecord::unmarshal(data).map(|n| n.to_field_map())
-                        }),
+                    Format::model::<NotificationRecord>()
+                        .serializer(NotificationRecord::marshal)
+                        .deserializer(NotificationRecord::unmarshal),
                 ),
             ),
     );

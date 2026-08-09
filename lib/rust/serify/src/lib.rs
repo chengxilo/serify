@@ -1325,27 +1325,21 @@ impl Format {
         }
     }
 
-    /// The canonical worker pattern: a model type `T` that maps to and from a
-    /// FieldMap (`from_fm`/`to_fm`, e.g. a `#[derive(SerifyModel)]` spec's
-    /// `from_field_map`/`to_field_map`) and encodes to and from bytes via its
-    /// SDK codec (`encode`/`decode`). serify composes the two halves; the SDK
-    /// codec stays in the worker, since serify is SDK-agnostic.
-    pub fn model<T, FromFm, ToFm, Encode, Decode>(
-        from_fm: FromFm,
-        to_fm: ToFm,
-        encode: Encode,
-        decode: Decode,
-    ) -> Self
-    where
-        FromFm: Fn(&FieldMap) -> Result<T, String> + 'static,
-        ToFm: Fn(&T) -> FieldMap + 'static,
-        Encode: Fn(&T) -> Vec<u8> + 'static,
-        Decode: Fn(&[u8]) -> Result<T, String> + 'static,
-    {
-        Self::pair(
-            move |fm| Ok(encode(&from_fm(fm)?)),
-            move |data| Ok(to_fm(&decode(data)?)),
-        )
+    /// The canonical worker pattern: a format whose functions speak the model
+    /// `M` and never see a FieldMap. serify converts on the way in and out, so
+    /// the worker registers its own codec methods directly:
+    ///
+    /// ```ignore
+    /// Format::model::<AllTypes>()
+    ///     .serializer(AllTypes::marshal)
+    ///     .deserializer(AllTypes::unmarshal)
+    /// ```
+    ///
+    /// `M` needs `#[derive(SerifyModel)]` or a hand-written impl. Use
+    /// [`Format::new`] instead when the type has no natural struct — the audit
+    /// fixtures deliberately work at FieldMap level.
+    pub fn model<M: SerifyModel + 'static>() -> ModelFormat<M> {
+        ModelFormat::new()
     }
 
     pub fn serializer<F>(mut self, f: F) -> Self
@@ -1372,6 +1366,60 @@ impl Default for Format {
     }
 }
 
+/// A [`Format`] under construction whose serializer takes `&M` and whose
+/// deserializer returns `M`; the FieldMap conversion happens on the way in and
+/// out. Build it with [`Format::model`] and hand it to `Type::with_format`,
+/// which takes anything that converts into a `Format`.
+#[cfg(feature = "worker")]
+pub struct ModelFormat<M> {
+    format: Format,
+    _model: std::marker::PhantomData<M>,
+}
+
+#[cfg(feature = "worker")]
+impl<M: SerifyModel + 'static> ModelFormat<M> {
+    fn new() -> Self {
+        Self {
+            format: Format::new(),
+            _model: std::marker::PhantomData,
+        }
+    }
+
+    /// Both directions in one call, mirroring [`Format::pair`].
+    pub fn pair<S, D>(serialize: S, deserialize: D) -> Self
+    where
+        S: Fn(&M) -> Result<Vec<u8>, String> + 'static,
+        D: Fn(&[u8]) -> Result<M, String> + 'static,
+    {
+        Self::new().serializer(serialize).deserializer(deserialize)
+    }
+
+    pub fn serializer<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&M) -> Result<Vec<u8>, String> + 'static,
+    {
+        self.format = self.format.serializer(move |fm| f(&M::from_field_map(fm)?));
+        self
+    }
+
+    pub fn deserializer<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&[u8]) -> Result<M, String> + 'static,
+    {
+        self.format = self
+            .format
+            .deserializer(move |data| Ok(f(data)?.to_field_map()));
+        self
+    }
+}
+
+#[cfg(feature = "worker")]
+impl<M> From<ModelFormat<M>> for Format {
+    fn from(m: ModelFormat<M>) -> Self {
+        m.format
+    }
+}
+
 /// One data type with named formats (each holding an optional serializer and deserializer).
 #[cfg(feature = "worker")]
 pub struct Type {
@@ -1386,8 +1434,9 @@ impl Type {
         }
     }
 
-    pub fn with_format(mut self, name: impl Into<String>, f: Format) -> Self {
-        self.formats.insert(name.into(), f);
+    /// Takes a [`Format`] or a [`ModelFormat`] — anything that converts into one.
+    pub fn with_format(mut self, name: impl Into<String>, f: impl Into<Format>) -> Self {
+        self.formats.insert(name.into(), f.into());
         self
     }
 }
