@@ -30,7 +30,11 @@ var ToolchainProbes = map[string][]string{
 	language.Cpp:    {"g++"},
 	language.CSharp: {"dotnet"},
 	language.Elixir: {"mix"},
-	language.PHP:    {"php", "composer"},
+	// php only. Every php worker.yaml in the repo sets `build: ""`, and the
+	// library is loaded with require_once rather than an autoloader, so
+	// composer never runs — demanding it here made SERIFY_REQUIRE drop php on
+	// machines that could have run it perfectly well.
+	language.PHP: {"php"},
 }
 
 // MissingToolchain returns the first missing binary for the given language,

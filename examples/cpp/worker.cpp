@@ -28,9 +28,6 @@
 #include "notification.hpp"
 #include "signals.hpp"
 
-#include <cstdint>
-#include <vector>
-
 using namespace serify;
 
 int main() {

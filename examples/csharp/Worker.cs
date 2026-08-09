@@ -22,7 +22,6 @@
 // Types this worker does not register (customer, order, telemetry) are reported
 // to the runner as SKIPPED.
 
-using System;
 using System.Collections.Generic;
 using Serify;
 

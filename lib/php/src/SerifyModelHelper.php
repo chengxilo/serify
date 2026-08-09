@@ -17,6 +17,13 @@
 
 namespace Serify;
 
+// Same reason as Type.php: these are this file's own dependencies — the two
+// attributes it reflects on, and the FieldMap it returns — and there is no
+// autoloader in a worker to fetch them.
+require_once __DIR__ . '/FieldMap.php';
+require_once __DIR__ . '/Attributes/SerifyModel.php';
+require_once __DIR__ . '/Attributes/SerifyField.php';
+
 use Serify\Attributes\SerifyModel;
 use Serify\Attributes\SerifyField;
 

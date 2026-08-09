@@ -20,6 +20,12 @@ declare(strict_types=1);
 
 namespace Serify;
 
+// resolve() calls SerifyModelHelper whenever a model is registered, and a
+// worker loads this library with require_once rather than an autoloader — so
+// the model path pulls in what it needs instead of failing at bind time in a
+// worker that required one file too few.
+require_once __DIR__ . '/SerifyModelHelper.php';
+
 /**
  * One data type: a model, and the formats whose functions speak it.
  *
