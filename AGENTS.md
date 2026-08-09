@@ -165,6 +165,45 @@ the payload, N fields → the payload is a struct**; tags are the arm's type nam
 in snake_case. See "`sum` and your own types" in `docs/protocol.md` for the
 full table, and `examples/*/notification.*` for a worked example per language.
 
+### Registering a model with the suite
+
+The binding above says how a type maps to a FieldMap. **Registration** says the
+worker's serialize/deserialize functions speak that type, so the library
+converts on either side and the FieldMap never reaches the worker. Every
+library has it; each spells it the way its type system wants:
+
+| Language | Model path | Model-less path |
+|----------|-----------|-----------------|
+| **Go** | `Type{Model: &T{}, Formats: …}` | `Model: nil` → `func(*FieldMap)` pairs |
+| **Rust** | `Format::model::<M>().serializer(…).deserializer(…)` | `Format::new()` |
+| **Python** | `Type(M, {"binary": Format(ser, deser)})` | `Type(None, …)`, or the plain format dict |
+| **Node** | `type(M, {binary: {serialize, deserialize}})` | the plain format record |
+| **C#** | `TypeEntry.Model<M>(…)` | `TypeEntry.Formats(…)` |
+| **Java** | `TypeEntry.model(M.class, …)` | `TypeEntry.formats(…)` |
+| **C++** | `model_format<M>(marshal, unmarshal)` | a plain `FormatPair` |
+| **Elixir** | `%WorkerLib.Type{model: M, formats: …}` | `model: nil`, or the plain format map |
+| **PHP** | `new Serify\Type(M::class, …)` | `new Type(null, …)`, or the plain format array |
+
+The model-less path is not legacy: a type with no natural struct needs it, and
+the audit fixtures are exactly that — they mutate a FieldMap on purpose.
+
+Two things about *how* the two paths are told apart, because they decide
+whether a language needs a unit test for its resolver:
+
+- **Statically, in Go, Rust, C#, Java and C++** — separate factories, separate
+  types, so a registration serify cannot resolve does not compile.
+- **At run time, in Python, Node, Elixir and PHP** — an `isinstance`/shape
+  check. Those four have unit tests for it (`lib/*/test*`), because an
+  unresolved (type, format) is reported **SKIPPED**: a resolver that
+  understands neither shape yields a *green* run made entirely of SKIPs, which
+  reads exactly like a worker that honestly does not implement the type.
+  Elixir is the sharpest case — a struct *is* a map, so `is_map(%Type{})` is
+  true and the clause order in `resolve_registered/3` is load-bearing.
+
+C++ has its own failure mode instead: `model_format` is a template, so an
+overload nothing calls is never compiled. `lib/cpp/test/model_format_test.cpp`
+exists first of all to name both of them.
+
 ## How a run works (the data flow)
 
 - The `serify` CLI reads a **directory** of case files and auto-detects each worker's language from marker files in its directory. Case files are **YAML** (`.yaml`), loaded by `internal/config` (`loadTypeFile`): each file holds a `fields:` (or `variants:`) section, a `formats:` list, an optional `import:` list for reusable named types, and `cases:`. The type name is the filename (without `.yaml`). Case data is decoded **schema-directed** (`casedata.go`): 64/128-bit integer fields are parsed exactly from their literal text (bare or quoted, any size), and loading rejects unknown fields, bad enum variants, float forms in integer fields, and out-of-range values.
@@ -305,6 +344,24 @@ go test ./test/...                                      # integration + CLI + me
 # Rust workspace (lib + examples). A harmless rlib name-collision warning is expected.
 cargo build --release
 ```
+
+Seven of the nine libraries have unit tests of their own, one CI job each
+(`test-go`, `test-rust`, `test-python`, `test-node`, `test-cpp`, `test-elixir`,
+`test-php`). Each runs with the tooling that language already has, and none
+added a dependency:
+
+```bash
+(cd lib/rust && cargo test)
+(cd lib/python && pytest -q)          # plus: mypy --strict lib/python/serify.py
+npm test                              # node, from the repo root
+(cd lib/elixir && mix deps.get && mix test)
+php lib/php/test/worker_test.php      # no PHPUnit, no composer; exits non-zero on failure
+g++ -O2 -std=c++17 -Ilib/cpp -o /tmp/t lib/cpp/test/model_format_test.cpp && /tmp/t
+```
+
+C# and Java have none: their libraries' testable surface is checked by the
+compiler (see "Registering a model with the suite"), and everything else about
+them is covered by the conformance and meta-test runs.
 
 Notes:
 - The `.schemas/` JSON Schemas are generated from the `fields:`/`variants:` sections of the case files and are **checked in**. Enable the hook that keeps them in sync once per clone: `git config core.hooksPath .githooks`. It regenerates and stages them on any commit that touches a case file or the generator.
