@@ -33,27 +33,14 @@
 
 using namespace serify;
 
-// One (serializer, deserializer) pair for a model that carries its own byte
-// layout: FieldMap in, model, bytes out — and back.
-template <typename Model, std::vector<uint8_t> (*Marshal)(const Model&),
-          Model (*Unmarshal)(const std::vector<uint8_t>&)>
-static FormatPair binary() {
-    return FormatPair{
-        [](const FieldMap& fm) {
-            Model m{};
-            from_field_map(fm, m);
-            return Marshal(m);
-        },
-        [](const std::vector<uint8_t>& data) { return to_field_map(Unmarshal(data)); },
-    };
-}
-
 int main() {
+    // model_format converts FieldMap <-> model around each pair, so marshal and
+    // unmarshal below are the model's own functions, unwrapped.
     SuiteMap suite;
-    suite["ledger"]["binary"] = binary<LedgerEntry, ledger_marshal, ledger_unmarshal>();
-    suite["signals"]["binary"] = binary<SignalCapture, signals_marshal, signals_unmarshal>();
+    suite["ledger"]["binary"] = model_format<LedgerEntry>(ledger_marshal, ledger_unmarshal);
+    suite["signals"]["binary"] = model_format<SignalCapture>(signals_marshal, signals_unmarshal);
     suite["notification"]["binary"] =
-        binary<NotificationRecord, notification_marshal, notification_unmarshal>();
+        model_format<NotificationRecord>(notification_marshal, notification_unmarshal);
     run_suite(suite);
     return 0;
 }

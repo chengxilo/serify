@@ -1045,6 +1045,44 @@ struct FormatPair { SerFn serialize; DeserFn deserialize; };
 // type name -> format name -> pair
 using SuiteMap = std::map<std::string, std::map<std::string, FormatPair>>;
 
+// One format whose functions speak the model M rather than a FieldMap: serify
+// converts around them, using the SERIFY_TO / SERIFY_FROM binding on M.
+//
+//     suite["ledger"]["binary"] = model_format<LedgerEntry>(ledger_marshal,
+//                                                           ledger_unmarshal);
+//
+// Assigning a plain FormatPair is the other path, for a type with no natural
+// struct — the audit fixtures mutate a FieldMap on purpose.
+//
+// The conversion is baked in here, at registration, rather than resolved when
+// the runner binds. That is deliberate and matches rust's Format::model::<M>():
+// with no reflection there is nothing to resolve at run time, and a model whose
+// binding does not compile is a compile error at the registration site, not a
+// (type, format) that silently reports SKIPPED.
+template <typename M, typename Ser, typename Deser>
+FormatPair model_format(Ser serialize, Deser deserialize) {
+    return FormatPair{
+        [serialize](const FieldMap& fm) {
+            return serialize(from_field_map_of(fm, static_cast<const M*>(nullptr)));
+        },
+        [deserialize](const std::vector<uint8_t>& data) {
+            return to_field_map(deserialize(data));
+        },
+    };
+}
+
+// Serialize-only: the runner reports this format's deserialize direction as
+// unsupported rather than skipping the type.
+template <typename M, typename Ser>
+FormatPair model_format(Ser serialize) {
+    return FormatPair{
+        [serialize](const FieldMap& fm) {
+            return serialize(from_field_map_of(fm, static_cast<const M*>(nullptr)));
+        },
+        nullptr,
+    };
+}
+
 // Multi-type worker. A (type, format) that is not registered is reported to the
 // runner as SKIPPED rather than failing the run.
 inline void run_suite(const SuiteMap& suite);
