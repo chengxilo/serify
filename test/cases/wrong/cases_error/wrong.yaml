@@ -24,8 +24,10 @@ fields:
 
 # yaml-language-server: $schema=.schemas/wrong.schema.json
 formats:
-  - err_ser
-  - err_deser
+  - name: err_ser
+    oracle: bytes
+  - name: err_deser
+    oracle: bytes
 
 _langs: &langs
   - go

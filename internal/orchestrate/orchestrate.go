@@ -63,9 +63,10 @@ func RunSuite(
 	var firstErr error
 	for _, ty := range set.Types {
 		for _, format := range ty.Formats {
-			// Resolve the comparison oracle for this format (defaults to bytes).
+			// The oracle is per (type, format): this type declared it, and a
+			// sibling type sharing the format name may have declared the other.
 			fmtOpts := opts
-			fmtOpts.Oracle = set.OracleFor(format)
+			fmtOpts.Oracle = ty.OracleFor(format)
 			if err := runTypeFormat(ctx, set, ty, format, workers, rep, fmtOpts); err != nil {
 				if firstErr == nil {
 					firstErr = err

@@ -140,6 +140,7 @@ func testCasesSet() *config.CasesSet {
 		Types: []*config.CasesFile{{
 			Name:    "thing",
 			Formats: []string{"binary"},
+			Oracles: map[string]string{"binary": config.OracleBytes},
 			Schema:  testSchema(),
 			Cases:   []config.TestCase{{Name: "basic", Data: map[string]any{"x": 1}}},
 		}},
@@ -287,7 +288,7 @@ func TestRunSuite_SemanticOracle_ByteDivergence(t *testing.T) {
 			"other": startStubWorker(t, "other", stubScript("bbbb", `{\"x\":1}`)),
 		}
 		set := testCasesSet()
-		set.Oracles = map[string]string{"binary": oracle}
+		set.Types[0].Oracles = map[string]string{"binary": oracle}
 		rep := newTestReport(set, []string{"ref", "other"})
 		if err := RunSuite(context.Background(), set, workers, rep, Options{TimeoutSec: 5}); err != nil {
 			t.Fatalf("RunSuite: %v", err)
@@ -313,7 +314,7 @@ func TestRunSuite_SemanticOracle_ValueMismatchFails(t *testing.T) {
 		"other": startStubWorker(t, "other", stubScript("bbbb", `{\"x\":1}`)),
 	}
 	set := testCasesSet()
-	set.Oracles = map[string]string{"binary": config.OracleSemantic}
+	set.Types[0].Oracles = map[string]string{"binary": config.OracleSemantic}
 	rep := newTestReport(set, []string{"ref", "other"})
 	if err := RunSuite(context.Background(), set, workers, rep, Options{TimeoutSec: 5}); err != nil {
 		t.Fatalf("RunSuite: %v", err)

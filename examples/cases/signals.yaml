@@ -62,7 +62,8 @@ fields:
   - mode: "enum<idle, active, fault, calibrating>"
 
 formats:
-  - binary
+  - name: binary
+    oracle: bytes
 
 cases:
   # Ordinary values, and deliberately ragged lengths: a worker that reads a

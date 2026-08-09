@@ -37,8 +37,10 @@ fields:
   - langs: list<string>
 
 formats:
-  - binary
-  - json
+  - name: binary
+    oracle: bytes
+  - name: json
+    oracle: bytes
 
 _langs: &langs
   - cpp

@@ -40,8 +40,10 @@ fields:
 
 # yaml-language-server: $schema=.schemas/all_types.schema.json
 formats:
-  - binary
-  - json
+  - name: binary
+    oracle: bytes
+  - name: json
+    oracle: bytes
 
 cases:
   - name: basic

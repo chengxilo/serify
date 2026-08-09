@@ -43,8 +43,10 @@ fields:
 # Serialization formats to test this type with. Each worker is re-initialized
 # once per format; workers that don't implement a format are skipped for it.
 formats:
-  - binary
-  - json
+  - name: binary
+    oracle: bytes
+  - name: json
+    oracle: bytes
 
 cases:
   - name: typical

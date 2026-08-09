@@ -33,7 +33,8 @@ fields:
   - id: uint64
   - name: string
 formats:
-  - binary
+  - name: binary
+    oracle: bytes
 cases:
   - name: alice
     data:
@@ -121,7 +122,8 @@ formats:
 fields:
   - id: uint64
 formats:
-  - binary
+  - name: binary
+    oracle: bytes
 cases:
   - name: alice
     data:
@@ -160,7 +162,8 @@ formats:
 fields:
   - id: uint64
 formats:
-  - xml
+  - name: xml
+    oracle: bytes
 cases:
   - name: alice
     data:
@@ -210,7 +213,8 @@ func TestSchemaGen_ModelineUpdate(t *testing.T) {
 fields:
   - id: uint64
 formats:
-  - binary
+  - name: binary
+    oracle: bytes
 cases:
   - name: one
     data:
@@ -234,7 +238,8 @@ func TestSchemaGen_AllTypeForms(t *testing.T) {
 	// One tested type exercising every serify type form.
 	mustWrite(t, filepath.Join(dir, "all.yaml"), `
 formats:
-  - binary
+  - name: binary
+    oracle: bytes
 fields:
   - u8: uint8
   - u16: uint16

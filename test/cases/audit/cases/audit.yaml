@@ -32,15 +32,24 @@ fields:
   - tags: list<string>
 
 formats:
-  - clean
-  - mutating
-  - value-mutating
-  - zero-copy
-  - list-zero-copy
-  - unstable
-  - deser-unstable
-  - input-mutating
-  - output-zero-copy
+  - name: clean
+    oracle: bytes
+  - name: mutating
+    oracle: bytes
+  - name: value-mutating
+    oracle: bytes
+  - name: zero-copy
+    oracle: bytes
+  - name: list-zero-copy
+    oracle: bytes
+  - name: unstable
+    oracle: bytes
+  - name: deser-unstable
+    oracle: bytes
+  - name: input-mutating
+    oracle: bytes
+  - name: output-zero-copy
+    oracle: bytes
 
 cases:
   - name: basic

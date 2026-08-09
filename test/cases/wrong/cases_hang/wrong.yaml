@@ -23,7 +23,8 @@ fields:
   - langs: list<string>
 
 formats:
-  - hang
+  - name: hang
+    oracle: bytes
 
 _langs: &langs
   - go

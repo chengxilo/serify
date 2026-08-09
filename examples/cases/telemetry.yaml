@@ -42,7 +42,8 @@ fields:
 
 # Binary only: NaN/Inf have no JSON representation.
 formats:
-  - binary
+  - name: binary
+    oracle: semantic
 
 cases:
   - name: nominal

@@ -41,7 +41,8 @@ fields:
   - urgent: bool
 
 formats:
-  - binary
+  - name: binary
+    oracle: bytes
 
 cases:
   # A unit variant: the tag alone, written bare.

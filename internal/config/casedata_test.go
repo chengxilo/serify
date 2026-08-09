@@ -29,7 +29,7 @@ func loadOneCase(t *testing.T, schema, data string) (map[string]any, error) {
 	t.Helper()
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "t.yaml"),
-		"formats: [binary]\nfields:\n"+schema+"cases:\n  - name: c\n    data:\n"+data)
+		"formats:\n  - name: binary\n    oracle: bytes\nfields:\n"+schema+"cases:\n  - name: c\n    data:\n"+data)
 	cf, err := LoadCases(filepath.Join(dir, "t.yaml"))
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func TestCaseData_StructFieldsRecurse(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "wallet.yaml"), "fields:\n  - balance: int128\n")
 	mustWrite(t, filepath.Join(dir, "t.yaml"),
-		"import:\n  - wallet.yaml\nformats: [binary]\n"+
+		"import:\n  - wallet.yaml\nformats:\n  - name: binary\n    oracle: bytes\n"+
 			"fields:\n  - w: wallet\n"+
 			"cases:\n  - name: c\n    data:\n      w: { balance: 1180591620717411303424 }\n")
 	cf, err := LoadCases(filepath.Join(dir, "t.yaml"))

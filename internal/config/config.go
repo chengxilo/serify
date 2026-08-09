@@ -106,6 +106,20 @@ type CasesFile struct {
 	ReferenceLanguage string   // set by the caller (from --ref), not read from the file
 	Schema            []Field
 	Cases             []TestCase // yaml `cases:`
+	// Oracles maps each of Formats to its comparison oracle, declared per type
+	// because map-ness is a property of the *type*, not of the format. `binary`
+	// is shared by types that contain a map<K,V> and types that do not, and the
+	// two want opposite verdicts: the map-free ones are the only place
+	// cross-language byte parity is actually checked, so they must stay on
+	// bytes even when a map-bearing type sharing their format goes semantic.
+	Oracles map[string]string
+}
+
+// OracleFor returns the comparison oracle this type declared for a format.
+// Every (type, format) declares one explicitly — see loadTypeFile — so an
+// unknown format here is a programming error rather than a defaulting case.
+func (cf *CasesFile) OracleFor(format string) string {
+	return cf.Oracles[format]
 }
 
 // CasesSet is a collection of types tested together in one run, sharing a
@@ -113,19 +127,6 @@ type CasesFile struct {
 type CasesSet struct {
 	ReferenceLanguage string
 	Types             []*CasesFile
-	// Oracles maps a format name to its comparison oracle, read from the suite's
-	// _formats.yaml. Nil when the suite declares no registry, in which case every
-	// format falls back to OracleBytes (see OracleFor).
-	Oracles map[string]string
-}
-
-// OracleFor returns the comparison oracle declared for a format, defaulting to
-// OracleBytes when the format is unlisted or the suite has no _formats.yaml.
-func (s *CasesSet) OracleFor(format string) string {
-	if o, ok := s.Oracles[format]; ok {
-		return o
-	}
-	return OracleBytes
 }
 
 // TestIDFmt returns the id for a case within a (type, format) ("type/format/case").
@@ -197,7 +198,7 @@ func loadTypeFile(path string) (*CasesFile, error) {
 		return nil, err
 	}
 	var tmp struct {
-		Formats     []string            `yaml:"formats"`
+		Formats     []FormatSpec        `yaml:"formats"`
 		Import      []string            `yaml:"import"`
 		Fields      []map[string]string `yaml:"fields"`
 		Variants    []map[string]string `yaml:"variants"`
@@ -258,9 +259,31 @@ func loadTypeFile(path string) (*CasesFile, error) {
 		cases[i] = TestCase{Name: rc.Name, Description: rc.Description, Data: data}
 	}
 
+	// Split the declared formats into names (what most callers want) and the
+	// per-format oracle. Declaring the oracle is mandatory: it decides whether a
+	// disagreement between two workers is a failure or is allowed wire freedom,
+	// and defaulting it silently picked that for the author. A bare name leaves
+	// Oracle empty, which is the error below.
+	formats := make([]string, len(tmp.Formats))
+	oracles := make(map[string]string, len(tmp.Formats))
+	for i, f := range tmp.Formats {
+		if f.Oracle == "" {
+			return nil, fmt.Errorf(
+				"%s: format %q must declare an oracle (%q or %q):\n  formats:\n    - name: %s\n      oracle: %s",
+				path, f.Name, OracleBytes, OracleSemantic, f.Name, OracleBytes)
+		}
+		if f.Oracle != OracleBytes && f.Oracle != OracleSemantic {
+			return nil, fmt.Errorf("%s: format %q has unknown oracle %q (want %q or %q)",
+				path, f.Name, f.Oracle, OracleBytes, OracleSemantic)
+		}
+		formats[i] = f.Name
+		oracles[f.Name] = f.Oracle
+	}
+
 	cf := &CasesFile{
 		Name:    name,
-		Formats: tmp.Formats,
+		Formats: formats,
+		Oracles: oracles,
 		Schema:  schema,
 		Cases:   cases,
 	}
@@ -307,18 +330,14 @@ func LoadSuite(dir string) (*CasesSet, error) {
 	}
 	slices.SortFunc(types, func(a, b *CasesFile) int { return cmp.Compare(a.Name, b.Name) })
 
-	specs, err := LoadFormatSpecs(dir)
-	if err != nil {
+	// Load the registry for its own validation only — a stray `oracle:` in it is
+	// an author reaching for the old per-format spelling, and saying so here
+	// beats silently ignoring it. The names it declares are enforced against
+	// each type's formats by `serify schema`.
+	if _, err := LoadFormatsRegistry(dir); err != nil {
 		return nil, err
 	}
-	var oracles map[string]string
-	if specs != nil {
-		oracles = make(map[string]string, len(specs))
-		for _, s := range specs {
-			oracles[s.Name] = s.Oracle
-		}
-	}
-	return &CasesSet{Types: types, Oracles: oracles}, nil
+	return &CasesSet{Types: types}, nil
 }
 
 // scalarAliases maps alternative spellings to their canonical name. Canonical
@@ -435,27 +454,26 @@ const (
 	OracleSemantic = "semantic"
 )
 
-// FormatSpec is one entry in a suite's _formats.yaml registry. In YAML it may be
-// a bare name (oracle defaults to bytes):
+// FormatSpec is one entry in a type file's `formats:` list — the format's name
+// and the oracle its output is judged by:
 //
 //	formats:
-//	  - binary
+//	  - name: binary
+//	    oracle: bytes
 //
-// or a mapping that also picks the comparison oracle:
-//
-//	formats:
-//	  - name: json
-//	    oracle: semantic
+// A bare name still parses (leaving Oracle empty) so the caller can report a
+// missing oracle against the format it belongs to, rather than failing with a
+// YAML type error that names no format at all.
 type FormatSpec struct {
 	Name   string
 	Oracle string
 }
 
-// UnmarshalYAML accepts either a scalar (bare format name, oracle defaults to
-// bytes) or a mapping ({name, oracle}).
+// UnmarshalYAML accepts either a scalar (bare format name — no oracle, which
+// the caller rejects) or a mapping ({name, oracle}).
 func (f *FormatSpec) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind == yaml.ScalarNode {
-		f.Name, f.Oracle = node.Value, OracleBytes
+		f.Name = node.Value
 		return nil
 	}
 	var tmp struct {
@@ -467,9 +485,6 @@ func (f *FormatSpec) UnmarshalYAML(node *yaml.Node) error {
 	}
 	if tmp.Name == "" {
 		return fmt.Errorf("format entry: missing name")
-	}
-	if tmp.Oracle == "" {
-		tmp.Oracle = OracleBytes
 	}
 	f.Name, f.Oracle = tmp.Name, tmp.Oracle
 	return nil
@@ -493,10 +508,12 @@ func loadOptionalYAML[T any](path string) (T, bool, error) {
 	return v, true, nil
 }
 
-// LoadFormatSpecs reads <dir>/_formats.yaml — the suite's declared format
-// universe — and returns each format with its comparison oracle. Returns nil (no
-// registry, no restriction) if the file does not exist.
-func LoadFormatSpecs(dir string) ([]FormatSpec, error) {
+// LoadFormatsRegistry reads <dir>/_formats.yaml — the suite's declared format
+// *universe*, names only. The oracle is not here: it is a property of the
+// (type, format) pair and lives in each type file, because one format name is
+// shared by types that want opposite verdicts (see CasesFile.Oracles). Returns
+// nil (no restriction) if the file does not exist.
+func LoadFormatsRegistry(dir string) ([]string, error) {
 	path := filepath.Join(dir, FormatsRegistryFile)
 	fr, found, err := loadOptionalYAML[formatsRegistryFile](path)
 	if err != nil || !found {
@@ -505,28 +522,14 @@ func LoadFormatSpecs(dir string) ([]FormatSpec, error) {
 	if len(fr.Formats) == 0 {
 		return nil, fmt.Errorf("%s: formats list is empty", path)
 	}
-	for _, f := range fr.Formats {
-		switch f.Oracle {
-		case OracleBytes, OracleSemantic:
-		default:
-			return nil, fmt.Errorf("%s: format %q has unknown oracle %q (want %q or %q)",
-				path, f.Name, f.Oracle, OracleBytes, OracleSemantic)
+	names := make([]string, len(fr.Formats))
+	for i, f := range fr.Formats {
+		if f.Oracle != "" {
+			return nil, fmt.Errorf(
+				"%s: format %q declares an oracle; oracles belong in each type file's formats: list, not the registry",
+				path, f.Name)
 		}
-	}
-	return fr.Formats, nil
-}
-
-// LoadFormatsRegistry reads <dir>/_formats.yaml and returns just the declared
-// format names (see LoadFormatSpecs for the oracle-aware form). Returns nil (no
-// restriction) if the file does not exist.
-func LoadFormatsRegistry(dir string) ([]string, error) {
-	specs, err := LoadFormatSpecs(dir)
-	if err != nil || specs == nil {
-		return nil, err
-	}
-	names := make([]string, len(specs))
-	for i, s := range specs {
-		names[i] = s.Name
+		names[i] = f.Name
 	}
 	return names, nil
 }

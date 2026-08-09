@@ -32,7 +32,8 @@ fields:
   - memo: optional<string>
 
 formats:
-  - binary
+  - name: binary
+    oracle: bytes
 
 cases:
   - name: deposit

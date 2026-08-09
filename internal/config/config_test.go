@@ -258,39 +258,71 @@ func TestParseType_UnknownStillErrors(t *testing.T) {
 	}
 }
 
-// A _formats.yaml may mix bare names (oracle defaults to bytes) with
-// {name, oracle} mappings; LoadSuite exposes the resolution via OracleFor.
-func TestFormatSpecOracle(t *testing.T) {
+// The oracle is per (type, format), not per format. This is the case that
+// forced the move: two types share the format name "binary" and want opposite
+// verdicts — the one holding a map<K,V> compares by value, while the map-free
+// one keeps byte parity, which is the only place cross-language byte agreement
+// is actually checked. Resolving per format could not express this.
+func TestOracleIsPerTypeNotPerFormat(t *testing.T) {
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "_formats.yaml"),
-		"formats:\n  - binary\n  - name: json\n    oracle: semantic\n")
-	mustWrite(t, filepath.Join(dir, "t.yaml"),
-		"fields:\n  - x: uint32\nformats: [binary, json]\ncases:\n  - name: c1\n    data:\n      x: 1\n")
+	mustWrite(t, filepath.Join(dir, "_formats.yaml"), "formats:\n  - binary\n")
+	mustWrite(t, filepath.Join(dir, "withmap.yaml"),
+		"fields:\n  - m: map<string,uint32>\nformats:\n  - name: binary\n    oracle: semantic\n"+
+			"cases:\n  - name: c1\n    data:\n      m: {a: 1}\n")
+	mustWrite(t, filepath.Join(dir, "nomap.yaml"),
+		"fields:\n  - x: uint32\nformats:\n  - name: binary\n    oracle: bytes\n"+
+			"cases:\n  - name: c1\n    data:\n      x: 1\n")
 
 	set, err := LoadSuite(dir)
 	require.NoError(t, err, "LoadSuite: %v", err)
-	got := set.OracleFor("binary")
-	assert.Equal(t, OracleBytes, got, "OracleFor(binary) = %q, want %q (bare name defaults to bytes)", got, OracleBytes)
-	got = set.OracleFor("json")
-	assert.Equal(t, OracleSemantic, got, "OracleFor(json) = %q, want %q", got, OracleSemantic)
-	got = set.OracleFor("unlisted")
-	assert.Equal(t, OracleBytes, got, "OracleFor(unlisted) = %q, want %q (default)", got, OracleBytes)
+
+	byName := map[string]*CasesFile{}
+	for _, ty := range set.Types {
+		byName[ty.Name] = ty
+	}
+	require.Contains(t, byName, "withmap", "withmap type not loaded")
+	require.Contains(t, byName, "nomap", "nomap type not loaded")
+
+	assert.Equal(t, OracleSemantic, byName["withmap"].OracleFor("binary"),
+		"the map-bearing type must resolve binary to semantic")
+	assert.Equal(t, OracleBytes, byName["nomap"].OracleFor("binary"),
+		"the map-free type must keep binary on bytes, sharing the name changes nothing")
 }
 
-func TestFormatSpecOracle_Invalid(t *testing.T) {
+// Declaring the oracle is mandatory. A bare name used to mean "bytes", which
+// chose the verdict for the author silently; it is now a load error naming the
+// format and showing the fix.
+func TestOracleMustBeDeclared(t *testing.T) {
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "_formats.yaml"),
-		"formats:\n  - name: binary\n    oracle: bogus\n")
 	mustWrite(t, filepath.Join(dir, "t.yaml"),
-		"fields:\n  - x: uint32\nformats: [binary]\ncases:\n  - name: c1\n    data:\n      x: 1\n")
+		"fields:\n  - x: uint32\nformats:\n  - binary\ncases:\n  - name: c1\n    data:\n      x: 1\n")
+	_, err := LoadSuite(dir)
+	require.Error(t, err, "a bare format name must not load")
+	assert.Contains(t, err.Error(), "must declare an oracle", "error = %v", err)
+	assert.Contains(t, err.Error(), "binary", "the error must name the offending format; got %v", err)
+}
+
+func TestOracleUnknownValue(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "t.yaml"),
+		"fields:\n  - x: uint32\nformats:\n  - name: binary\n    oracle: bogus\n"+
+			"cases:\n  - name: c1\n    data:\n      x: 1\n")
 	_, err := LoadSuite(dir)
 	require.Error(t, err, "LoadSuite error = %v, want unknown oracle", err)
 	assert.Contains(t, err.Error(), "unknown oracle", "LoadSuite error = %v, want unknown oracle", err)
 }
 
-// With no _formats.yaml at all, every format resolves to bytes.
-func TestOracleFor_NoRegistry(t *testing.T) {
-	set := &CasesSet{}
-	got := set.OracleFor("binary")
-	assert.Equal(t, OracleBytes, got, "OracleFor without registry = %q, want %q", got, OracleBytes)
+// The registry declares the format-name universe only. An oracle there is an
+// author reaching for the old per-format spelling, and is rejected rather than
+// silently ignored — ignoring it would leave them believing they had set it.
+func TestFormatsRegistryRejectsOracle(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "_formats.yaml"),
+		"formats:\n  - name: binary\n    oracle: semantic\n")
+	mustWrite(t, filepath.Join(dir, "t.yaml"),
+		"fields:\n  - x: uint32\nformats:\n  - name: binary\n    oracle: bytes\n"+
+			"cases:\n  - name: c1\n    data:\n      x: 1\n")
+	_, err := LoadSuite(dir)
+	require.Error(t, err, "an oracle in the registry must be rejected")
+	assert.Contains(t, err.Error(), "oracles belong in each type file", "error = %v", err)
 }

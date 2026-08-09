@@ -23,7 +23,8 @@ fields:
 
 # yaml-language-server: $schema=.schemas/wrong.schema.json
 formats:
-  - crash
+  - name: crash
+    oracle: bytes
 
 _langs: &langs
   - go
