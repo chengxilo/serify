@@ -42,27 +42,26 @@ require_once __DIR__ . '/ledger.php';
 require_once __DIR__ . '/notification.php';
 require_once __DIR__ . '/signals.php';
 
-use Serify\FieldMap;
-use Serify\SerifyModelHelper;
+use Serify\Type;
 use Serify\Worker;
 
 /**
- * One [serializer, deserializer] pair for a model that carries its own byte
- * layout: FieldMap in, model, bytes out — and back.
+ * A model that carries its own byte layout, under the one format it speaks.
+ * Registered as a Type, so serify converts FieldMap <-> model around these two
+ * functions and neither of them ever sees a FieldMap.
  *
  * @param class-string $model
- * @return array{callable, callable}
  */
-function binary(string $model): array
+function binary(string $model): Type
 {
-    return [
-        fn(FieldMap $fm): string => SerifyModelHelper::fromFieldMap($fm, $model)->marshal(),
-        fn(string $data): FieldMap => SerifyModelHelper::toFieldMap($model::unmarshal($data)),
-    ];
+    return new Type($model, ['binary' => [
+        fn(object $m): string => $m->marshal(),
+        $model::unmarshal(...),
+    ]]);
 }
 
 Worker::runSuite([
-    'ledger'       => ['binary' => binary(LedgerEntry::class)],
-    'signals'      => ['binary' => binary(SignalCapture::class)],
-    'notification' => ['binary' => binary(NotificationRecord::class)],
+    'ledger'       => binary(LedgerEntry::class),
+    'signals'      => binary(SignalCapture::class),
+    'notification' => binary(NotificationRecord::class),
 ]);

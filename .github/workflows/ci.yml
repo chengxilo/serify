@@ -86,6 +86,22 @@ jobs:
       - name: Unit tests (workerlib)
         run: npm ci && npm test
 
+  # The library has no dependencies and a worker loads it with plain
+  # require_once, so its tests do too — no composer, no PHPUnit. The script
+  # exits non-zero on the first failing assertion.
+  test-php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          # Same as the conformance job: PHP's int is 64-bit, so the library
+          # carries int128 through GMP.
+          extensions: gmp
+      - name: Unit tests (workerlib)
+        run: php lib/php/test/worker_test.php
+
   test-rust:
     runs-on: ubuntu-latest
     steps:

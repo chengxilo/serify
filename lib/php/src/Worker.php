@@ -17,6 +17,11 @@
 
 namespace Serify;
 
+// resolveRegistered() below names Type, and a worker require_once's this
+// library by hand rather than through an autoloader — so Worker.php loads its
+// own dependency instead of making every worker remember a second line.
+require_once __DIR__ . '/Type.php';
+
 /**
  * Worker — NDJSON protocol loop for the serify conformance harness.
  *
@@ -28,14 +33,31 @@ namespace Serify;
  */
 class Worker
 {
-    /** @return array{0: callable, 1: callable}|null */
-    private static function resolveFormat(array $suite, string $type, string $format): ?array
+    /**
+     * Look one (type, format) up across both registration spellings: a Type,
+     * which may carry a model, or the older format -> [serialize, deserialize]
+     * array. Null means the worker does not implement it. '*' matches any
+     * type/format and backs the single-type run() below.
+     *
+     * Public, and separate from runSuite, so it can be tested without stdin: an
+     * unresolved (type, format) is reported SKIPPED, so a registration shape
+     * this silently fails to understand produces a *green* conformance run made
+     * entirely of SKIPs — indistinguishable from a worker that legitimately
+     * does not implement the type.
+     *
+     * @param array<string, Type|array<string, array{0: ?callable, 1: ?callable}>> $suite
+     * @return array{0: ?callable, 1: ?callable}|null
+     */
+    public static function resolveRegistered(array $suite, string $type, string $format): ?array
     {
-        $formats = $suite[$type] ?? $suite['*'] ?? null;
-        if (!is_array($formats)) {
+        $entry = $suite[$type] ?? $suite['*'] ?? null;
+        if ($entry instanceof Type) {
+            return $entry->resolve($format);
+        }
+        if (!is_array($entry)) {
             return null;
         }
-        $pair = $formats[$format] ?? $formats['*'] ?? null;
+        $pair = $entry[$format] ?? $entry['*'] ?? null;
         return is_array($pair) ? $pair : null;
     }
 
@@ -52,10 +74,13 @@ class Worker
     }
 
     /**
-     * Multi-type worker. $suite maps type name -> format name -> [serialize,
-     * deserialize]. A (type, format) that is not registered is reported to the
-     * runner as SKIPPED rather than failing the run. The '*' wildcard matches any
-     * type/format and backs the single-type run() above.
+     * Multi-type worker. $suite maps a type name to a Type — which carries the
+     * model its format functions speak — or to the older format name ->
+     * [serialize, deserialize] array, which still works and is what a type with
+     * no natural class wants. A (type, format) that is not registered is
+     * reported to the runner as SKIPPED rather than failing the run.
+     *
+     * @param array<string, Type|array<string, array{0: ?callable, 1: ?callable}>> $suite
      */
     public static function runSuite(array $suite, array $schema = []): void
     {
@@ -96,7 +121,7 @@ class Worker
                 case 'bind':
                     $schema = self::parseSchemaFields($msg['schema'] ?? []);
                     $auditEnabled = (bool) ($msg['audit'] ?? false);
-                    $pair = self::resolveFormat($suite, (string) ($msg['type'] ?? ''), (string) ($msg['format'] ?? ''));
+                    $pair = self::resolveRegistered($suite, (string) ($msg['type'] ?? ''), (string) ($msg['format'] ?? ''));
                     if ($pair === null) {
                         $serialize = null;
                         $deserialize = null;
