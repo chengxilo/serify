@@ -43,6 +43,25 @@ defmodule WorkerLib do
     defstruct [:tag, value: nil]
   end
 
+  defmodule Type do
+    @moduledoc """
+    One data type: a model, and the formats whose functions speak it.
+
+    `model` is the module the format functions take and return — anything with
+    `from_field_map/1` and `to_field_map/1`, which `use WorkerLib.Serify.Model`
+    generates. serify converts on either side, so the field map never reaches
+    the worker:
+
+        %Type{model: LedgerEntry, formats: %{
+          "binary" => {&LedgerEntry.marshal/1, &LedgerEntry.unmarshal/1}}}
+
+    `model: nil` is the other path, for a type with no natural struct (the
+    audit fixtures mutate a field map on purpose): the functions then take and
+    return the field map itself.
+    """
+    defstruct [:model, formats: %{}]
+  end
+
   # run/2
 
   @doc """
@@ -53,12 +72,53 @@ defmodule WorkerLib do
   end
 
   @doc """
-  Multi-type worker. `suite` maps type name -> format name -> {serialize, deserialize}.
-  A (type, format) that is not registered is reported to the runner as SKIPPED
-  rather than failing the run.
+  Multi-type worker. `suite` maps a type name to a `%WorkerLib.Type{}` — which
+  carries the model its format functions speak — or to the older format name ->
+  `{serialize, deserialize}` map, which still works and is what a type with no
+  natural struct wants. A (type, format) that is not registered is reported to
+  the runner as SKIPPED rather than failing the run.
   """
   def run_suite(suite) do
     loop(suite, open_input(), nil, nil, [], false)
+  end
+
+  @doc """
+  Look one (type, format) up across both registration spellings, returning the
+  field-map-level `{serialize, deserialize}` the run loop calls, or nil. `"*"`
+  matches any type/format and backs the single-type `run/2` above.
+
+  Public, and separate from the run loop, so it can be tested without stdin: an
+  unresolved (type, format) is reported SKIPPED, so a registration shape this
+  silently fails to understand produces a *green* conformance run made entirely
+  of SKIPs — indistinguishable from a worker that honestly does not implement
+  the type. In Elixir that is not a hypothetical: a struct *is* a map, so the
+  `%Type{}` clause below has to come before the `is_map` one or every
+  model-registered type falls through it into a `Map.get(%Type{}, "binary")`
+  that answers nil.
+  """
+  def resolve_registered(suite, type, format) do
+    case Map.get(suite, type) || Map.get(suite, "*") do
+      %Type{} = t -> resolve_type(t, format)
+      formats when is_map(formats) -> Map.get(formats, format) || Map.get(formats, "*")
+      _ -> nil
+    end
+  end
+
+  defp resolve_type(%Type{model: nil, formats: formats}, format) do
+    Map.get(formats, format) || Map.get(formats, "*")
+  end
+
+  defp resolve_type(%Type{model: model, formats: formats}, format) do
+    case Map.get(formats, format) || Map.get(formats, "*") do
+      {ser, deser} ->
+        {
+          fn fm -> fm |> model.from_field_map() |> ser.() end,
+          fn data -> data |> deser.() |> model.to_field_map() end
+        }
+
+      _ ->
+        nil
+    end
   end
 
   defp loop(suite, input, ser, deser, schema, audit_enabled) do
@@ -164,12 +224,7 @@ defmodule WorkerLib do
     schema = parse_schema_fields(Map.get(msg, "schema", []))
     audit_enabled = Map.get(msg, "audit", false)
 
-    formats = Map.get(suite, Map.get(msg, "type", "")) || Map.get(suite, "*")
-
-    pair =
-      if is_map(formats) do
-        Map.get(formats, Map.get(msg, "format", "")) || Map.get(formats, "*")
-      end
+    pair = resolve_registered(suite, Map.get(msg, "type", ""), Map.get(msg, "format", ""))
 
     case pair do
       {ser, deser} ->

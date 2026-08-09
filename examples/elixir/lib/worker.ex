@@ -27,18 +27,19 @@ defmodule Worker do
 
   def main(_args) do
     WorkerLib.run_suite(%{
-      "ledger" => %{"binary" => binary(LedgerEntry)},
-      "signals" => %{"binary" => binary(SignalCapture)},
-      "notification" => %{"binary" => binary(NotificationRecord)}
+      "ledger" => binary(LedgerEntry),
+      "signals" => binary(SignalCapture),
+      "notification" => binary(NotificationRecord)
     })
   end
 
-  # One {serialize, deserialize} pair for a model that carries its own byte
-  # layout: field map in, model, bytes out — and back.
+  # A model that carries its own byte layout, under the one format it speaks.
+  # Registered as a %Type{}, so serify converts field map <-> model around
+  # marshal/unmarshal and neither of them ever sees a field map.
   defp binary(model) do
-    {
-      fn fm -> fm |> model.from_field_map() |> model.marshal() end,
-      fn data -> data |> model.unmarshal() |> model.to_field_map() end
+    %WorkerLib.Type{
+      model: model,
+      formats: %{"binary" => {&model.marshal/1, &model.unmarshal/1}}
     }
   end
 end

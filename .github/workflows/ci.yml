@@ -86,6 +86,21 @@ jobs:
       - name: Unit tests (workerlib)
         run: npm ci && npm test
 
+  test-elixir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Same pair as the other Elixir jobs, for one toolchain across the repo.
+      # Unlike theirs, this pin is not load-bearing: these tests never touch
+      # stdin, so they do not exercise the OTP 26 input device.
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.16'
+          otp-version: '26'
+      - name: Unit tests (workerlib)
+        working-directory: lib/elixir
+        run: mix deps.get && mix test
+
   # The library has no dependencies and a worker loads it with plain
   # require_once, so its tests do too — no composer, no PHPUnit. The script
   # exits non-zero on the first failing assertion.
