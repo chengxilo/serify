@@ -145,7 +145,7 @@ using FieldValue = std::variant<
 // HashMap, C# Dictionary, Python dict). This was a std::map only because the
 // protocol used to require workers to emit map entries in UTF-8 key order, and
 // std::map handed that over for free — so C++ satisfied a rule it never had to
-// implement. That rule is gone (docs/protocol.md § Maps: workers do not sort),
+// implement. That rule is gone (docs/protocol.md § Maps: the format decides),
 // and with it the reason to impose an ordering the type does not have. A worker
 // whose format really is canonical over maps now sorts explicitly, the same as
 // every other language has always had to.

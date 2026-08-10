@@ -348,27 +348,37 @@ decodes each worker's output (checks the worker's **serializer**), and each work
 decodes the reference's output (checks its **deserializer** — the deserialize round
 below). No byte equality is required.
 
-### Maps: workers do not sort
+### Maps: the format decides, not serify
 
-**A worker must not sort map entries.** It emits them in whatever order its own
-map type yields, and a type holding a `map<K,V>` declares `oracle: semantic` so
-the decoded value is compared instead of the bytes.
+A `map<K,V>` is unordered, so entry order is a property of the **format**, and
+the `oracle:` declaration is where the format says which it is. Both are
+first-class:
 
-This used to be the opposite. The `bytes` oracle demanded **ascending by the
-key's UTF-8 bytes**, because byte-parity across languages is otherwise
-impossible for an unordered value. The cost was paid by every worker author:
-`map<K,V>` was the one type whose serialization required implementing a
-collation the language's own map does not have. In UTF-16 languages
-(JavaScript, Java, C#) the native string comparator is *wrong* for it — it
-orders by UTF-16 code unit, placing astral-plane keys (≥ U+10000) before keys in
-U+E000–U+FFFF, the reverse of UTF-8 order — so each of those workers grew a
-hand-written `byteCompare`. Requiring a canonical order for a value the type
-system says is unordered was the wrong trade.
+| The format is… | Declare | The worker |
+|----------------|---------|-----------|
+| canonical over maps — its spec fixes entry order | `oracle: bytes` | sorts, explicitly, and every worker agrees byte-for-byte |
+| not canonical — entry order is free | `oracle: semantic` | emits its own map's order and never sorts |
 
-A format that genuinely *is* canonical over maps (one whose spec fixes entry
-order) can still declare `oracle: bytes` for that type and sort. The point is
-that serify no longer imposes it: the declaration says which world the type
-lives in, and nothing is silently assumed.
+`test/cases/happy/all_types` carries the same data under both: `binary` and
+`json` are canonical and sorted; `binary_unordered` is the identical layout with
+the sort removed. Flipping the latter to `bytes` fails across the languages
+immediately, which is what makes the pair a check on the oracles themselves.
+
+**serify no longer imposes a collation.** It used to: the `bytes` oracle
+demanded *ascending by the key's UTF-8 bytes* for every map, everywhere. That
+made `map<K,V>` the one type whose serialization required implementing an order
+the language's own map does not have. In UTF-16 languages (JavaScript, Java, C#)
+the native string comparator is *wrong* for it — it orders by UTF-16 code unit,
+placing astral-plane keys (≥ U+10000) before keys in U+E000–U+FFFF, the reverse
+of UTF-8 order — so each of those workers grew a hand-written `byteCompare` that
+existed for no other reason.
+
+If you do declare `bytes` over a map, sort on the key's **UTF-8 bytes**, not the
+language's default string comparator, for exactly that reason. And do not reach
+for an ordered container to get it for free: the C++ library held map values in
+a `std::map` for years purely because the old rule made that convenient, which
+left it satisfying a contract it had never actually implemented. It is a
+`std::unordered_map` now, and its canonical formats sort in the open.
 
 ## Type system
 
