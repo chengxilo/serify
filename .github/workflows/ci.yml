@@ -141,6 +141,23 @@ jobs:
         run: |
           cargo fmt --all --check
           cargo clippy --all-targets --all-features -- -D warnings
+      # The four fixture workers each declare their own empty [workspace], so
+      # that their `worker` binaries do not collide with the example worker in
+      # the root workspace. The side effect is that the step above has never
+      # seen them: they were the only Rust in the repo outside any lint.
+      #
+      # clippy only, deliberately — no `cargo fmt --check`. These workers are
+      # hand-aligned so a byte layout reads as a column (`uint16:     u16,`),
+      # and rustfmt would flatten all of it. Same reasoning AGENTS.md gives for
+      # applying gofmt to the Go tree but not to the example workers.
+      - name: clippy (standalone fixture workers)
+        run: |
+          for d in test/cases/audit/rust test/cases/happy/rust \
+                   test/cases/invalid_schema/rust test/cases/wrong/rust; do
+            echo "::group::$d"
+            (cd "$d" && cargo clippy --all-targets --all-features -- -D warnings)
+            echo "::endgroup::"
+          done
       - name: cargo test (workerlib)
         working-directory: lib/rust
         run: cargo test

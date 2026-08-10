@@ -104,10 +104,12 @@ func TestCLI_KnownFailures(t *testing.T) {
 // TestCLI_Run_TimeoutOnHungWorker verifies that --timeout kills a hung worker.
 // The hang format sleeps 3 s; --timeout 1 ensures the race is always won by timeout.
 //
-// Go and Rust only, on purpose. --timeout also bounds the start-up ping, and a
-// second is not enough for the JVM, the CLR or the BEAM to answer it: the run
-// would die with "failed to ping csharp worker" before writing a CSV. What is
-// under test is the runner's timeout handling, and one hung worker proves that.
+// Go and Rust only, on purpose — though no longer out of necessity. --timeout
+// used to bound the start-up ping too, so `--timeout 1` killed the JVM, the CLR
+// and the BEAM before they could answer it; start-up now has its own budget
+// (--startup-timeout), so the other seven would survive. They are still left
+// out because they buy nothing: what is under test is the runner's timeout
+// handling, and one hung worker proves that in a fraction of the runtime.
 var hang = wrong.With(language.Go, language.Rust)
 
 func TestCLI_Run_TimeoutOnHungWorker(t *testing.T) {

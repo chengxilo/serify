@@ -222,6 +222,10 @@ impl AllTypes {
 
         let status = status_name(read_bytes!(1)[0])?;
 
+        if p != data.len() {
+            return Err(format!("trailing bytes: consumed {p} of {}", data.len()));
+        }
+
         Ok(Self {
             uint8, uint16, uint32, uint64,
             int8, int16, int32, int64,
@@ -265,7 +269,7 @@ fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
         }
     }
     let s = s.as_bytes();
-    if s.len() % 4 != 0 { return Err("base64 length not a multiple of 4".into()); }
+    if !s.len().is_multiple_of(4) { return Err("base64 length not a multiple of 4".into()); }
     let mut out = Vec::with_capacity(s.len() / 4 * 3);
     for chunk in s.chunks(4) {
         let c2pad = chunk[2] == b'=';

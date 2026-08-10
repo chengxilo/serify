@@ -61,6 +61,8 @@ Examples:
 	f.BoolVar(&opts.buildOnly, "build-only", false, "Build workers but do not run tests")
 	f.BoolVar(&opts.noBuild, "no-build", false, "Skip build step")
 	f.IntVar(&opts.timeoutSec, "timeout", 10, "Per-request worker timeout in seconds")
+	f.IntVar(&opts.startupTimeoutSec, "startup-timeout", 60,
+		"Timeout in seconds for a worker's start-up ping (separate from --timeout: a cold runtime start is not a slow response)")
 	f.StringVar(&opts.outputFmt, "output", "table", "Output format: table | json | junit")
 	f.StringVar(&opts.csvPath, "csv", "", "Also write the full results to this CSV file")
 	f.StringVar(
@@ -87,17 +89,18 @@ Examples:
 }
 
 type runOpts struct {
-	casesFile     string
-	refLang       string
-	fullMatrix    bool
-	buildOnly     bool
-	noBuild       bool
-	timeoutSec    int
-	outputFmt     string
-	csvPath       string
-	knowFDir      string
-	expectSkipDir string
-	audit         bool
+	casesFile         string
+	refLang           string
+	fullMatrix        bool
+	buildOnly         bool
+	noBuild           bool
+	timeoutSec        int
+	startupTimeoutSec int
+	outputFmt         string
+	csvPath           string
+	knowFDir          string
+	expectSkipDir     string
+	audit             bool
 }
 
 func (o runOpts) validate() error {
@@ -108,6 +111,9 @@ func (o runOpts) validate() error {
 	}
 	if o.timeoutSec <= 0 {
 		return fmt.Errorf("--timeout must be > 0 (got %d)", o.timeoutSec)
+	}
+	if o.startupTimeoutSec <= 0 {
+		return fmt.Errorf("--startup-timeout must be > 0 (got %d)", o.startupTimeoutSec)
 	}
 	if o.buildOnly && o.noBuild {
 		return errors.New("--build-only and --no-build are mutually exclusive")
@@ -146,7 +152,7 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 		return nil
 	}
 
-	workers, err := startWorkers(ctx, workerInfos, opts.timeoutSec)
+	workers, err := startWorkers(ctx, workerInfos, opts.startupTimeoutSec)
 	if err != nil {
 		return err
 	}
@@ -248,10 +254,20 @@ func detectAndBuild(workerDirs []string, noBuild bool) ([]*builder.WorkerInfo, e
 	return infos, nil
 }
 
+// startWorkers launches every worker and completes its ping handshake, bounded
+// by --startup-timeout rather than --timeout.
+//
+// The two are separate because they measure different things. --timeout asks
+// "is this worker answering requests promptly", which is a property of the
+// worker's code. Coming up is a property of its *runtime*: `dotnet run -c
+// Release` has to restore and JIT before the program's first statement, and on
+// a cold machine that alone can exceed a per-request budget that is otherwise
+// generous. Sharing one number meant a 10s default either false-failed csharp
+// on start-up or blunted hang detection everywhere to accommodate it.
 func startWorkers(
 	ctx context.Context,
 	infos []*builder.WorkerInfo,
-	timeoutSec int,
+	startupTimeoutSec int,
 ) (map[string]*worker.Worker, error) {
 	workers := make(map[string]*worker.Worker, len(infos))
 	for _, info := range infos {
@@ -259,7 +275,7 @@ func startWorkers(
 			Dir:      info.Dir,
 			RunCmd:   info.Manifest.Run,
 			Language: info.Language,
-		}, timeoutSec)
+		}, startupTimeoutSec)
 		if err != nil {
 			for _, w := range workers {
 				_ = w.Stop()
