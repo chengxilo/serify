@@ -104,9 +104,10 @@ func TestCLI_RunCSVAndTable(t *testing.T) {
 	assert.Contains(t, tableOut, "all_types/basic", "table")
 }
 
-// TestCLI_RunWithoutRef: `run` without --ref exits non-zero with a clear message
-// that --ref is required. (The old late-check message "reference language \"\""
-// not among provided workers" has been replaced by an early validate() check.)
+// TestCLI_RunWithoutRef: --ref is optional when the suite declares its own
+// reference_language, which every fixture here does. The flag is an override,
+// not a requirement — see TestCLI_Run_FlagValidation/missing_ref for the case
+// where neither is present.
 func TestCLI_RunWithoutRef(t *testing.T) {
 	requireWorkers(t, happy.langs...)
 	out, code := testutil.RunSerify(t, slices.Concat(
@@ -116,8 +117,8 @@ func TestCLI_RunWithoutRef(t *testing.T) {
 			"--no-build",
 		},
 		happy.WorkerPaths())...)
-	require.NotEqual(t, 0, code, "expected non-zero exit, got 0\n%s", out)
-	assert.Contains(t, out, "--ref is required and must name one of the worker languages", "ref-missing")
+	require.Equal(t, 0, code, "run without --ref should use the suite's reference_language\n%s", out)
+	assert.Contains(t, out, "PASSED:", "expected a completed run\n%s", out)
 }
 
 // TestCLI_CasesMustDeclareFormats: a tested type with no formats is rejected.

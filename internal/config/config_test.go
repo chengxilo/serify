@@ -265,7 +265,7 @@ func TestParseType_UnknownStillErrors(t *testing.T) {
 // is actually checked. Resolving per format could not express this.
 func TestOracleIsPerTypeNotPerFormat(t *testing.T) {
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "_formats.yaml"), "formats:\n  - binary\n")
+	mustWrite(t, filepath.Join(dir, "_config.yaml"), "formats:\n  - binary\n")
 	mustWrite(t, filepath.Join(dir, "withmap.yaml"),
 		"fields:\n  - m: map<string,uint32>\nformats:\n  - name: binary\n    oracle: semantic\n"+
 			"cases:\n  - name: c1\n    data:\n      m: {a: 1}\n")
@@ -312,12 +312,12 @@ func TestOracleUnknownValue(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown oracle", "LoadSuite error = %v, want unknown oracle", err)
 }
 
-// The registry declares the format-name universe only. An oracle there is an
+// _config.yaml declares the format-name universe only. An oracle there is an
 // author reaching for the old per-format spelling, and is rejected rather than
 // silently ignored — ignoring it would leave them believing they had set it.
-func TestFormatsRegistryRejectsOracle(t *testing.T) {
+func TestSuiteConfigRejectsOracle(t *testing.T) {
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "_formats.yaml"),
+	mustWrite(t, filepath.Join(dir, "_config.yaml"),
 		"formats:\n  - name: binary\n    oracle: semantic\n")
 	mustWrite(t, filepath.Join(dir, "t.yaml"),
 		"fields:\n  - x: uint32\nformats:\n  - name: binary\n    oracle: bytes\n"+

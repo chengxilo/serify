@@ -12,10 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Format registry for this suite. Every case file's `formats:` must pick from
-# this list; `serify schema` enforces it and bakes it into the generated
-# schemas as the enum. Add new worker-supported formats here first.
-# (The "_" prefix keeps this file out of case-file loading.)
+# Suite-wide configuration. (The "_" prefix keeps this file out of case-file
+# loading.)
+#
+# reference_language is the worker that owns the byte layouts every other worker
+# is compared against. It lives here because it is a property of the cases, not
+# of the command line — `serify run --cases examples/cases …` no longer has to
+# repeat it. --ref still overrides, for a run that wants a different reference.
+#
+# formats is the universe every case file's `formats:` must pick from; `serify
+# schema` enforces it and bakes it into the generated schemas as the enum. Add
+# new worker-supported formats here first.
 #
 # Names only. The comparison oracle is NOT declared here: it belongs to the
 # (type, format) pair and lives in each type file's `formats:` list, because one
@@ -25,6 +32,8 @@
 # file is a load error rather than being silently ignored.
 #
 # See docs/protocol.md § Comparison oracles.
+reference_language: go
+
 formats:
   - binary
   - json

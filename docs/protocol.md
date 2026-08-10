@@ -326,21 +326,42 @@ own byte encoding.
 
 ## Comparison oracles
 
-How a worker's serialize output is judged is a property of the **format**, declared
-in the suite's optional `<cases>/_formats.yaml` registry. Each format picks one of
-two oracles; the default is `bytes`.
+How a worker's serialize output is judged is declared per **(type, format)**, in
+the type's own `formats:` list. Declaring it is **mandatory** — there is no
+default, because the choice decides whether a disagreement between two workers
+is a failure or is allowed wire freedom, and that is not something a file should
+pick silently.
 
 ```yaml
-# _formats.yaml
+# customer.yaml — holds a map<K,V>, so entry order is free
 formats:
-  - binary            # bare name ⇒ oracle: bytes
-  - name: wire_json   # object form opts into a different oracle
+  - name: binary
     oracle: semantic
+
+# ledger.yaml — no map; byte parity across all nine languages
+formats:
+  - name: binary
+    oracle: bytes
+```
+
+Note that both files name `binary` and resolve it differently. The oracle is a
+property of the *pair*, not of the format name: one type holding a map wants
+`semantic` for a format that a map-free sibling needs on `bytes`. A suite-level
+`oracle:` could not express that, and declaring one in `_config.yaml` is an
+error rather than a silently-ignored setting.
+
+The suite's `<cases>/_config.yaml` declares only the format-name *universe*
+every type must pick from (plus `reference_language`):
+
+```yaml
+# _config.yaml
+reference_language: go
+formats: [binary, json]
 ```
 
 | Oracle | How the verdict is reached | Use it for |
 |--------|----------------------------|------------|
-| `bytes` (default) | The worker's serialized bytes are compared **byte-for-byte** against the reference worker's. | Canonical/deterministic formats, where the exact wire layout is the contract (a wire protocol whose bytes are hashed, signed, framed, or stored). |
+| `bytes` | The worker's serialized bytes are compared **byte-for-byte** against the reference worker's. | Canonical/deterministic formats, where the exact wire layout is the contract (a wire protocol whose bytes are hashed, signed, framed, or stored). |
 | `semantic` | The reference worker **deserializes the worker's bytes** and the decoded value is compared to the expected case data (order-insensitive for maps). | Non-canonical formats whose serialization is deliberately unordered (e.g. protobuf: map-entry and field order unspecified), where byte comparison would raise false positives. |
 
 Under `semantic`, the two directions together give full conformance: the reference

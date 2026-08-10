@@ -56,7 +56,7 @@ Examples:
 
 	f := cmd.Flags()
 	f.StringVar(&opts.casesFile, "cases", "cases", "Path to the directory of per-type test case files")
-	f.StringVar(&opts.refLang, "ref", "", "Reference language to compare other workers against")
+	f.StringVar(&opts.refLang, "ref", "", "Reference language to compare against (overrides the suite's reference_language)")
 	f.BoolVar(&opts.fullMatrix, "full-matrix", false, "Run N×N cross-language deserialization matrix")
 	f.BoolVar(&opts.buildOnly, "build-only", false, "Build workers but do not run tests")
 	f.BoolVar(&opts.noBuild, "no-build", false, "Skip build step")
@@ -112,9 +112,6 @@ func (o runOpts) validate() error {
 	if o.buildOnly && o.noBuild {
 		return errors.New("--build-only and --no-build are mutually exclusive")
 	}
-	if o.refLang == "" && !o.buildOnly {
-		return errors.New("--ref is required and must name one of the worker languages")
-	}
 	return nil
 }
 
@@ -127,7 +124,16 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 	if err != nil {
 		return fmt.Errorf("load cases: %w", err)
 	}
-	set.ReferenceLanguage = opts.refLang
+	// --ref overrides whatever the suite declared; a suite that declares one
+	// makes the flag optional rather than obsolete, since a run may legitimately
+	// want to compare against a different worker.
+	if opts.refLang != "" {
+		set.ReferenceLanguage = opts.refLang
+	}
+	if set.ReferenceLanguage == "" && !opts.buildOnly {
+		return fmt.Errorf("no reference language: pass --ref, or declare reference_language in %s/%s",
+			opts.casesFile, config.SuiteConfigFile)
+	}
 
 	workerInfos, err := detectAndBuild(workerDirs, opts.noBuild)
 	if err != nil {

@@ -119,7 +119,6 @@ func TestCLI_Run_FlagValidation(t *testing.T) {
 			[]string{"run", "--cases", happy.CasePath(), "--build-only", "--no-build", happy.WorkerPaths()[0]},
 			"mutually exclusive",
 		},
-		{"missing ref", []string{"run", "--cases", happy.CasePath(), happy.WorkerPaths()[0]}, "--ref is required"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -128,6 +127,20 @@ func TestCLI_Run_FlagValidation(t *testing.T) {
 			assert.Contains(t, out, tt.wantSub, tt.name)
 		})
 	}
+
+	// A reference language has to come from somewhere: --ref, or the suite's
+	// _config.yaml. Every fixture in this repo declares one, so proving the
+	// no-reference error still fires needs a suite that does not.
+	t.Run("no reference anywhere", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "t.yaml"), []byte(
+			"fields:\n  - x: uint32\nformats:\n  - name: binary\n    oracle: bytes\n"+
+				"cases:\n  - name: c1\n    data:\n      x: 1\n"), 0644))
+		out, code := testutil.RunSerify(t, "run", "--cases", dir, happy.WorkerPaths()[0])
+		require.NotEqual(t, 0, code, "expected non-zero exit, got 0\n%s", out)
+		assert.Contains(t, out, "no reference language", out)
+		assert.Contains(t, out, "_config.yaml", "the error should name the file that could declare it\n%s", out)
+	})
 }
 
 // TestCLI_Run_MalformedCases exercises error paths for bad case files.

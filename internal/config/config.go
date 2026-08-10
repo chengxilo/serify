@@ -103,7 +103,7 @@ type Field struct {
 type CasesFile struct {
 	Name              string   // type name (the worker bind "type"); the filename without .yaml
 	Formats           []string // serialization formats to test this type with (yaml `formats:`)
-	ReferenceLanguage string   // set by the caller (from --ref), not read from the file
+	ReferenceLanguage string   // set by the caller (--ref, or the suite _config.yaml)
 	Schema            []Field
 	Cases             []TestCase // yaml `cases:`
 	// Oracles maps each of Formats to its comparison oracle, declared per type
@@ -330,14 +330,16 @@ func LoadSuite(dir string) (*CasesSet, error) {
 	}
 	slices.SortFunc(types, func(a, b *CasesFile) int { return cmp.Compare(a.Name, b.Name) })
 
-	// Load the registry for its own validation only — a stray `oracle:` in it is
-	// an author reaching for the old per-format spelling, and saying so here
-	// beats silently ignoring it. The names it declares are enforced against
-	// each type's formats by `serify schema`.
-	if _, err := LoadFormatsRegistry(dir); err != nil {
+	// The suite's own config: its reference language, and the format-name
+	// universe. Loaded here for its validation too — a stray `oracle:` in it is
+	// an author reaching for the old per-format spelling, and saying so beats
+	// silently ignoring it. The names it declares are enforced against each
+	// type's formats by `serify schema`.
+	sc, err := LoadSuiteConfig(dir)
+	if err != nil {
 		return nil, err
 	}
-	return &CasesSet{Types: types}, nil
+	return &CasesSet{Types: types, ReferenceLanguage: sc.ReferenceLanguage}, nil
 }
 
 // scalarAliases maps alternative spellings to their canonical name. Canonical
@@ -433,13 +435,24 @@ func LoadWorkerManifest(dir string) (*WorkerManifest, error) {
 	return &m, nil
 }
 
-// FormatsRegistryFile is the optional per-suite format registry. It is
-// "_"-prefixed so LoadSuite and schema generation skip it as a case file.
-const FormatsRegistryFile = "_formats.yaml"
+// SuiteConfigFile is the optional per-suite configuration: the format-name
+// universe every case file must pick from, and the reference language the run
+// compares against. It is "_"-prefixed so LoadSuite and schema generation skip
+// it as a case file.
+const SuiteConfigFile = "_config.yaml"
 
-type formatsRegistryFile struct {
-	Formats []FormatSpec `yaml:"formats"`
+type suiteConfigFile struct {
+	// ReferenceLanguage is the suite's own answer to --ref. A suite knows which
+	// of its workers owns the byte layout — that is a property of the cases, not
+	// of the command line — so declaring it here means the run command stops
+	// having to repeat it. --ref still wins when passed.
+	ReferenceLanguage string       `yaml:"reference_language"`
+	Formats           []FormatSpec `yaml:"formats"`
 }
+
+// suiteConfigKeys is every key _config.yaml accepts. A misspelling is a load
+// error rather than a silently-ignored setting, the same rule case files follow.
+var suiteConfigKeys = map[string]bool{"reference_language": true, "formats": true}
 
 // Oracle names the comparison strategy applied to a format's serialize output.
 const (
@@ -508,30 +521,71 @@ func loadOptionalYAML[T any](path string) (T, bool, error) {
 	return v, true, nil
 }
 
-// LoadFormatsRegistry reads <dir>/_formats.yaml — the suite's declared format
-// *universe*, names only. The oracle is not here: it is a property of the
-// (type, format) pair and lives in each type file, because one format name is
-// shared by types that want opposite verdicts (see CasesFile.Oracles). Returns
-// nil (no restriction) if the file does not exist.
+// SuiteConfig is <dir>/_config.yaml, already validated. A suite with no such
+// file yields the zero value: no format restriction, no declared reference.
+type SuiteConfig struct {
+	ReferenceLanguage string
+	// Formats is the declared format-name *universe*, names only. The oracle is
+	// not here: it is a property of the (type, format) pair and lives in each
+	// type file, because one format name is shared by types that want opposite
+	// verdicts (see CasesFile.Oracles). Nil means the suite declares no
+	// restriction.
+	Formats []string
+}
+
+// LoadSuiteConfig reads and validates <dir>/_config.yaml. A missing file is not
+// an error — the suite simply declares nothing.
+func LoadSuiteConfig(dir string) (SuiteConfig, error) {
+	path := filepath.Join(dir, SuiteConfigFile)
+
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return SuiteConfig{}, nil
+	}
+	if err != nil {
+		return SuiteConfig{}, err
+	}
+	var keys map[string]yaml.Node
+	if err := yaml.Unmarshal(raw, &keys); err != nil {
+		return SuiteConfig{}, fmt.Errorf(errParseFmt, path, err)
+	}
+	for k := range keys {
+		if !suiteConfigKeys[k] {
+			return SuiteConfig{}, fmt.Errorf("%s: unknown key %q (want reference_language or formats)", path, k)
+		}
+	}
+
+	var sc suiteConfigFile
+	if err := yaml.Unmarshal(raw, &sc); err != nil {
+		return SuiteConfig{}, fmt.Errorf(errParseFmt, path, err)
+	}
+
+	out := SuiteConfig{ReferenceLanguage: sc.ReferenceLanguage}
+	if _, declared := keys["formats"]; declared {
+		if len(sc.Formats) == 0 {
+			return SuiteConfig{}, fmt.Errorf("%s: formats list is empty", path)
+		}
+		out.Formats = make([]string, len(sc.Formats))
+		for i, f := range sc.Formats {
+			if f.Oracle != "" {
+				return SuiteConfig{}, fmt.Errorf(
+					"%s: format %q declares an oracle; oracles belong in each type file's formats: list, not here",
+					path, f.Name)
+			}
+			out.Formats[i] = f.Name
+		}
+	}
+	return out, nil
+}
+
+// LoadFormatsRegistry returns just the declared format-name universe, or nil if
+// the suite declares none.
 func LoadFormatsRegistry(dir string) ([]string, error) {
-	path := filepath.Join(dir, FormatsRegistryFile)
-	fr, found, err := loadOptionalYAML[formatsRegistryFile](path)
-	if err != nil || !found {
+	sc, err := LoadSuiteConfig(dir)
+	if err != nil {
 		return nil, err
 	}
-	if len(fr.Formats) == 0 {
-		return nil, fmt.Errorf("%s: formats list is empty", path)
-	}
-	names := make([]string, len(fr.Formats))
-	for i, f := range fr.Formats {
-		if f.Oracle != "" {
-			return nil, fmt.Errorf(
-				"%s: format %q declares an oracle; oracles belong in each type file's formats: list, not the registry",
-				path, f.Name)
-		}
-		names[i] = f.Name
-	}
-	return names, nil
+	return sc.Formats, nil
 }
 
 // ExpectedSkips declares the coverage a worker is *allowed* to be missing.

@@ -113,7 +113,7 @@ cases:
 func TestSchemaGen_FormatsRegistry(t *testing.T) {
 	dir := t.TempDir()
 
-	mustWrite(t, filepath.Join(dir, "_formats.yaml"), `
+	mustWrite(t, filepath.Join(dir, "_config.yaml"), `
 formats:
   - binary
   - json
@@ -138,7 +138,7 @@ cases:
 	var defs map[string]any
 	require.NoError(t, json.Unmarshal(defsB, &defs), "unmarshal defs.schema.json")
 	fs, ok := defs["definitions"].(map[string]any)["formatsSection"].(map[string]any)
-	require.True(t, ok, "defs missing formatsSection despite _formats.yaml registry")
+	require.True(t, ok, "defs missing formatsSection despite _config.yaml registry")
 	enum := fs["items"].(map[string]any)["enum"].([]any)
 	assert.Equal(t, []any{"binary", "json"}, enum, "registry enum = %v, want [binary json]", enum)
 
@@ -154,7 +154,7 @@ cases:
 func TestSchemaGen_FormatsRegistryViolation(t *testing.T) {
 	dir := t.TempDir()
 
-	mustWrite(t, filepath.Join(dir, "_formats.yaml"), `
+	mustWrite(t, filepath.Join(dir, "_config.yaml"), `
 formats:
   - binary
 `)
@@ -171,9 +171,9 @@ cases:
 `)
 
 	err := runSchemaGen(dir)
-	require.Error(t, err, "expected error for format not in _formats.yaml")
+	require.Error(t, err, "expected error for format not in _config.yaml")
 	assert.Contains(t, err.Error(), `"xml"`, "error should name the format and the registry, got: %v", err)
-	assert.Contains(t, err.Error(), "_formats.yaml", "error should name the format and the registry, got: %v", err)
+	assert.Contains(t, err.Error(), "_config.yaml", "error should name the format and the registry, got: %v", err)
 }
 
 func TestSchemaGen_ReusableType(t *testing.T) {

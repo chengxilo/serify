@@ -104,7 +104,7 @@ files, so editors (VS Code, JetBrains) can give autocomplete and validation.
 Writes schemas to <cases>/.schemas/ and inserts a # yaml-language-server modeline
 into each case file. Re-run after changing fields:/variants: sections.
 
-An optional <cases>/_formats.yaml (formats: [name, ...]) declares the suite's
+An optional <cases>/_config.yaml (formats: [name, ...]) declares the suite's
 format universe: every case file's formats: is then validated against it, in
 the generated schemas and by this command. Without it, each file's enum is
 generated from its own formats: list.
@@ -166,7 +166,7 @@ func runSchemaGen(casesDir string) error {
 			for _, f := range ty.Formats {
 				if !allowed[f] {
 					return fmt.Errorf("%s/%s.yaml: format %q is not declared in %s (has: %s)",
-						casesDir, ty.Name, f, config.FormatsRegistryFile, strings.Join(registry, ", "))
+						casesDir, ty.Name, f, config.SuiteConfigFile, strings.Join(registry, ", "))
 				}
 			}
 		}
@@ -248,7 +248,7 @@ func writeTypeSchema(
 }
 
 // formatsSchema validates a formats: list against the given names — the suite
-// registry (_formats.yaml) when one exists, else the file's own declared
+// registry (_config.yaml) when one exists, else the file's own declared
 // formats. Format names are worker-defined, so nothing is hard-coded; with no
 // names at all (a reusable type, no registry) any non-empty string is allowed.
 func formatsSchema(formats []string) J {
@@ -426,7 +426,7 @@ func writeModeline(yamlPath, schemaFile string) error {
 func writeDefs(dir string, registry []string) error {
 	defs := J{}
 
-	// With a _formats.yaml registry, the format universe is suite-level and
+	// With a _config.yaml registry, the format universe is suite-level and
 	// shared: every case file's formats: refs this definition.
 	if registry != nil {
 		defs.set("formatsSection", formatsSchema(registry))
