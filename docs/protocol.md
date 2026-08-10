@@ -40,7 +40,7 @@ bind at all. Workers must not treat ping as a reason to change bound state.
 {
   "op": "ping",
   "status": "OK",
-  "protocol_version": 1
+  "protocol_version": 2
 }
 ```
 
@@ -56,7 +56,7 @@ to skip.
 
 ### Protocol version
 
-`protocol_version` is a single integer, currently **1**, incremented on every
+`protocol_version` is a single integer, currently **2**, incremented on every
 breaking change to the messages in this document. The runner requires an **exact
 match** and refuses to start a worker that reports anything else:
 

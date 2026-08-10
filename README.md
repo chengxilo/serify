@@ -191,8 +191,9 @@ cases/
 - `cases` decides only whether a type is **tested** (run in the suite). Any type
   can be **imported** and reused regardless — `import` takes a file's schema and
   ignores its cases. A type with no `cases` is simply reusable-only.
-- The reference language is given on the command line (`--ref`), not stored in
-  the directory.
+- The reference language is declared by the suite, in `_config.yaml`
+  (`reference_language: go`). `--ref` overrides it, and is required only for a
+  suite that declares none.
 
 ### Defining a type
 
@@ -202,8 +203,10 @@ section (or `variants:` for a sum, see below), and a `cases:` list.
 ```yaml
 # cases/user.yaml
 formats:                  # serialization formats to test this type with
-  - binary
-  - json
+  - name: binary          # every format must name its comparison oracle
+    oracle: bytes         #   bytes    — compared byte-for-byte
+  - name: json            #   semantic — compared by decoded value
+    oracle: bytes
 import:
   - address.yaml          # makes the `address` type available below
 fields:                   # one `name: type` per line, order is preserved
@@ -266,7 +269,11 @@ workers.
 
 Every tested type **must declare its `formats:`** explicitly (there is no
 implicit default — a type with `cases:` but no `formats:` is rejected at load
-time). List one or more (e.g. `binary`, `json`). Each worker is re-initialized
+time), and **every format must name its `oracle:`** — `bytes` to compare the
+serialized bytes, `semantic` to compare the decoded value. That is mandatory too,
+and for the same reason: it decides whether a disagreement between two workers is
+a failure or is allowed wire freedom, which is not something to leave implicit.
+Each worker is re-initialized
 once per format and its cases run again under that format, so a single run
 compares every language byte-for-byte for each format. A worker that doesn't
 implement a format is marked `SKIP` for it (and if the reference worker lacks
@@ -274,9 +281,11 @@ it, that whole format is skipped). Reusable-only types (no `cases:`, imported by
 others) don't need `formats:`.
 
 Note that byte-for-byte parity across languages only holds for formats with a
-fully-specified wire layout. Text formats like JSON often differ between
-implementations (float formatting, key ordering, whitespace), so cross-language
-JSON comparison may report `FAIL` unless every worker emits identical bytes.
+fully-specified wire layout — that is what `oracle: bytes` asserts. Text formats
+like JSON often differ between implementations (float formatting, whitespace), and
+any type holding a `map<K,V>` differs by construction, since a map is unordered
+and workers do not sort it. Those want `oracle: semantic`, which compares the
+decoded value instead. See `docs/protocol.md` § Comparison oracles.
 
 ### Reusing types with `import`
 

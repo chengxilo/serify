@@ -22,9 +22,13 @@ import (
 
 // ToolchainProbes maps each language to the binaries that must be on PATH.
 var ToolchainProbes = map[string][]string{
-	language.Go:     {"go"},
-	language.Rust:   {"cargo"},
-	language.Python: {"python3", "python"},
+	language.Go:   {"go"},
+	language.Rust: {"cargo"},
+	// python3 only. Every python worker.yaml runs `python3 worker.py`, so `python`
+	// is never invoked — demanding it dropped python from SERIFY_REQUIRE on any
+	// machine that ships only the versioned name, which is most of them. Same
+	// mistake the PHP probe made with composer.
+	language.Python: {"python3"},
 	language.Node:   {"node", "npm"},
 	language.Java:   {"mvn", "java"},
 	language.Cpp:    {"g++"},

@@ -20,7 +20,7 @@ flowchart TD
     I --> J{"did reference<br/>serialize OK?"}
     J -->|"no — nothing to compare"| L["all candidates pass<br/>(no ref to compare against)"]
 
-    J -->|"yes"| M{"which oracle<br/>for this format?"}
+    J -->|"yes"| M{"which oracle<br/>for this (type, format)?"}
 
     subgraph BYTES["Oracle — bytes mode"]
         N1["compare raw bytes:<br/>HexDiff(refHex, candidateHex)<br/>length + offset + hex dump"]
@@ -33,7 +33,7 @@ flowchart TD
         S2 -->|"yes"| S4["compare decoded values:<br/>DataDiff(original, deserialized)<br/>map-order tolerant, NaN-tolerant"]
     end
 
-    M -->|"bytes (default)"| N1
+    M -->|bytes| N1
     M -->|semantic| S1
 
     N1 --> V

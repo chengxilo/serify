@@ -321,7 +321,7 @@ The CLI is `./cmd/serify`; the importable Go library (package `serify`) lives at
 # Build the CLI
 go build -o serify ./cmd/serify    # building the whole tree: go build ./...
 
-# Run conformance tests (--ref is required for non-build-only runs; --cases defaults to "cases")
+# Run conformance tests (--ref overrides the suite's reference_language; --cases defaults to "cases")
 go run ./cmd/serify run --ref rust --cases examples/cases examples/go examples/rust
 #   --no-build       skip building workers (workers must already be built)
 #   --audit          enable unsafe-behaviour auditing (mutation, zero-copy, stability)
