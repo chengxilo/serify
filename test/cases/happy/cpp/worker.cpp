@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -80,6 +81,18 @@ static std::string take_len_str(const std::vector<uint8_t>& data, size_t& off) {
     return s;
 }
 
+// MapStore is a std::unordered_map, so a canonical format has to ask for key
+// order explicitly — the same cost every other language's worker has always
+// paid. std::string compares by bytes, which is the UTF-8 order the canonical
+// layout specifies.
+static std::vector<std::string> map_keys(const serify::MapStore& m, bool sorted) {
+    std::vector<std::string> keys;
+    keys.reserve(m.size());
+    for (const auto& [k, _] : m) keys.push_back(k);
+    if (sorted) std::sort(keys.begin(), keys.end());
+    return keys;
+}
+
 static std::vector<uint8_t> binary_serialize_with(const FieldMap& fm, bool sorted_maps);
 
 // Canonical layout: map keys in byte order, judged by the bytes oracle.
@@ -87,10 +100,10 @@ static std::vector<uint8_t> binary_serialize(const FieldMap& fm) {
     return binary_serialize_with(fm, true);
 }
 
-// The same layout with a different map order, judged by the semantic oracle.
-// MapStore is a std::map, so there is no unordered iteration to reach for —
-// this walks the keys in reverse instead. Any order other than the canonical
-// one makes the point, and reverse is the one std::map hands over for free.
+// The same layout with the map sort removed, judged by the semantic oracle.
+// MapStore is a std::unordered_map, so this is genuinely the container's own
+// order — bucket order, which depends on the hash and the insertion history and
+// matches no other language's.
 static std::vector<uint8_t> binary_unordered_serialize(const FieldMap& fm) {
     return binary_serialize_with(fm, false);
 }
@@ -143,30 +156,20 @@ static std::vector<uint8_t> binary_serialize_with(const FieldMap& fm, bool sorte
     put_le<uint32_t>(out, (uint32_t)p->get_i32("z"), 4);
     put_len_str(out, p->get_string("name"));
 
-    const auto& m = fm.get_map("map");  // std::map: keys already byte-sorted
+    const auto& m = fm.get_map("map");
     put_le<uint32_t>(out, (uint32_t)m.size(), 4);
-    const auto put_u32_entry = [&out](const std::string& k, const FieldValue& v) {
+    for (const auto& k : map_keys(m, sorted_maps)) {
         put_len_str(out, k);
-        put_le<uint32_t>(out, std::get<uint32_t>(v), 4);
-    };
-    if (sorted_maps) {
-        for (const auto& [k, v] : m) put_u32_entry(k, v);
-    } else {
-        for (auto it = m.rbegin(); it != m.rend(); ++it) put_u32_entry(it->first, it->second);
+        put_le<uint32_t>(out, std::get<uint32_t>(m.at(k)), 4);
     }
 
     const auto& ms = fm.get_map("map_struct");
     put_le<uint32_t>(out, (uint32_t)ms.size(), 4);
-    const auto put_tag_entry = [&out](const std::string& k, const FieldValue& v) {
-        const auto t = std::get<StructPtr>(v);
+    for (const auto& k : map_keys(ms, sorted_maps)) {
+        const auto t = std::get<StructPtr>(ms.at(k));
         put_len_str(out, k);
         put_len_str(out, t->get_string("name"));
         put_le<uint32_t>(out, t->get_u32("weight"), 4);
-    };
-    if (sorted_maps) {
-        for (const auto& [k, v] : ms) put_tag_entry(k, v);
-    } else {
-        for (auto it = ms.rbegin(); it != ms.rend(); ++it) put_tag_entry(it->first, it->second);
     }
 
     out.push_back(status_ordinal(fm.get_string("status")));
@@ -381,21 +384,23 @@ static std::vector<uint8_t> json_serialize(const FieldMap& fm) {
          ",\"z\":" + std::to_string(p->get_i32("z")) +
          ",\"name\":" + go_str(p->get_string("name")) + "}";
 
+    const auto& jm = fm.get_map("map");
     s += ",\"map\":{";
     bool first = true;
-    for (const auto& [k, v] : fm.get_map("map")) {
+    for (const auto& k : map_keys(jm, true)) {
         if (!first) s += ",";
         first = false;
-        s += go_str(k) + ":" + std::to_string(std::get<uint32_t>(v));
+        s += go_str(k) + ":" + std::to_string(std::get<uint32_t>(jm.at(k)));
     }
     s += "}";
 
+    const auto& jms = fm.get_map("map_struct");
     s += ",\"map_struct\":{";
     first = true;
-    for (const auto& [k, v] : fm.get_map("map_struct")) {
+    for (const auto& k : map_keys(jms, true)) {
         if (!first) s += ",";
         first = false;
-        const auto t = std::get<StructPtr>(v);
+        const auto t = std::get<StructPtr>(jms.at(k));
         s += go_str(k) + ":{\"name\":" + go_str(t->get_string("name")) +
              ",\"weight\":" + std::to_string(t->get_u32("weight")) + "}";
     }

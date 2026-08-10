@@ -23,6 +23,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <unordered_map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -138,7 +139,17 @@ using FieldValue = std::variant<
 >;
 
 // Map fields are stored separately to avoid recursive variant definition.
-using MapStore = std::map<std::string, FieldValue>;
+//
+// unordered_map, not map. A schema `map<K,V>` is unordered, and every other
+// serify library holds one in its language's unordered type (Go map, Rust
+// HashMap, C# Dictionary, Python dict). This was a std::map only because the
+// protocol used to require workers to emit map entries in UTF-8 key order, and
+// std::map handed that over for free — so C++ satisfied a rule it never had to
+// implement. That rule is gone (docs/protocol.md § Maps: workers do not sort),
+// and with it the reason to impose an ordering the type does not have. A worker
+// whose format really is canonical over maps now sorts explicitly, the same as
+// every other language has always had to.
+using MapStore = std::unordered_map<std::string, FieldValue>;
 
 // One arm of a sum: a tag and its decoded payload (null for a unit variant).
 // The payload is held behind a shared_ptr so Variant does not have to be one of
