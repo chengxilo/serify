@@ -65,7 +65,14 @@ internal static class HappyWorker
     private static string ReadLenStr(BinaryReader r)
         => Encoding.UTF8.GetString(r.ReadBytes((int)r.ReadUInt32()));
 
-    private static byte[] BinarySerialize(FieldMap fm)
+    // Canonical layout: map keys in UTF-8 byte order, so all nine agree
+    // byte-for-byte under the bytes oracle.
+    private static byte[] BinarySerialize(FieldMap fm) => BinarySerializeWith(fm, true);
+
+    // The same layout with the map sort removed — judged by the semantic oracle.
+    private static byte[] BinaryUnorderedSerialize(FieldMap fm) => BinarySerializeWith(fm, false);
+
+    private static byte[] BinarySerializeWith(FieldMap fm, bool sortMaps)
     {
         using var ms = new MemoryStream();
         using var w = new BinaryWriter(ms); // BinaryWriter is little-endian
@@ -105,13 +112,13 @@ internal static class HappyWorker
 
         var m = fm.GetMap("map");
         var keys = m.Keys.ToList();
-        keys.Sort(ByteCompare);
+        if (sortMaps) keys.Sort(ByteCompare);
         w.Write((uint)keys.Count);
         foreach (var k in keys) { WriteLenStr(w, k); w.Write((uint)m[k]!); }
 
         var ms2 = fm.GetMap("map_struct");
         var mkeys = ms2.Keys.ToList();
-        mkeys.Sort(ByteCompare);
+        if (sortMaps) mkeys.Sort(ByteCompare);
         w.Write((uint)mkeys.Count);
         foreach (var k in mkeys)
         {
@@ -333,6 +340,9 @@ internal static class HappyWorker
             {
                 ["binary"] = (BinarySerialize, BinaryDeserialize),
                 ["json"] = (JsonSerialize, JsonDeserialize),
+                // Same bytes minus the map sort; the deserializer is shared
+                // because reading never cared about entry order.
+                ["binary_unordered"] = (BinaryUnorderedSerialize, BinaryDeserialize),
             }),
         });
     }

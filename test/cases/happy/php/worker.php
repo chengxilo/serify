@@ -82,7 +82,19 @@ function packLenStr(string $s): string
 
 // --- binary format -----------------------------------------------------------
 
+/** Canonical layout: map keys sorted, judged by the bytes oracle. */
 function binarySerialize(FieldMap $fm): string
+{
+    return binarySerializeWith($fm, true);
+}
+
+/** The same layout with the map sort removed — judged by the semantic oracle. */
+function binaryUnorderedSerialize(FieldMap $fm): string
+{
+    return binarySerializeWith($fm, false);
+}
+
+function binarySerializeWith(FieldMap $fm, bool $sortMaps): string
 {
     $out = chr($fm->getU8('uint8'));
     $out .= pack('v', $fm->getU16('uint16'));
@@ -121,7 +133,9 @@ function binarySerialize(FieldMap $fm): string
 
     $m = $fm->getMap('map');
     $keys = array_keys($m);
-    sort($keys, SORT_STRING);
+    if ($sortMaps) {
+        sort($keys, SORT_STRING);
+    }
     $out .= pack('V', count($keys));
     foreach ($keys as $k) {
         $out .= packLenStr((string)$k) . pack('V', $m[$k]);
@@ -129,7 +143,9 @@ function binarySerialize(FieldMap $fm): string
 
     $ms = $fm->getMap('map_struct');
     $keys = array_keys($ms);
-    sort($keys, SORT_STRING);
+    if ($sortMaps) {
+        sort($keys, SORT_STRING);
+    }
     $out .= pack('V', count($keys));
     foreach ($keys as $k) {
         $out .= packLenStr((string)$k);
@@ -380,5 +396,8 @@ Worker::runSuite([
     'all_types' => [
         'binary' => ['binarySerialize', 'binaryDeserialize'],
         'json' => ['jsonSerialize_', 'jsonDeserialize'],
+        // Same bytes minus the map sort; the deserializer is shared because
+        // reading never cared about entry order.
+        'binary_unordered' => ['binaryUnorderedSerialize', 'binaryDeserialize'],
     ],
 ]);

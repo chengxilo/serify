@@ -72,6 +72,16 @@ class _Cursor:
 
 
 def binary_serialize(fm: FieldMap) -> bytes:
+    """Canonical layout: map keys sorted, so all nine workers agree byte-for-byte."""
+    return _binary_serialize(fm, sort_maps=True)
+
+
+def binary_unordered_serialize(fm: FieldMap) -> bytes:
+    """Same layout minus the map sort — judged by the semantic oracle."""
+    return _binary_serialize(fm, sort_maps=False)
+
+
+def _binary_serialize(fm: FieldMap, sort_maps: bool) -> bytes:
     buf = bytearray()
     buf += struct.pack("<BHIQ", fm.get_u8("uint8"), fm.get_u16("uint16"),
                        fm.get_u32("uint32"), fm.get_u64("uint64"))
@@ -104,12 +114,12 @@ def binary_serialize(fm: FieldMap) -> bytes:
 
     m = fm.get_map("map")
     buf += struct.pack("<I", len(m))
-    for k in sorted(m):
+    for k in (sorted(m) if sort_maps else m):
         buf += pack_len_str(k) + struct.pack("<I", m[k])
 
     ms = fm.get_map("map_struct")
     buf += struct.pack("<I", len(ms))
-    for k in sorted(ms):
+    for k in (sorted(ms) if sort_maps else ms):
         buf += pack_len_str(k) + pack_len_str(ms[k].get_string("name"))
         buf += struct.pack("<I", ms[k].get_u32("weight"))
 
@@ -289,5 +299,8 @@ if __name__ == '__main__':
         "all_types": {
             "binary": (binary_serialize, binary_deserialize),
             "json": (json_serialize, json_deserialize),
+            # Same bytes minus the map sort; the deserializer is shared because
+            # reading never cared about entry order.
+            "binary_unordered": (binary_unordered_serialize, binary_deserialize),
         },
     })

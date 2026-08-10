@@ -30,7 +30,10 @@ defmodule HappyWorker do
     WorkerLib.run_suite(%{
       "all_types" => %{
         "binary" => {&binary_serialize/1, &binary_deserialize/1},
-        "json" => {&json_serialize/1, &json_deserialize/1}
+        "json" => {&json_serialize/1, &json_deserialize/1},
+        # Same bytes minus the map sort; the deserializer is shared because
+        # reading never cared about entry order.
+        "binary_unordered" => {&binary_unordered_serialize/1, &binary_deserialize/1}
       }
     })
   end
@@ -46,7 +49,13 @@ defmodule HappyWorker do
 
   defp len_str(s), do: <<byte_size(s)::little-32, s::binary>>
 
-  defp binary_serialize(fm) do
+  # Canonical layout: map keys sorted, judged by the bytes oracle.
+  defp binary_serialize(fm), do: binary_serialize(fm, true)
+
+  # The same layout with the map sort removed — judged by the semantic oracle.
+  defp binary_unordered_serialize(fm), do: binary_serialize(fm, false)
+
+  defp binary_serialize(fm, sort_maps) do
     list = fm["list"]
     opt = case fm["optional"] do
       nil -> <<0>>
@@ -60,14 +69,14 @@ defmodule HappyWorker do
     map_bin =
       m
       |> Map.keys()
-      |> Enum.sort()
+      |> then(&if sort_maps, do: Enum.sort(&1), else: &1)
       |> Enum.map(fn k -> <<len_str(k)::binary, m[k]::little-32>> end)
       |> IO.iodata_to_binary()
 
     ms_bin =
       ms
       |> Map.keys()
-      |> Enum.sort()
+      |> then(&if sort_maps, do: Enum.sort(&1), else: &1)
       |> Enum.map(fn k ->
         t = ms[k]
         <<len_str(k)::binary, len_str(t["name"])::binary, t["weight"]::little-32>>

@@ -205,7 +205,8 @@
       "items": {
         "enum": [
           "binary",
-          "json"
+          "json",
+          "binary_unordered"
         ]
       },
       "minItems": 1,

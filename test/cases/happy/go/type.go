@@ -99,7 +99,16 @@ func readLenStr(b []byte) (string, []byte, error) {
 	return string(b[:n]), b[n:], nil
 }
 
-func (a *AllTypes) MarshalBinary() ([]byte, error) {
+// MarshalBinary writes the canonical layout: map keys sorted, so every worker
+// agrees byte-for-byte under the bytes oracle.
+func (a *AllTypes) MarshalBinary() ([]byte, error) { return a.marshalBinary(true) }
+
+// MarshalBinaryUnordered writes the same layout with the map sort removed. Go
+// randomises map iteration, so this deliberately differs run to run — only the
+// semantic oracle can call it equal to another worker's output.
+func (a *AllTypes) MarshalBinaryUnordered() ([]byte, error) { return a.marshalBinary(false) }
+
+func (a *AllTypes) marshalBinary(sortMaps bool) ([]byte, error) {
 	var buf []byte
 
 	buf = append(buf, a.Uint8)
@@ -145,14 +154,14 @@ func (a *AllTypes) MarshalBinary() ([]byte, error) {
 	buf = binary.LittleEndian.AppendUint32(buf, uint32(a.Struct.Z))
 	buf = appendLenStr(buf, a.Struct.Name)
 
-	keys := sortedKeys(a.Map)
+	keys := mapKeys(a.Map, sortMaps)
 	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(keys)))
 	for _, k := range keys {
 		buf = appendLenStr(buf, k)
 		buf = binary.LittleEndian.AppendUint32(buf, a.Map[k])
 	}
 
-	tkeys := sortedTagKeys(a.MapStruct)
+	tkeys := mapKeys(a.MapStruct, sortMaps)
 	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(tkeys)))
 	for _, k := range tkeys {
 		buf = appendLenStr(buf, k)
@@ -355,20 +364,16 @@ func marshalJSON(a *AllTypes) ([]byte, error) {
 
 func unmarshalJSON(a *AllTypes, b []byte) error { return json.Unmarshal(b, a) }
 
-func sortedKeys(m map[string]uint32) []string {
+// mapKeys returns the map's keys, sorted only when the format asks for it.
+// Sorting by the Go string's bytes is UTF-8 order, which is what the canonical
+// layout specifies.
+func mapKeys[V any](m map[string]V, sorted bool) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
-	return keys
-}
-
-func sortedTagKeys(m map[string]Tag) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+	if sorted {
+		sort.Strings(keys)
 	}
-	sort.Strings(keys)
 	return keys
 }

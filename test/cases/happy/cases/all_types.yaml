@@ -39,11 +39,22 @@ fields:
   - status: "enum<pending, paid, shipped, delivered, cancelled>"
 
 # yaml-language-server: $schema=.schemas/all_types.schema.json
+# Two oracles over the same data. `binary` and `json` are canonical layouts —
+# the worker sorts map keys, so all nine agree byte-for-byte, which is what
+# keeps `escapes` and the JSON escaping rules meaningful. `binary_unordered` is
+# the same layout with the map sort removed: the bytes then differ per language
+# (and per run, where map iteration is randomised), and only the semantic oracle
+# can still call them equal.
+#
+# This is the one place both oracles run over identical data in all nine
+# languages, which is what makes it a check on the oracles themselves.
 formats:
   - name: binary
     oracle: bytes
   - name: json
     oracle: bytes
+  - name: binary_unordered
+    oracle: semantic
 
 cases:
   - name: basic

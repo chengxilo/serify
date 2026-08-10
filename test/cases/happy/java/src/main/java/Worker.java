@@ -82,7 +82,17 @@ public final class Worker {
         return new String(b, StandardCharsets.UTF_8);
     }
 
+    /** Canonical layout: map keys in UTF-8 byte order, judged by the bytes oracle. */
     private static byte[] binarySerialize(FieldMap fm) {
+        return binarySerializeWith(fm, true);
+    }
+
+    /** The same layout with the map sort removed — judged by the semantic oracle. */
+    private static byte[] binaryUnorderedSerialize(FieldMap fm) {
+        return binarySerializeWith(fm, false);
+    }
+
+    private static byte[] binarySerializeWith(FieldMap fm, boolean sortMaps) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         ByteBuffer head = ByteBuffer.allocate(43).order(ByteOrder.LITTLE_ENDIAN);
@@ -131,7 +141,7 @@ public final class Worker {
 
         Map<String, Object> m = fm.getMap("map");
         List<String> keys = new ArrayList<>(m.keySet());
-        keys.sort(Worker::byteCompare);
+        if (sortMaps) keys.sort(Worker::byteCompare);
         out.writeBytes(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(keys.size()).array());
         for (String k : keys) {
             writeLenStr(out, k);
@@ -141,7 +151,7 @@ public final class Worker {
 
         Map<String, Object> ms = fm.getMap("map_struct");
         List<String> mkeys = new ArrayList<>(ms.keySet());
-        mkeys.sort(Worker::byteCompare);
+        if (sortMaps) mkeys.sort(Worker::byteCompare);
         out.writeBytes(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(mkeys.size()).array());
         for (String k : mkeys) {
             FieldMap t = (FieldMap) ms.get(k);
@@ -409,7 +419,11 @@ public final class Worker {
                             } catch (Exception e) {
                                 throw new RuntimeException(e);
                             }
-                        })))));
+                        }),
+                        // Same bytes minus the map sort; the deserializer is
+                        // shared because reading never cared about entry order.
+                        "binary_unordered", new FormatPair(
+                                Worker::binaryUnorderedSerialize, Worker::binaryDeserialize)))));
     }
 
     private Worker() {}

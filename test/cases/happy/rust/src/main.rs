@@ -87,7 +87,20 @@ fn read_len_str(data: &[u8], pos: &mut usize) -> Result<String, String> {
 }
 
 impl AllTypes {
+    /// The canonical layout: map keys sorted, so every worker agrees
+    /// byte-for-byte under the bytes oracle.
     fn marshal(&self) -> Result<Vec<u8>, String> {
+        self.marshal_with(true)
+    }
+
+    /// The same layout with the map sort removed. HashMap iteration order is
+    /// arbitrary and seed-randomised, so this differs from every other worker —
+    /// only the semantic oracle can call it equal.
+    fn marshal_unordered(&self) -> Result<Vec<u8>, String> {
+        self.marshal_with(false)
+    }
+
+    fn marshal_with(&self, sort_maps: bool) -> Result<Vec<u8>, String> {
         let mut buf = Vec::new();
 
         buf.push(self.uint8);
@@ -124,7 +137,9 @@ impl AllTypes {
         append_len_str(&mut buf, &self.point.name);
 
         let mut map_keys: Vec<&String> = self.map.keys().collect();
-        map_keys.sort();
+        if sort_maps {
+            map_keys.sort();
+        }
         buf.extend_from_slice(&(map_keys.len() as u32).to_le_bytes());
         for k in &map_keys {
             append_len_str(&mut buf, k);
@@ -132,7 +147,9 @@ impl AllTypes {
         }
 
         let mut ms_keys: Vec<&String> = self.map_struct.keys().collect();
-        ms_keys.sort();
+        if sort_maps {
+            ms_keys.sort();
+        }
         buf.extend_from_slice(&(ms_keys.len() as u32).to_le_bytes());
         for k in &ms_keys {
             append_len_str(&mut buf, k);
@@ -421,6 +438,12 @@ fn main() {
                 .with_format("json", Format::model::<AllTypes>()
                     .serializer(|a| Ok(to_json(a)))
                     .deserializer(from_json),
+                )
+                // Same bytes minus the map sort; the deserializer is shared
+                // because reading never cared about entry order.
+                .with_format("binary_unordered", Format::model::<AllTypes>()
+                    .serializer(AllTypes::marshal_unordered)
+                    .deserializer(AllTypes::unmarshal),
                 ),
         ),
     );

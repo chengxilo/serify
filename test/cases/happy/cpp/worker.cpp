@@ -80,7 +80,22 @@ static std::string take_len_str(const std::vector<uint8_t>& data, size_t& off) {
     return s;
 }
 
+static std::vector<uint8_t> binary_serialize_with(const FieldMap& fm, bool sorted_maps);
+
+// Canonical layout: map keys in byte order, judged by the bytes oracle.
 static std::vector<uint8_t> binary_serialize(const FieldMap& fm) {
+    return binary_serialize_with(fm, true);
+}
+
+// The same layout with a different map order, judged by the semantic oracle.
+// MapStore is a std::map, so there is no unordered iteration to reach for —
+// this walks the keys in reverse instead. Any order other than the canonical
+// one makes the point, and reverse is the one std::map hands over for free.
+static std::vector<uint8_t> binary_unordered_serialize(const FieldMap& fm) {
+    return binary_serialize_with(fm, false);
+}
+
+static std::vector<uint8_t> binary_serialize_with(const FieldMap& fm, bool sorted_maps) {
     std::vector<uint8_t> out;
 
     out.push_back(fm.get_u8("uint8"));
@@ -130,18 +145,28 @@ static std::vector<uint8_t> binary_serialize(const FieldMap& fm) {
 
     const auto& m = fm.get_map("map");  // std::map: keys already byte-sorted
     put_le<uint32_t>(out, (uint32_t)m.size(), 4);
-    for (const auto& [k, v] : m) {
+    const auto put_u32_entry = [&out](const std::string& k, const FieldValue& v) {
         put_len_str(out, k);
         put_le<uint32_t>(out, std::get<uint32_t>(v), 4);
+    };
+    if (sorted_maps) {
+        for (const auto& [k, v] : m) put_u32_entry(k, v);
+    } else {
+        for (auto it = m.rbegin(); it != m.rend(); ++it) put_u32_entry(it->first, it->second);
     }
 
     const auto& ms = fm.get_map("map_struct");
     put_le<uint32_t>(out, (uint32_t)ms.size(), 4);
-    for (const auto& [k, v] : ms) {
+    const auto put_tag_entry = [&out](const std::string& k, const FieldValue& v) {
         const auto t = std::get<StructPtr>(v);
         put_len_str(out, k);
         put_len_str(out, t->get_string("name"));
         put_le<uint32_t>(out, t->get_u32("weight"), 4);
+    };
+    if (sorted_maps) {
+        for (const auto& [k, v] : ms) put_tag_entry(k, v);
+    } else {
+        for (auto it = ms.rbegin(); it != ms.rend(); ++it) put_tag_entry(it->first, it->second);
     }
 
     out.push_back(status_ordinal(fm.get_string("status")));
@@ -591,6 +616,10 @@ int main() {
     SuiteMap suite;
     suite["all_types"]["binary"] = FormatPair{binary_serialize, binary_deserialize};
     suite["all_types"]["json"] = FormatPair{json_serialize, json_deserialize};
+    // Same bytes in a different map order; the deserializer is shared because
+    // reading never cared about entry order.
+    suite["all_types"]["binary_unordered"] =
+        FormatPair{binary_unordered_serialize, binary_deserialize};
     run_suite(suite);
     return 0;
 }

@@ -30,6 +30,12 @@ func main() {
 						Serializer:   marshalJSON,
 						Deserializer: unmarshalJSON,
 					},
+					// Same bytes minus the map sort; the deserializer is shared
+					// because reading never cared about entry order.
+					"binary_unordered": {
+						Serializer:   (*AllTypes).MarshalBinaryUnordered,
+						Deserializer: (*AllTypes).UnmarshalBinary,
+					},
 				},
 			},
 		},

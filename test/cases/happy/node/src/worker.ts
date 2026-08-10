@@ -88,7 +88,17 @@ class Cursor {
   }
 }
 
+// Canonical layout: map keys in UTF-8 byte order, so all nine agree byte-for-byte.
 function binarySerialize(fm: FieldMap): Buffer {
+  return binarySerializeWith(fm, true);
+}
+
+// The same layout with the map sort removed — judged by the semantic oracle.
+function binaryUnorderedSerialize(fm: FieldMap): Buffer {
+  return binarySerializeWith(fm, false);
+}
+
+function binarySerializeWith(fm: FieldMap, sortMaps: boolean): Buffer {
   const w = new Writer();
   w.u8(fm.getU8('uint8'));
   w.u16(fm.getU16('uint16'));
@@ -123,12 +133,14 @@ function binarySerialize(fm: FieldMap): Buffer {
   w.lenStr(p.getString('name'));
 
   const m = fm.getMap('map');
-  const keys = Array.from(m.keys()).sort(byteCompare);
+  const keys = Array.from(m.keys());
+  if (sortMaps) keys.sort(byteCompare);
   w.u32(keys.length);
   for (const k of keys) { w.lenStr(k); w.u32(m.get(k) as number); }
 
   const ms = fm.getMap('map_struct');
-  const mkeys = Array.from(ms.keys()).sort(byteCompare);
+  const mkeys = Array.from(ms.keys());
+  if (sortMaps) mkeys.sort(byteCompare);
   w.u32(mkeys.length);
   for (const k of mkeys) {
     const t = ms.get(k) as FieldMap;
@@ -329,5 +341,8 @@ runSuite({
   all_types: {
     binary: { serialize: binarySerialize, deserialize: binaryDeserialize },
     json: { serialize: jsonSerialize, deserialize: jsonDeserialize },
+    // Same bytes minus the map sort; the deserializer is shared because reading
+    // never cared about entry order.
+    binary_unordered: { serialize: binaryUnorderedSerialize, deserialize: binaryDeserialize },
   },
 });
