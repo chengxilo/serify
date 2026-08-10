@@ -83,9 +83,7 @@ impl TelemetryFrame {
             buf.extend_from_slice(&v.to_le_bytes());
         }
 
-        // Map keys are sorted so the bytes are deterministic; see examples/go/wire.go.
-        let mut keys: Vec<&String> = self.packet_counts.keys().collect();
-        keys.sort();
+        let keys: Vec<&String> = self.packet_counts.keys().collect();
         buf.extend_from_slice(&(keys.len() as u32).to_le_bytes());
         for k in keys {
             append_len_str(&mut buf, k);

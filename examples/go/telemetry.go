@@ -87,8 +87,7 @@ func (t *TelemetryFrame) MarshalBinary() ([]byte, error) {
 		buf = binary.LittleEndian.AppendUint32(buf, v)
 	}
 
-	// Map keys are sorted so the bytes are deterministic; see wire.go.
-	keys := sortedKeys(t.PacketCounts)
+	keys := mapKeys(t.PacketCounts)
 	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(keys)))
 	for _, k := range keys {
 		buf = appendLenStr(buf, k)

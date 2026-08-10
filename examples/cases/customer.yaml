@@ -44,9 +44,9 @@ fields:
 # once per format; workers that don't implement a format are skipped for it.
 formats:
   - name: binary
-    oracle: bytes
+    oracle: semantic
   - name: json
-    oracle: bytes
+    oracle: semantic
 
 cases:
   - name: typical

@@ -102,8 +102,7 @@ impl CustomerRecord {
             append_address(&mut buf, a);
         }
 
-        let mut book_keys: Vec<&String> = self.address_book.keys().collect();
-        book_keys.sort();
+        let book_keys: Vec<&String> = self.address_book.keys().collect();
         buf.extend_from_slice(&(book_keys.len() as u32).to_le_bytes());
         for k in &book_keys {
             append_len_str(&mut buf, k);
@@ -115,8 +114,7 @@ impl CustomerRecord {
             append_len_str(&mut buf, s);
         }
 
-        let mut pref_keys: Vec<&String> = self.preferences.keys().collect();
-        pref_keys.sort();
+        let pref_keys: Vec<&String> = self.preferences.keys().collect();
         buf.extend_from_slice(&(pref_keys.len() as u32).to_le_bytes());
         for k in &pref_keys {
             append_len_str(&mut buf, k);
@@ -387,8 +385,7 @@ impl CustomerRecord {
         s.push(']');
 
         s.push_str(",\"address_book\":{");
-        let mut book_keys: Vec<&String> = c.address_book.keys().collect();
-        book_keys.sort();
+        let book_keys: Vec<&String> = c.address_book.keys().collect();
         for (i, k) in book_keys.iter().enumerate() {
             if i > 0 {
                 s.push(',');
@@ -409,8 +406,7 @@ impl CustomerRecord {
         s.push(']');
 
         s.push_str(",\"preferences\":{");
-        let mut pref_keys: Vec<&String> = c.preferences.keys().collect();
-        pref_keys.sort();
+        let pref_keys: Vec<&String> = c.preferences.keys().collect();
         for (i, k) in pref_keys.iter().enumerate() {
             if i > 0 {
                 s.push(',');

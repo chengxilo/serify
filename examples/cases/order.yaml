@@ -39,7 +39,7 @@ fields:
 # Both example workers implement only the binary format for order.
 formats:
   - name: binary
-    oracle: bytes
+    oracle: semantic
 
 cases:
   - name: paid

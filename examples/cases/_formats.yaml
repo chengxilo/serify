@@ -17,14 +17,12 @@
 # schemas as the enum. Add new worker-supported formats here first.
 # (The "_" prefix keeps this file out of case-file loading.)
 #
-# A bare name uses the byte-for-byte (`bytes`) oracle — the default. To compare a
-# non-canonical format by decoded value instead (the reference deserializes each
-# worker's bytes; map/field order is then free), use the object form:
-#
-#   formats:
-#     - binary                 # oracle: bytes (default)
-#     - name: wire_json
-#       oracle: semantic
+# Names only. The comparison oracle is NOT declared here: it belongs to the
+# (type, format) pair and lives in each type file's `formats:` list, because one
+# format name is shared by types that want opposite verdicts — `binary` is
+# `bytes` for ledger (byte parity across all nine languages) and `semantic` for
+# customer (which holds a map, so entry order is free). An `oracle:` in this
+# file is a load error rather than being silently ignored.
 #
 # See docs/protocol.md § Comparison oracles.
 formats:

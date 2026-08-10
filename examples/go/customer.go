@@ -124,7 +124,7 @@ func (c *CustomerRecord) MarshalBinary() ([]byte, error) {
 		buf = appendAddress(buf, a)
 	}
 
-	bookKeys := sortedKeys(c.AddressBook)
+	bookKeys := mapKeys(c.AddressBook)
 	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(bookKeys)))
 	for _, k := range bookKeys {
 		buf = appendLenStr(buf, k)
@@ -136,7 +136,7 @@ func (c *CustomerRecord) MarshalBinary() ([]byte, error) {
 		buf = appendLenStr(buf, s)
 	}
 
-	prefKeys := sortedKeys(c.Preferences)
+	prefKeys := mapKeys(c.Preferences)
 	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(prefKeys)))
 	for _, k := range prefKeys {
 		buf = appendLenStr(buf, k)

@@ -101,8 +101,7 @@ func (o *OrderRecord) MarshalBinary() ([]byte, error) {
 
 	buf = appendMoney(buf, o.Subtotal)
 
-	// Map keys are sorted so the bytes are deterministic; see wire.go.
-	keys := sortedKeys(o.Adjustments)
+	keys := mapKeys(o.Adjustments)
 	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(keys)))
 	for _, k := range keys {
 		buf = appendLenStr(buf, k)
