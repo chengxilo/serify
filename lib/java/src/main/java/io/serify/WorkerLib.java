@@ -215,27 +215,23 @@ public final class WorkerLib {
     private static final int PROTOCOL_VERSION = 2;
 
     // --- audit helpers --------------------------------------------------------
+    //
+    // The public members below are low-level audit helpers. A worker driven by the
+    // serify runner never calls them: register serialize/deserialize in a Suite,
+    // and run() handles audit itself when --audit is passed. They are public for
+    // audit-style checks outside the runner.
 
     /**
      * A snapshot of a byte[] field in a FieldMap, used for zero-copy detection.
      *
-     * <p>This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this
-     * directly — register your serialize/deserialize functions in a Suite and run() handles audit automatically.
-     * Call this directly only if you want audit-style checks outside the runner.
-     *
      * @param fm   the FieldMap containing the field
      * @param key  the field key
-     * @param orig a clone of the original byte[] value
+     * @param orig a clone of the original value: a {@code byte[]}, or a {@link Variant} whose payload is one
      */
-    /** {@code orig} is a {@code byte[]}, or a {@link Variant} whose payload is one. */
     public record ByteSnap(FieldMap fm, String key, Object orig) {}
 
     /**
      * Recursively walks a FieldMap and collects snapshots of every byte[] value.
-     *
-     * <p>This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this
-     * directly — register your serialize/deserialize functions in a Suite and run() handles audit automatically.
-     * Call this directly only if you want audit-style checks outside the runner.
      *
      * @param fm    the FieldMap to walk
      * @param snaps the list to which ByteSnap entries are appended
@@ -272,10 +268,6 @@ public final class WorkerLib {
     /**
      * Compares two ObjectNodes and returns the field keys whose values differ.
      *
-     * <p>This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this
-     * directly — register your serialize/deserialize functions in a Suite and run() handles audit automatically.
-     * Call this directly only if you want audit-style checks outside the runner.
-     *
      * @param before the state before an operation
      * @param after  the state after an operation
      * @return the list of keys with differing values
@@ -296,10 +288,6 @@ public final class WorkerLib {
     /**
      * Detects whether any byte[] fields in the FieldMap alias the input buffer by XOR-flipping the buffer
      * and checking for changes, then restoring the original values.
-     *
-     * <p>This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this
-     * directly — register your serialize/deserialize functions in a Suite and run() handles audit automatically.
-     * Call this directly only if you want audit-style checks outside the runner.
      *
      * @param fm  the FieldMap to inspect
      * @param buf the input buffer (will be temporarily XOR-flipped and restored)

@@ -36,13 +36,15 @@ flowchart LR
 
     subgraph WORKERS["Language Workers"]
         direction TD
-        W1["Go"]
+        W1["Go — the reference"]
         W2["Rust"]
         W3["Python"]
         W4["C#"]
         W5["C++"]
         W6["Node.js"]
         W7["Elixir"]
+        W8["Java"]
+        W9["PHP"]
     end
 
     REPORT["Test Report"]

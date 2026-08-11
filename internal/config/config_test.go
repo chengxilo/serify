@@ -207,7 +207,8 @@ func TestLoadSuite_Directory(t *testing.T) {
 	require.Contains(t, byName, "order", "missing type order")
 	order := byName["order"]
 
-	// The shared `address` struct must be resolved into both types via `ref:`.
+	// The shared `address` type, pulled in by both files via `import:`, must be
+	// resolved and inlined as a struct in each of their schemas.
 	for _, ty := range []string{"customer", "order"} {
 		var addr *FieldType
 		for _, f := range byName[ty].Schema {

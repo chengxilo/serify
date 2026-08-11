@@ -301,13 +301,15 @@ public static class Worker
     private const int ProtocolVersion = 2;
 
     // --- audit helpers --------------------------------------------------------
+    //
+    // The public methods below are low-level audit helpers. A worker driven by the
+    // serify runner never calls them: register serialize/deserialize in a Suite,
+    // and Run handles audit itself when --audit is passed. They are public for
+    // audit-style checks outside the runner.
 
     /// <summary>
     /// Recursively walks a FieldMap and collects snapshots of every byte[] value.
     /// </summary>
-    /// <remarks>
-    /// This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions in a Suite and run() handles audit automatically. Call this directly only if you want audit-style checks outside the runner.
-    /// </remarks>
     public static void CollectByteSnaps(FieldMap fm, List<(FieldMap fm, string key, object orig)> snaps)
     {
         foreach (var key in fm.Fields.Keys.OrderBy(k => k))
@@ -352,9 +354,6 @@ public static class Worker
     /// <summary>
     /// Compares two dictionaries and returns the keys whose values differ.
     /// </summary>
-    /// <remarks>
-    /// This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions in a Suite and run() handles audit automatically. Call this directly only if you want audit-style checks outside the runner.
-    /// </remarks>
     public static string[] DictDiffs(Dictionary<string, object?> before, Dictionary<string, object?> after)
     {
         var diffs = new List<string>();
@@ -418,9 +417,6 @@ public static class Worker
     /// <summary>
     /// Detects whether any byte[] fields in the FieldMap alias the input buffer by XOR-flipping the buffer and checking for changes, then restoring the original values.
     /// </summary>
-    /// <remarks>
-    /// This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions in a Suite and run() handles audit automatically. Call this directly only if you want audit-style checks outside the runner.
-    /// </remarks>
     public static string[] DetectZeroCopy(FieldMap fm, byte[] buf)
     {
         if (buf.Length == 0) return Array.Empty<string>();

@@ -636,9 +636,14 @@ class Worker
     }
 
     // ── Audit helpers ─────────────────────────────────────────────────────
+    //
+    // The public methods below are low-level audit helpers. A worker driven by
+    // the serify runner never calls them: register serialize/deserialize in a
+    // suite, and the run loop handles audit itself when --audit is passed. They
+    // are public for audit-style checks outside the runner.
 
     /**
-     * This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions and the run loop handles audit automatically. Call this directly only if you want audit-style checks outside the runner.
+     * Recursively walks a FieldMap and collects a snapshot of every byte-string value.
      */
     public static function collectByteSnaps(FieldMap $fm, array &$snaps): void
     {
@@ -670,7 +675,7 @@ class Worker
     }
 
     /**
-     * This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions and the run loop handles audit automatically. Call this directly only if you want audit-style checks outside the runner.
+     * Compares two arrays and returns the keys whose values differ.
      */
     public static function dictDiffs(array $before, array $after): array
     {
@@ -688,7 +693,8 @@ class Worker
     }
 
     /**
-     * This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions and the run loop handles audit automatically. Call this directly only if you want audit-style checks outside the runner.
+     * XOR-flips the input buffer and reports which FieldMap fields changed with it,
+     * i.e. which alias it. Restores the original values before returning.
      */
     public static function detectZeroCopy(FieldMap $fm, string &$buf): array
     {

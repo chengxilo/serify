@@ -448,12 +448,15 @@ function encodeOptional(sf: SchemaField, elem: string, v: unknown): unknown {
 }
 
 // --- audit helpers ----------------------------------------------------------
+//
+// The functions below are low-level audit helpers. A worker driven by the serify
+// runner never calls them: register serialize/deserialize in a suite, and run()
+// handles audit itself when --audit is passed. They are exported for audit-style
+// checks outside the runner.
 
 type FieldSnap = { fm: FieldMap; key: string; orig: Buffer | Variant };
 
-/**
- * This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions in a Suite and Run() handles audit automatically via --audit. Call this directly only if you want audit-style checks outside the runner.
- */
+/** Recursively walks a FieldMap and collects a snapshot of every Buffer value. */
 export function collectByteSnaps(fm: FieldMap, snaps: FieldSnap[]): void {
   const keys = Array.from(fm._fields.keys()).sort();
   for (const k of keys) {
@@ -482,9 +485,7 @@ export function collectByteSnaps(fm: FieldMap, snaps: FieldSnap[]): void {
   }
 }
 
-/**
- * This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions in a Suite and Run() handles audit automatically via --audit. Call this directly only if you want audit-style checks outside the runner.
- */
+/** Compares two plain objects and returns the keys whose values differ. */
 export function dictDiffs(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
   const diffs: string[] = [];
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
@@ -497,7 +498,8 @@ export function dictDiffs(before: Record<string, unknown>, after: Record<string,
 }
 
 /**
- * This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions in a Suite and Run() handles audit automatically via --audit. Call this directly only if you want audit-style checks outside the runner.
+ * XOR-flips the input buffer and reports which FieldMap fields changed with it,
+ * i.e. which alias it. Restores the original values before returning.
  */
 export function detectZeroCopy(fm: FieldMap, buf: Buffer): string[] {
   if (buf.length === 0) return [];

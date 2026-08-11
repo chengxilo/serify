@@ -1491,12 +1491,12 @@ fn xor_flip(buf: &mut [u8]) {
     }
 }
 
+// The four public functions below are low-level audit helpers. A worker driven
+// by the serify runner never calls them: register serialize/deserialize in a
+// Suite, and run() handles audit itself when --audit is passed. They are public
+// for audit-style checks outside the runner.
+
 /// Compare two FieldMaps and return the list of top-level keys that differ.
-///
-/// This is a low-level audit helper. If you use the serify conformance runner,
-/// you do not need to call this directly — register your serialize/deserialize
-/// functions in a Suite and Run() handles audit automatically via --audit.
-/// Call this directly only if you want audit-style checks outside the runner.
 #[cfg(feature = "worker")]
 pub fn field_map_diffs(before: &FieldMap, after: &FieldMap) -> Vec<String> {
     let mut diffs = Vec::new();
@@ -1517,11 +1517,6 @@ pub fn field_map_diffs(before: &FieldMap, after: &FieldMap) -> Vec<String> {
 }
 
 /// Compare two JSON objects and return the list of top-level keys that differ.
-///
-/// This is a low-level audit helper. If you use the serify conformance runner,
-/// you do not need to call this directly — register your serialize/deserialize
-/// functions in a Suite and Run() handles audit automatically via --audit.
-/// Call this directly only if you want audit-style checks outside the runner.
 #[cfg(feature = "worker")]
 pub fn json_field_diffs(before: &Value, after: &Value) -> Vec<String> {
     let mut diffs = Vec::new();
@@ -1549,11 +1544,6 @@ pub fn json_field_diffs(before: &Value, after: &Value) -> Vec<String> {
 
 /// Active overwrite test: XOR-flip the input buffer and report which FieldMap
 /// fields changed (indicating they alias the buffer). Restores original values.
-///
-/// This is a low-level audit helper. If you use the serify conformance runner,
-/// you do not need to call this directly — register your serialize/deserialize
-/// functions in a Suite and Run() handles audit automatically via --audit.
-/// Call this directly only if you want audit-style checks outside the runner.
 #[cfg(feature = "worker")]
 pub fn detect_zero_copy(fm: &mut FieldMap, buf: &mut [u8]) -> Vec<String> {
     if buf.is_empty() {
@@ -1578,11 +1568,6 @@ pub fn detect_zero_copy(fm: &mut FieldMap, buf: &mut [u8]) -> Vec<String> {
 /// XOR-flip the returned buffer and detect which model fields changed
 /// (indicating the serializer output aliases model memory). Flips back after.
 /// Returns the list of top-level field names showing output zero-copy.
-///
-/// This is a low-level audit helper. If you use the serify conformance runner,
-/// you do not need to call this directly — register your serialize/deserialize
-/// functions in a Suite and Run() handles audit automatically via --audit.
-/// Call this directly only if you want audit-style checks outside the runner.
 #[cfg(feature = "worker")]
 pub fn detect_output_zero_copy(fm: &FieldMap, buf: &mut [u8]) -> Vec<String> {
     if buf.is_empty() {

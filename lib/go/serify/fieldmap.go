@@ -117,8 +117,8 @@ func (f *FieldMap) GetOptionalStruct(key string) (*FieldMap, error) {
 
 // An array<T,N> is stored as the same []T a list<T> is, so it is read and
 // written through the GetList*/SetList* accessors above — there is no separate
-// array accessor family. The dedicated ones that used to live here only ever
-// spoke [4]uint32, which is why array<T,N> supported exactly that one shape.
+// array accessor family, and adding one would re-limit array<T,N> to whatever
+// shapes it happened to spell.
 
 func (f *FieldMap) SetU8(key string, v uint8)      { f.fields[key] = v }
 func (f *FieldMap) SetU16(key string, v uint16)    { f.fields[key] = v }

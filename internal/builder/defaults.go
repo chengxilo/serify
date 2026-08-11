@@ -22,8 +22,12 @@ type LangDefault struct {
 	Run   string
 }
 
-// Defaults maps each supported language to its default build/run commands.
-// These match the self-contained form used by serify init templates.
+// Defaults maps each supported language to its default build/run commands, used
+// when a worker directory has no worker.yaml overriding them. They assume a
+// self-contained worker laid out the conventional way for its language. Every
+// worker in this repo does override them, because each has to reach a library
+// under lib/ by relative path — that is a property of living in the repo, not a
+// sign the defaults are wrong.
 var Defaults = map[string]LangDefault{
 	language.Go: {
 		Build: "go build -o worker .",

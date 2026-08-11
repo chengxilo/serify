@@ -23,14 +23,18 @@ test/
 
 | Directory | Purpose |
 |-----------|---------|
-| `cases/happy/` | Correct go+rust workers for the happy path (all_types, point, tag) |
-| `cases/wrong/` | Deliberately-faulty go+rust workers (see below) |
+| `cases/happy/` | Correct workers for the happy path (all_types, point, tag) |
+| `cases/wrong/` | Deliberately-faulty workers (see below) |
 | `cases/invalid_schema/` | Type with no `formats:` — exercises config validation |
 | `cases/audit/` | Audit meta-fixture (clean, mutating, zero-copy, unstable formats) |
 
+All four fixtures carry a worker in **every one of the nine languages**, and
+`requireWorkers` treats a missing toolchain as a failure rather than a skip — so
+these tests need the full toolchain set, not just go and cargo.
+
 ## Fault formats (wrong worker)
 
-The `wrong` worker registers six formats beyond `binary` and `json`:
+The `wrong` worker registers four formats beyond `binary` and `json`:
 
 | Format | Behaviour |
 |--------|-----------|
@@ -58,7 +62,7 @@ the required language toolchain isn't available (e.g. `cargo` not on PATH).
 ## Multi-language tests
 
 `examples/test/` drives all example workers (`examples/<lang>/`) through the
-shared conformance suite. See `examples/test/README.md` or the inline docs.
+shared conformance suite; `examples/test/example_test.go` documents itself.
 Multi-language builds may need network (first `npm install` / `mix deps.get` /
 `composer install`). serify always invokes the build command and lets each
 language's build tool decide what to recompile, so repeat runs are cheap without
@@ -67,7 +71,7 @@ serify caching anything itself.
 ## Running
 
 ```bash
-# Run integration tests (requires go + cargo)
+# Run integration tests (needs every one of the nine toolchains on PATH)
 go test ./test/... -v
 
 # Run multi-language conformance (example workers — needs all toolchains)

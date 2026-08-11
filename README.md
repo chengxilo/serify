@@ -2,7 +2,12 @@
 
 Cross-language binary serialization test framework. Define a schema once, verify that every language's serialization implementation produces identical bytes.
 
-While Serify might can be considered as a conformence test framework, it's not designed for you to write a very nice serialize/deserialize function. Instead, it depends on a well-defined unit test for one langauge, while other language would deeply rely on the well-defined unit test. With Serify, you can avoid writing/generating a very complicated golden file, filled with json or even hex that human cannot read. Or, implement the same unit test across many different languages, while have to manually make sure they match each other's behavior.
+serify is a conformance harness, not a tool for writing a good serializer. It
+assumes you already have one language whose tests you trust, and makes that the
+reference every other language is held to. The two things it exists to spare you
+are the alternatives: a golden file full of JSON or hex that no one can read, and
+the same test suite reimplemented in nine languages that you then have to keep in
+agreement by hand.
 
 
 ## Contents
@@ -17,15 +22,32 @@ While Serify might can be considered as a conformence test framework, it's not d
   - [Defining a type](#defining-a-type)
   - [Field types](#field-types)
   - [Writing test data](#writing-test-data)
+  - [Testing formats](#testing-formats)
   - [Reusing types with `import`](#reusing-types-with-import)
-- [Local CI with act](#local-ci-with-act)
+  - [Sum types: `variants:`](#sum-types-variants)
+- [Audit mode](#audit-mode)
+- [Model binding](#model-binding)
+- [`serify validate`](#serify-validate)
+- [Protocol](#protocol)
+- [Local CI](#local-ci)
 
 ## How it works
 
 1. You write `worker` for your target languages — a small program that reads an NDJSON protocol on stdin and answers serialize/deserialize requests.
 2. `serify` CLI drives all workers through the same test cases and compares their outputs byte-for-byte.
 
-![alt text](docs/basic-example.svg)
+```mermaid
+flowchart LR
+    Y["cases/customer.yaml<br/>schema + test data"] --> R["serify runner"]
+    R -->|"1. serialize"| W["workers<br/>go · rust · python · node · csharp<br/>cpp · elixir · java · php"]
+    W -->|"2. bytes"| R
+    R -->|"3. deserialize the reference's bytes"| W
+    W -->|"4. decoded data"| R
+    R --> V["report<br/>per-language verdict"]
+```
+
+[`docs/basic-example.md`](docs/basic-example.md) draws the same flow with a real
+case file in it.
 
 ## Install Serify CLI
 
@@ -203,10 +225,10 @@ section (or `variants:` for a sum, see below), and a `cases:` list.
 ```yaml
 # cases/user.yaml
 formats:                  # serialization formats to test this type with
-  - name: binary          # every format must name its comparison oracle
+  - name: binary          # every format must name its comparison oracle:
     oracle: bytes         #   bytes    — compared byte-for-byte
-  - name: json            #   semantic — compared by decoded value
-    oracle: bytes
+  - name: json
+    oracle: semantic      #   semantic — compared by decoded value
 import:
   - address.yaml          # makes the `address` type available below
 fields:                   # one `name: type` per line, order is preserved
@@ -261,9 +283,10 @@ In `data:`, write each field's value in YAML according to its type:
 | named type / struct        | a mapping                 | `address: { street: "x", zip: 1 }`                  |
 | `map<K,V>`                 | a mapping                 | `scores: { math: 95 }`                              |
 
-Each case has a `name`, and its **global id is `type/name`** (e.g.
-`user/basic`). That id is what appears in the report and is sent to the
-workers.
+Each case has a `name`, and its **global id is `type/format/case`** (e.g.
+`user/binary/basic`) — the format is part of it because the same case runs once
+per declared format. That id is what appears in the report and is sent to the
+workers as the request `id`.
 
 ### Testing formats
 
@@ -273,12 +296,12 @@ time), and **every format must name its `oracle:`** — `bytes` to compare the
 serialized bytes, `semantic` to compare the decoded value. That is mandatory too,
 and for the same reason: it decides whether a disagreement between two workers is
 a failure or is allowed wire freedom, which is not something to leave implicit.
-Each worker is re-initialized
-once per format and its cases run again under that format, so a single run
-compares every language byte-for-byte for each format. A worker that doesn't
-implement a format is marked `SKIP` for it (and if the reference worker lacks
-it, that whole format is skipped). Reusable-only types (no `cases:`, imported by
-others) don't need `formats:`.
+
+Each worker is re-bound once per format and its cases run again under that
+format, so a single run compares every language for each format. A worker that
+doesn't implement a format is marked `SKIP` for it (and if the reference worker
+lacks it, that whole format is skipped). Reusable-only types (no `cases:`,
+imported by others) don't need `formats:`.
 
 Note that byte-for-byte parity across languages only holds for formats with a
 fully-specified wire layout — that is what `oracle: bytes` asserts. Text formats
@@ -290,9 +313,9 @@ decoded value instead. See `docs/protocol.md` § Comparison oracles.
 ### Reusing types with `import`
 
 Any type file can be imported by path so your schema can reference it by name —
-`import` uses the imported file's `schema` and ignores any `cases` it has. So you
-can import a tested type just as well; a type with no `cases` is just one that
-exists *only* to be reused:
+`import` takes the imported file's `fields:` (or `variants:`) section and ignores
+any `cases:` it has. So you can import a tested type just as well; a type with no
+`cases:` is just one that exists *only* to be reused:
 
 ```yaml
 # cases/address.yaml — reusable-only (no cases)
@@ -318,6 +341,13 @@ cycle-safe; a single file may import several others.
 Under `variants:` each entry is `tag: payload`, a value is *exactly one* of them,
 and an entry with no type is a unit variant. The section name is the whole
 declaration — there is no separate flag.
+
+```yaml
+# cases/money.yaml — reusable-only, the struct payload below refers to it
+fields:
+  - currency: string
+  - amount_minor: int64
+```
 
 ```yaml
 # cases/channel.yaml
@@ -346,8 +376,10 @@ a list of named fields and a bare sum is not one:
 
 ```yaml
 cases:
-  - name: numeric
-    data: { value: { numeric: 1 } }
+  - name: pushed
+    data: { value: { push: 12345 } }
+  - name: quiet
+    data: { value: silent }   # a unit variant is written bare, as just the tag
 ```
 
 The tag ordinal is **not** on the wire — only the name is — so each worker

@@ -37,14 +37,14 @@ type fieldSnap struct {
 	orig any
 }
 
+// The exported functions in this file are low-level audit helpers. A worker
+// driven by the serify runner never calls them: register serialize/deserialize
+// in a Suite, and Run handles audit itself when --audit is passed. They are
+// exported for audit-style checks outside the runner.
+
 // SnapshotFieldMap deep-copies a FieldMap, cloning []byte values so in-place
 // mutations to the original are visible as diffs. Recurses into nested
 // *FieldMap, []*FieldMap, and map[string]any containing *FieldMap.
-//
-// This is a low-level audit helper. If you use the serify conformance runner,
-// you do not need to call this directly — register your serialize/deserialize
-// functions in a Suite and Run() handles audit automatically via --audit.
-// Call this directly only if you want audit-style checks outside the runner.
 func SnapshotFieldMap(src *FieldMap) *FieldMap {
 	if src == nil {
 		return nil
@@ -123,11 +123,6 @@ func cloneValue(v any) any {
 // CompareFieldMaps returns field names that differ between before and after.
 // Uses bytes.Equal for []byte, recursive comparison for nested *FieldMap,
 // and reflect.DeepEqual for everything else.
-//
-// This is a low-level audit helper. If you use the serify conformance runner,
-// you do not need to call this directly — register your serialize/deserialize
-// functions in a Suite and Run() handles audit automatically via --audit.
-// Call this directly only if you want audit-style checks outside the runner.
 func CompareFieldMaps(before, after *FieldMap) []string {
 	if before == nil && after == nil {
 		return nil
@@ -225,11 +220,6 @@ func xorFlip(buf []byte) {
 // XOR-flips the input buffer, and checks which fields changed. Fields that
 // changed were aliasing the buffer. Restores original values after.
 // Returns the list of field names that exhibited zero-copy aliasing.
-//
-// This is a low-level audit helper. If you use the serify conformance runner,
-// you do not need to call this directly — register your serialize/deserialize
-// functions in a Suite and Run() handles audit automatically via --audit.
-// Call this directly only if you want audit-style checks outside the runner.
 func DetectZeroCopy(fm *FieldMap, buf []byte) []string {
 	if len(buf) == 0 {
 		return nil
@@ -345,11 +335,6 @@ func hasBytesOrStringValue(x map[string]any) bool {
 }
 
 // DetectInputMutation checks if the input buffer was modified during deserialization.
-//
-// This is a low-level audit helper. If you use the serify conformance runner,
-// you do not need to call this directly — register your serialize/deserialize
-// functions in a Suite and Run() handles audit automatically via --audit.
-// Call this directly only if you want audit-style checks outside the runner.
 func DetectInputMutation(before, current []byte) bool {
 	return !bytes.Equal(before, current)
 }

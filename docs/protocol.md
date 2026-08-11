@@ -179,10 +179,9 @@ anything about itself.
   "status": "OK",
   "hex": "010000002a0000000000000000000000",
   "audit": {
-    "mutations": [],
-    "stable": true,
-    "zero_copy_fields": [],
-    "input_mutated": false
+    "mutations": ["score"],
+    "output_zero_copy_fields": ["metadata"],
+    "stable": false
   }
 }
 ```
@@ -227,10 +226,9 @@ anything about itself.
     "metadata": "deadbeef"
   },
   "audit": {
-    "mutations": [],
-    "stable": true,
-    "zero_copy_fields": [],
-    "input_mutated": false
+    "input_mutated": true,
+    "deser_stable": false,
+    "zero_copy_fields": ["metadata"]
   }
 }
 ```
@@ -264,25 +262,34 @@ message. No response is expected.
 
 When the `--audit` flag is set, the runner passes `"audit": true` in the bind
 message. The worker should enable unsafe-behaviour detection and populate the
-`audit` field in serialize/deserialize responses:
+`audit` field in serialize/deserialize responses.
 
-```json
-{
-  "mutations": ["value"],
-  "stable": false,
-  "zero_copy_fields": ["payload"],
-  "input_mutated": true
-}
-```
+Six detections are defined, three per direction. **The `audit` object is not the
+same shape in both directions** — a serialize response carries the first three
+keys, a deserialize response the last three:
 
-Four detections are defined:
+| Direction | Key | Type | Detection | How |
+|-----------|-----|------|-----------|-----|
+| serialize | `mutations` | array | Serializer mutated the input it was given | Snapshot the FieldMap before, compare after |
+| serialize | `output_zero_copy_fields` | array | The returned bytes alias model fields | XOR-flip the returned buffer, re-extract the model, compare |
+| serialize | `stable` | boolean | Serializer returns different bytes on a repeat call | Call twice, compare hex |
+| deserialize | `input_mutated` | boolean | Deserializer modified the raw input bytes | Snapshot the buffer before, compare after |
+| deserialize | `deser_stable` | boolean | Deserializer returns a different value on a repeat call | Re-deserialize from a fresh clone, diff FieldMaps |
+| deserialize | `zero_copy_fields` | array | Decoded fields alias the input buffer | XOR-flip the buffer, check which fields change |
 
-| Detection | When | How |
-|-----------|------|-----|
-| **Serialize mutation** | Serializer mutates the input | Snapshot before, compare after |
-| **Serialize instability** | Serializer produces different output on repeat | Call twice, compare hex |
-| **Deserialize zero-copy** | Deserialized fields alias the input buffer | XOR-flip buffer, check which fields change |
-| **Input-buffer mutation** | Deserializer modifies the raw input | Snapshot buffer before, compare after |
+Every key is optional and **only a finding is reported**: omit the array when it
+is empty, and omit `stable`/`deser_stable`/`input_mutated` unless the unsafe
+value (`false`, `false`, `true`) applies. An `audit` object with nothing to say
+is empty.
+
+Order matters within a direction. The zero-copy probe destroys the buffer it
+tests, so run it last, and take the stability re-call from a pristine clone
+rather than from the buffer a previous probe (or the worker itself) may have
+corrupted.
+
+Output zero-copy is the one detection a language may legitimately not implement:
+it needs a memory model in which a model field can mutably alias the output
+buffer. C++, Elixir and PHP cannot express that, and omit the key.
 
 Audit findings are **warnings, not errors** — they appear in the report as
 `WARN` and do not cause a non-zero exit.

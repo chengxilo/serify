@@ -1,6 +1,7 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents working in this repository.
+`CLAUDE.md` is a one-line pointer here; keep the content in this file.
 
 ## What this is
 
@@ -22,7 +23,7 @@ Understanding this split is essential — they are different audiences with thei
 2. **The worker libraries** — what a worker author imports, one implementation per language:
    - `lib/go/serify` (package `serify`, imported as `github.com/chengxilo/serify/lib/go/serify`) — the **Go** worker lib: `serify.Run`, `Suite`/`Type`/`Format`, `FieldMap`, reflection-based field mapping, and the NDJSON loop. Same module as the CLI (`cmd/serify/`); the Thrift-style `lib/go/serify` path keeps the import's last element equal to the package name.
    - `lib/<lang>/` — equivalents for rust/python/node/csharp/cpp/elixir/java/php. `lib/rust/serify` is the Rust crate (`serify`); `lib/rust/derive` is the proc-macro for `#[derive(SerifyModel)]`.
-   - `examples/<lang>/` — reference worker implementations; the Go + Rust examples are exercised by the integration tests. `examples/cases/` holds the shared conformance suite (one `.yaml` file per type; tested: `customer`, `order`, `telemetry`, `ledger`, `notification`, `signals`, plus reusable `address`/`money`/`line_item`). `notification` is the `sum` type and is implemented by **all nine** example workers, so `TestExamples_Notification` is what actually guards sum-type parity across the libraries. `signals` plays the same role for `list<T>` and `array<T,N>`: its fields use every scalar the schema allows as a list element, so `TestExamples_Signals` is what keeps a library from quietly dropping one — three libraries once failed *silently* on the element types they did not handle. `telemetry` (Go + Rust) carries the only `optional<scalar>` and the float NaN/Inf cases; `order` (Go) is the only type combining `enum`, `list<struct>`, `map<string,struct>` and `optional<struct>`. A type no worker implements is now called out under the results grid, because a column of SKIP otherwise reads exactly like a passing run. Each file carries a `fields:` (or `variants:`) section plus `formats:`/`cases:`; generated JSON Schemas (`.schemas/*.schema.json`, from `scripts/gen-schemas.sh`) give editors save-time validation of case data.
+   - `examples/<lang>/` — reference worker implementations, exercised by `examples/test/` (not by `test/`, which drives its own fixtures under `test/cases/`). `examples/cases/` holds the shared conformance suite (one `.yaml` file per type; tested: `customer`, `order`, `telemetry`, `ledger`, `notification`, `signals`, plus reusable `address`/`money`/`line_item`). `notification` is the `sum` type and is implemented by **all nine** example workers, so `TestExamples_Notification` is what actually guards sum-type parity across the libraries. `signals` plays the same role for `list<T>` and `array<T,N>`: its fields use every scalar the schema allows as a list element, so `TestExamples_Signals` is what keeps a library from quietly dropping one — three libraries once failed *silently* on the element types they did not handle. `telemetry` (Go + Rust) carries the only `optional<scalar>` and the float NaN/Inf cases; `order` (Go) is the only type combining `enum`, `list<struct>`, `map<string,struct>` and `optional<struct>`. A type no worker implements is now called out under the results grid, because a column of SKIP otherwise reads exactly like a passing run. Each file carries a `fields:` (or `variants:`) section plus `formats:`/`cases:`; generated JSON Schemas (`.schemas/*.schema.json`, from `scripts/gen-schemas.sh`) give editors save-time validation of case data.
    - There is **no `serify init` / `templates/` scaffolding** — it was removed and will be rebuilt once libraries/protocol stabilize; new workers start by copying an `examples/<lang>` worker.
 
 **Go and Rust are the reference implementations.** When changing protocol or library behavior, update Go (`lib/go/serify`) and Rust (`lib/rust/`) first, then propagate to the other languages. All 9 libraries are currently at parity for core features (audit, `map<K,V>`, `sum<...>`, FieldMap types).
@@ -248,14 +249,14 @@ The terminal table is **not** a separate code path — it's a view of the same d
 To verify that serify itself *reports* disagreements correctly (not just that honest workers agree), there is a deliberately-faulty `wrong` type — kept **out** of `examples/cases` so it never pollutes the real conformance suite:
 
 - `test/cases/wrong/cases/wrong.yaml` — schema is four `bool` fault directives (`<format>_serialize` / `<format>_deserialize`) plus a `langs: list<string>` payload. Each case toggles the directives.
-- `test/cases/wrong/go/` and `test/cases/wrong/rust/` — faulty workers. When a format's directive is off, the worker **drops its own language name** from `langs` (go drops `"go"`, rust drops `"rust"`), so its output diverges from the others; otherwise it round-trips all five fields faithfully and byte-identically. The directives must round-trip (they ride in the bytes) so the deserializer can read them back. The Rust worker is a **standalone crate** (its own empty `[workspace]`) so its `worker` binary does not collide with the example worker in the main Cargo workspace.
+- `test/cases/wrong/<lang>/` — faulty workers, one per language, all nine. When a format's directive is off, the worker **drops its own language name** from `langs` (go drops `"go"`, php drops `"php"`), so its output diverges from the others; otherwise it round-trips all five fields faithfully and byte-identically. The directives must round-trip (they ride in the bytes) so the deserializer can read them back. The Rust worker is a **standalone crate** (its own empty `[workspace]`) so its `worker` binary does not collide with the example worker in the main Cargo workspace.
 - `test/wrong_meta_test.go` (`TestWrongWorkerErrorsAreReported`) drives the **real `serify` CLI** (`serify run … --csv`), asserts it **exits non-zero**, then reads the exported CSV (`report.ReadCSV`) and checks it cell-by-cell against the outcome each case's flags predict.
 
 ## Audit mode: the `audit` meta-fixture (`test/cases/audit`)
 
 The `--audit` CLI flag enables unsafe-behaviour detection inside workers. It sends `"audit": true` in the bind message; each worker library then runs additional checks and reports findings as warnings. Findings are **warnings, not failures** — they appear in the report/CSV with `StatusWarn` and do NOT cause a non-zero exit.
 
-Seven unsafe behaviours are detected:
+Six unsafe behaviours are detected:
 
 | Detection | When | How |
 |-----------|------|-----|
@@ -270,7 +271,7 @@ Key files:
 
 | File | Purpose |
 |------|---------|
-| `lib/go/serify/auditcheck.go` | Go lib: `detectZeroCopy`, `snapshotFieldMap`, `compareFieldMaps`, `serializeAuditHolder` |
+| `lib/go/serify/auditcheck.go` | Go lib: `DetectZeroCopy`, `SnapshotFieldMap`, `CompareFieldMaps`, `DetectInputMutation`, `serializeAuditHolder` |
 | `lib/go/serify/auditcheck_test.go` | Go library unit tests for audit detection functions |
 | `lib/go/serify/run.go` | Go library: NDJSON loop audit logic (stability, mutation, zero-copy, input-mutation) |
 | `lib/go/serify/suite.go` | Go lib: `buildSerializer` returns `*serializeAuditHolder` for mutation detection |
@@ -282,14 +283,13 @@ Key files:
 | `lib/java/src/main/java/io/serify/WorkerLib.java` | Java lib: `detectZeroCopy`, `collectByteSnaps`, `dictDiffs`; audit in serialize/deserialize handlers |
 | `lib/elixir/lib/serify.ex` | Elixir lib: `detect_zero_copy`, `collect_bin_snaps`, `dict_diffs`; audit in serialize/deserialize handlers |
 | `lib/php/src/Worker.php` | PHP lib: `detectZeroCopy`, `collectByteSnaps`, `dictDiffs`; audit in serialize/deserialize handlers |
-| `internal/protocol/protocol.go` | `InitRequest.Audit`, `Response.Audit`, `AuditReport` type |
+| `internal/protocol/protocol.go` | `BindRequest.Audit`, `Response.Audit`, `AuditReport` type |
 | `internal/worker/worker.go` | `Bind` passes audit flag to the worker |
 | `internal/orchestrate/orchestrate.go` | `Options.Audit`; collects audit results into report |
 | `internal/report/report.go` | `StatusWarn`, `OpAudit*` constants, `Warnings` slice |
 | `cmd/serify/run.go` | `--audit` flag |
-| `test/cases/audit/` | Meta-test fixture with deliberately-broken Go + Rust workers (clean, mutating, value-mutating, zero-copy, list-zero-copy, unstable, deser-unstable, input-mutating, output-zero-copy formats) |
-| `test/audit_meta_test.go` | Integration test asserting expected audit warnings for both Go and Rust |
-| `design/audit-design.md` | Full design document |
+| `test/cases/audit/` | Meta-test fixture with deliberately-broken workers in all nine languages (clean, mutating, value-mutating, zero-copy, list-zero-copy, unstable, deser-unstable, input-mutating, output-zero-copy formats) |
+| `test/audit_meta_test.go` | Integration test asserting the expected audit warnings per language |
 
 **Audit support by language:**
 
@@ -332,6 +332,12 @@ go run ./cmd/serify run --ref rust --cases examples/cases examples/go examples/r
 #   --full-matrix    N×N cross-language deserialize matrix
 #   --output table|json|junit
 #   --csv <path>     also dump the full results as CSV (canonical data)
+#   --known-failures <dir>  per-language <lang>.yaml of expected failures; a listed
+#                      FAIL becomes XFAIL (exit 0), an unexpected pass becomes XPASS
+#   --expect-skips <dir>  per-language <lang>.yaml declaring the coverage a worker is
+#                      allowed to skip. Any *other* SKIP fails the run — this is the
+#                      only thing standing between a worker that honestly declines a
+#                      type and one that quietly declines everything.
 
 # Re-render a saved results CSV as the same table (offline, no workers)
 go run ./cmd/serify table out.csv
@@ -371,4 +377,4 @@ Notes:
 - The `.schemas/` JSON Schemas are generated from the `fields:`/`variants:` sections of the case files and are **checked in**. Enable the hook that keeps them in sync once per clone: `git config core.hooksPath .githooks`. It regenerates and stages them on any commit that touches a case file or the generator.
 - `serify run` **builds workers by default**, so it needs the relevant toolchains (go, cargo, etc.) on PATH; pass `--no-build` to skip.
 - On Windows the builder rewrites manifest commands (`worker`→`worker.exe`, `python`/`python3`→`py`); keep `worker.yaml` commands in the unix form.
-- The repo is not uniformly `gofmt`-clean; run `gofmt -w` only on files you touch.
+- The Go tree is `gofmt`-clean and CI enforces it (`gofmt -l .` must be empty). The example workers in the other languages are hand-aligned on purpose and are deliberately outside any formatter.

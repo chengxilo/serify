@@ -172,9 +172,14 @@ defmodule WorkerLib do
   end
 
   # --- audit helpers --------------------------------------------------------
+  #
+  # The public functions below are low-level audit helpers. A worker driven by
+  # the serify runner never calls them: register serialize/deserialize in a
+  # suite, and the run loop handles audit itself when --audit is passed. They
+  # are public for audit-style checks outside the runner.
 
   @doc """
-  This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions and the run loop handles audit automatically. Call this directly only if you want audit-style checks outside the runner.
+  Recursively walks a field map and collects a snapshot of every binary value.
   """
   def collect_bin_snaps(fm, snaps) when is_map(fm) do
     keys = Map.keys(fm) |> Enum.sort()
@@ -199,7 +204,7 @@ defmodule WorkerLib do
   end
 
   @doc """
-  This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions and the run loop handles audit automatically. Call this directly only if you want audit-style checks outside the runner.
+  Compares two maps and returns the keys whose values differ.
   """
   # `after` is a reserved word in Elixir and cannot be a parameter name.
   def dict_diffs(before, after_fm) do
@@ -210,31 +215,15 @@ defmodule WorkerLib do
   end
 
   @doc """
-  This is a low-level audit helper. If you use the serify conformance runner, you do not need to call this directly — register your serialize/deserialize functions and the run loop handles audit automatically. Call this directly only if you want audit-style checks outside the runner.
+  Reports which field-map entries alias the input buffer. On the BEAM that is
+  always none, so this always returns `[]`.
+
+  The other libraries answer this by XOR-flipping the input buffer and seeing
+  which decoded fields change with it. Neither half of that is expressible here:
+  a binary is immutable, so there is nothing to flip, and a decoded value can
+  never alias the buffer it was read from in the first place.
   """
-  def detect_zero_copy(fm, buf) do
-    if byte_size(buf) == 0, do: [], else: do_detect_zero_copy(fm, buf, collect_bin_snaps(fm, []))
-  end
-
-  defp do_detect_zero_copy(_fm, _buf, snaps) do
-    # Other libraries detect zero-copy by XOR-flipping the input buffer and seeing
-    # whether the decoded FieldMap changes with it. Elixir binaries are immutable,
-    # so a decoded value can never alias the input buffer and there is nothing to
-    # flip: the check reduces to comparing the snapshots.
-    aliased = Enum.filter(snaps, fn {target_fm, key, orig} ->
-      case Map.get(target_fm, key) do
-        v when is_binary(v) -> v != orig
-        _ -> false
-      end
-    end) |> Enum.map(fn {_fm, key, _orig} -> key end) |> Enum.uniq()
-
-    # Restore
-    Enum.each(snaps, fn {target_fm, key, orig} ->
-      Map.put(target_fm, key, orig)
-    end)
-
-    aliased
-  end
+  def detect_zero_copy(_fm, _buf), do: []
 
   # --- protocol handlers ----------------------------------------------------
 
