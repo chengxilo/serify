@@ -19,7 +19,7 @@ defmodule WorkerLib.MixProject do
     [
       app: :serify,
       version: "0.1.0",
-      elixir: "~> 1.14",
+      elixir: "~> 1.17",
       description: "Cross-language serialization conformance worker library for Elixir",
       source_url: "https://github.com/chengxilo/serify",
       package: [

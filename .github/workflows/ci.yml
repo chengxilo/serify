@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: "1.25"
       - run: go build -o serify ./cmd/serify
       - uses: actions/upload-artifact@v4
         with:
@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: "1.25"
       - name: Build check
         run: go build -buildvcs=false ./...
       # gofmt keeps the Go tree uniform (it is already written that way, unlike
@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
       - run: pip install mypy pytest
       - name: mypy strict (workerlib)
         run: mypy --strict lib/python/serify.py
@@ -82,7 +82,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
       - name: Unit tests (workerlib)
         run: npm ci && npm test
 
@@ -103,13 +103,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Same pair as the other Elixir jobs, for one toolchain across the repo.
-      # Unlike theirs, this pin is not load-bearing: these tests never touch
-      # stdin, so they do not exercise the OTP 26 input device.
       - uses: erlef/setup-beam@v1
         with:
-          elixir-version: '1.16'
-          otp-version: '26'
+          elixir-version: "1.17"
+          otp-version: "27"
       - name: Unit tests (workerlib)
         working-directory: lib/elixir
         run: mix deps.get && mix test
@@ -123,7 +120,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: "8.2"
           # Same as the conformance job: PHP's int is 64-bit, so the library
           # carries int128 through GMP.
           extensions: gmp
@@ -184,40 +181,36 @@ jobs:
       # Go is always needed: it runs the test and is the reference worker.
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: "1.25"
 
       - uses: dtolnay/rust-toolchain@stable
         if: matrix.language == 'rust'
       - uses: actions/setup-python@v5
         if: matrix.language == 'python'
         with:
-          python-version: '3.11'
+          python-version: "3.11"
       - uses: actions/setup-node@v4
         if: matrix.language == 'node'
         with:
-          node-version: '20'
+          node-version: "20"
       - uses: actions/setup-dotnet@v4
         if: matrix.language == 'csharp'
         with:
-          dotnet-version: '8.0'
-      # OTP is pinned to the oldest release the Elixir library supports, not
-      # the newest: OTP <= 26 reads stdin through a device that eats control
-      # characters, so this pin is what keeps the all_types/escapes case
-      # honest for the Elixir worker. Bumping it drops that coverage.
+          dotnet-version: "8.0"
       - uses: erlef/setup-beam@v1
         if: matrix.language == 'elixir'
         with:
-          elixir-version: '1.16'
-          otp-version: '26'
+          elixir-version: "1.17"
+          otp-version: "27"
       - uses: actions/setup-java@v4
         if: matrix.language == 'java'
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
       - uses: shivammathur/setup-php@v2
         if: matrix.language == 'php'
         with:
-          php-version: '8.2'
+          php-version: "8.2"
           # PHP's int is 64-bit, so the example worker encodes int128 through GMP.
           extensions: gmp
       # cpp: g++ is preinstalled on ubuntu runners.
@@ -243,20 +236,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: "1.25"
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
-      # Pinned to the oldest supported OTP on purpose — see the conformance job.
+          java-version: "21"
       - uses: erlef/setup-beam@v1
         with:
-          elixir-version: '1.16'
-          otp-version: '26'
+          elixir-version: "1.17"
+          otp-version: "27"
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: "8.2"
           extensions: gmp
       # No SERIFY_REQUIRE here: that variable is read by examples/test, whose
       # TestMain skips absent languages by default. ./test's requireWorkers

@@ -19,8 +19,8 @@ defmodule Worker.MixProject do
     [
       app: :worker,
       version: "0.1.0",
-      elixir: "~> 1.14",
-      escript: [main_module: Worker, emu_args: "-noinput"],
+      elixir: "~> 1.17",
+      escript: [main_module: Worker],
       deps: deps()
     ]
   end
