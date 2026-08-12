@@ -64,7 +64,7 @@ flowchart LR
 
 The runner offers every case to every worker. A worker registers only the types
 it implements and answers SKIP for the rest, so the nine above do not all take
-part in every row: `customer`, the type drawn here, is implemented by the go and
-rust workers only. A SKIP is not a failure and does not change the exit code,
+part in every row: `customer`, the type drawn here, is implemented by every worker
+except cpp and elixir. A SKIP is not a failure and does not change the exit code,
 which is why `--expect-skips` exists — see [`examples/cases/expected_skips/`](../examples/cases/expected_skips/)
 for the declarations that turn an undeclared gap back into a failure.

@@ -17,7 +17,8 @@ for your own project is easy to tell apart from the part serify needs:
 
 Which models a worker carries varies, because a worker is only obliged to
 implement what it claims. `ledger`, `notification` and `signals` are in all nine;
-`telemetry` in all but elixir; `customer` in go and rust; `order` in go alone.
+`telemetry` in all but elixir; `customer` in all but cpp and elixir; `order` in
+go alone.
 
 Go is the `--ref` language and owns the byte layout every other worker has to
 reproduce; the conventions are documented at the top of
