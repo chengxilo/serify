@@ -1470,6 +1470,16 @@ inline void get_sum(const FieldMap& fm, const std::string& key, V& v,
         fm.set_list_struct(#name, std::move(_ls_##name)); \
     } while(0)
 
+// optional<struct> for a std::optional<T> field. Distinct from
+// SERIFY_FIELD_STRUCT because the FieldMap slot holds a std::optional<StructPtr>
+// rather than a bare StructPtr, and from SERIFY_FIELD_OPTIONAL because a struct
+// payload is a nested FieldMap rather than a scalar alternative.
+#define SERIFY_FIELD_OPTIONAL_STRUCT(name, NestedType) \
+    if (obj.name.has_value()) \
+        fm.set_optional_struct(#name, \
+            std::make_shared<serify::FieldMap>(to_field_map(*obj.name))); \
+    else fm.set_optional_struct(#name, std::nullopt);
+
 #define SERIFY_FIELD_MAP_SCALAR(name, kind) \
     do { \
         serify::MapStore _m_##name; \
@@ -1527,6 +1537,18 @@ inline void get_sum(const FieldMap& fm, const std::string& key, V& v,
             obj.name.push_back(std::move(_e)); \
         } \
     }
+
+#define SERIFY_FROM_FIELD_OPTIONAL_STRUCT(name, NestedType) \
+    do { \
+        auto _o_##name = fm.get_optional_struct(#name); \
+        if (_o_##name.has_value() && *_o_##name) { \
+            NestedType _v_##name{}; \
+            from_field_map(**_o_##name, _v_##name); \
+            obj.name = std::move(_v_##name); \
+        } else { \
+            obj.name = std::nullopt; \
+        } \
+    } while(0)
 
 #define SERIFY_FROM_FIELD_MAP_SCALAR(name, kind) \
     if (fm.has_map(#name)) { \
