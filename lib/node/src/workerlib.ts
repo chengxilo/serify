@@ -551,6 +551,7 @@ const PROTOCOL_VERSION = 2;
 
 const _serifyKeys  = new WeakMap<object, string[]>();
 const _serifyKeyMap = new WeakMap<object, Map<string, string>>();
+const _serifyModels = new WeakMap<object, Map<string, { new (): any }>>();
 const _serifyClass = new WeakMap<Function, { keys: string[] }>();
 
 export namespace Serify {
@@ -558,6 +559,17 @@ export namespace Serify {
   export interface FieldOptions {
     /** Override the schema key name (default: property name) */
     rename?: string;
+    /**
+     * The model class behind a `struct`, `list<struct>`, `optional<struct>` or
+     * `map<K,struct>` field.
+     *
+     * Only the way *back* needs it. Going out, a nested model is recognised by
+     * its `toFieldMap` method and no declaration is required; coming in, all
+     * that arrives is a FieldMap, and TypeScript has erased the property's type
+     * by then — the same erasure that forces @Serify.sum to list its arms.
+     * Without this the property would be handed a raw FieldMap.
+     */
+    model?: { new (): any };
   }
 
   /**
@@ -588,6 +600,13 @@ export namespace Serify {
       let keyMap = _serifyKeyMap.get(target);
       if (!keyMap) { keyMap = new Map(); _serifyKeyMap.set(target, keyMap); }
       if (serKey !== key) keyMap.set(key, serKey);
+
+      // Track the nested model class, if one was named
+      if (opts?.model) {
+        let models = _serifyModels.get(target);
+        if (!models) { models = new Map(); _serifyModels.set(target, models); }
+        models.set(key, opts.model);
+      }
     };
   }
 
@@ -642,7 +661,7 @@ export namespace Serify {
       const payload = val[props[0]];
       // A single payload that is itself a model travels as a struct.
       return new Variant(armTag(arm),
-        payload && typeof payload.toFieldMap === 'function' ? payload.toFieldMap() : payload);
+        isModel(payload) ? toFieldMap(payload) : payload);
     }
     const payload = new FieldMap();                       // N properties -> a struct
     for (const p of props) setFieldMapValue(payload, defaultKey(p), val[p]);
@@ -709,6 +728,22 @@ export namespace Serify {
     return fm;
   }
 
+  /**
+   * Is this a class the worker registered with @Serify.Model()?
+   *
+   * This is how a nested struct is recognised on the way out. The check used to
+   * be `typeof val.toFieldMap === 'function'`, which no model has ever
+   * satisfied — the binding exposes toFieldMap as a namespace function, not a
+   * method — so every one of those branches was unreachable and a nested model
+   * fell through to `setString(key, String(val))`, arriving as the string
+   * "[object Object]". Nothing caught it because no example had a nested struct
+   * until customer.
+   */
+  function isModel(val: any): boolean {
+    return val !== null && typeof val === 'object'
+      && _serifyClass.has(val.constructor as Function);
+  }
+
   /** Populate a model instance from a FieldMap. */
   export function fromFieldMap<T extends { new(): InstanceType<T> }>(
     ctor: T, fm: FieldMap
@@ -720,11 +755,29 @@ export namespace Serify {
       if (fm._fields.has(serKey)) {
         const val = fm._fields.get(serKey);
         const arms = _serifyArms.get(proto)?.get(prop);
+        const model = _serifyModels.get(proto)?.get(prop);
         (instance as any)[prop] =
-          arms && val instanceof Variant ? fromVariant(arms, val) : val;
+          arms && val instanceof Variant ? fromVariant(arms, val)
+            : model ? reviveModel(model, val)
+              : val;
       }
     }
     return instance;
+  }
+
+  /**
+   * Rebuild the declared model class out of whatever shape the field arrived
+   * in: a struct is one FieldMap, a list<struct> an array of them, a
+   * map<K,struct> a Map of them, and an absent optional<struct> a null.
+   */
+  function reviveModel(model: { new (): any }, val: any): any {
+    if (val === null || val === undefined) return null;
+    if (val instanceof FieldMap) return fromFieldMap(model as any, val);
+    if (Array.isArray(val)) return val.map((x) => reviveModel(model, x));
+    if (val instanceof Map) {
+      return new Map([...val].map(([k, v]) => [k, reviveModel(model, v)]));
+    }
+    return val;
   }
 
   function setFieldMapValue(fm: FieldMap, key: string, val: any): void {
@@ -755,18 +808,19 @@ export namespace Serify {
       // type on the wire, and encodeList reads it from there. Guessing from
       // val[0] meant an empty list — and any list of bigints, booleans or
       // Buffers — was stored as though its elements were strings.
-      fm._fields.set(key, val.map(x =>
-        x !== null && typeof x === 'object' && typeof (x as any).toFieldMap === 'function'
-          ? (x as any).toFieldMap()
-          : x));
+      fm._fields.set(key, val.map(x => (isModel(x) ? toFieldMap(x) : x)));
     } else if (val instanceof FieldMap) {
       fm.setStruct(key, val);
     } else if (val instanceof Map) {
-      fm.setMap(key, val);
+      // Convert model values the way the list branch above does. Storing the
+      // Map as-is left a map<K,struct> holding model instances the encoder has
+      // no idea what to do with — the list case was handled and this one was
+      // not, purely because no example had a map of structs until customer.
+      fm.setMap(key, new Map([...val].map(([k, v]) => [k, isModel(v) ? toFieldMap(v) : v])));
     } else if (val instanceof Variant) {
       fm._fields.set(key, val);
-    } else if (typeof val.toFieldMap === 'function') {
-      fm.setStruct(key, val.toFieldMap());
+    } else if (isModel(val)) {
+      fm.setStruct(key, toFieldMap(val));
     } else {
       fm.setString(key, String(val));
     }

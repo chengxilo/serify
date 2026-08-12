@@ -22,12 +22,13 @@
  * beside it — those stand in for the types an application already owns, each
  * carrying its own schema binding and byte layout.
  *
- * Types this worker does not register (customer, order) are reported
+ * Types this worker does not register (order) are reported
  * to the runner as SKIPPED.
  */
 
 import { runSuite, type } from '@chengxilo/serify';
 
+import { CustomerRecord } from './customer';
 import { LedgerEntry } from './ledger';
 import { NotificationRecord } from './notification';
 import { SignalCapture } from './signals';
@@ -49,6 +50,16 @@ function binary<T extends { marshal(): Buffer }>(
 }
 
 runSuite({
+  customer: type(CustomerRecord, {
+    binary: {
+      serialize: (c: CustomerRecord) => c.marshal(),
+      deserialize: (d: Buffer) => CustomerRecord.unmarshal(d),
+    },
+    json: {
+      serialize: (c: CustomerRecord) => c.toJSON(),
+      deserialize: (d: Buffer) => CustomerRecord.fromJSON(d),
+    },
+  }),
   ledger: binary(LedgerEntry),
   signals: binary(SignalCapture),
   notification: binary(NotificationRecord),
