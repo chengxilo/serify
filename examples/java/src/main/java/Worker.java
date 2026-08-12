@@ -28,8 +28,7 @@ import java.util.Map;
  * beside it — those stand in for the types an application already owns, each
  * carrying its own schema binding and byte layout.
  *
- * <p>Types this worker does not register (order) are reported to the runner as
- * SKIPPED.
+ * <p>This worker registers every type in the suite.
  */
 public final class Worker {
 
@@ -38,6 +37,8 @@ public final class Worker {
                 "customer", TypeEntry.model(CustomerRecord.class, Map.of(
                         "binary", new ModelFormatPair<>(CustomerRecord::marshal, CustomerRecord::unmarshal),
                         "json", new ModelFormatPair<>(CustomerRecord::toJson, CustomerRecord::fromJson))),
+                "order", TypeEntry.model(OrderRecord.class, Map.of(
+                        "binary", new ModelFormatPair<>(OrderRecord::marshal, OrderRecord::unmarshal))),
                 "ledger", TypeEntry.model(LedgerEntry.class, Map.of(
                         "binary", new ModelFormatPair<>(LedgerEntry::marshal, LedgerEntry::unmarshal))),
                 "signals", TypeEntry.model(SignalCapture.class, Map.of(
