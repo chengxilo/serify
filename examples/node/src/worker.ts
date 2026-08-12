@@ -22,8 +22,7 @@
  * beside it — those stand in for the types an application already owns, each
  * carrying its own schema binding and byte layout.
  *
- * Types this worker does not register (order) are reported
- * to the runner as SKIPPED.
+ * This worker registers every type in the suite.
  */
 
 import { runSuite, type } from '@chengxilo/serify';
@@ -31,6 +30,7 @@ import { runSuite, type } from '@chengxilo/serify';
 import { CustomerRecord } from './customer';
 import { LedgerEntry } from './ledger';
 import { NotificationRecord } from './notification';
+import { OrderRecord } from './order';
 import { SignalCapture } from './signals';
 import { TelemetryFrame } from './telemetry';
 
@@ -61,6 +61,7 @@ runSuite({
     },
   }),
   ledger: binary(LedgerEntry),
+  order: binary(OrderRecord),
   signals: binary(SignalCapture),
   notification: binary(NotificationRecord),
   telemetry: binary(TelemetryFrame),

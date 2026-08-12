@@ -42,7 +42,7 @@ import { Serify } from '@chengxilo/serify';
 import { lenPrefixed, lenPrefixedStr } from './wire';
 
 /** A cursor over the input buffer, so the readers below stay one-liners. */
-class Reader {
+export class Reader {
   off = 0;
   constructor(readonly buf: Buffer) {}
 
