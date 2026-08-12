@@ -1017,7 +1017,7 @@ public final class WorkerLib {
                     if (field.getType().isSealed() && val instanceof Variant v) {
                         field.set(obj, fromVariant(field.getType(), v));
                     } else {
-                        field.set(obj, val);
+                        field.set(obj, revive(field, val));
                     }
                 }
                 return obj;
@@ -1146,11 +1146,70 @@ public final class WorkerLib {
                 // meant an *empty* list stored nothing at all — the field simply
                 // vanished from the FieldMap — and any list of booleans,
                 // BigIntegers, Shorts, Doubles or byte[] fell through the same way.
-                fm.raw().put(key, v);
+                // A list<struct> is the one element type that does need
+                // converting, since the encoder speaks FieldMap, not models.
+                fm.raw().put(key, v.stream().map(SerifyModelHelper::flatten).toList());
             }
             else if (val instanceof FieldMap v) fm.setStruct(key, v);
-            else if (val instanceof Map<?,?> v) fm.setMap(key, (Map<String, Object>) v);
+            else if (val instanceof Map<?,?> v) {
+                var out = new LinkedHashMap<String, Object>(v.size());
+                for (var e : v.entrySet()) out.put((String) e.getKey(), flatten(e.getValue()));
+                fm.setMap(key, out);
+            }
+            else if (isModel(val.getClass())) fm.setStruct(key, toFieldMap(val));
             else fm.setString(key, val.toString());
+        }
+
+        /** Is this a class the worker annotated with @SerifyModel? */
+        private static boolean isModel(Class<?> cls) {
+            return cls.isAnnotationPresent(SerifyModel.class);
+        }
+
+        /**
+         * A nested model becomes a FieldMap; anything else passes through.
+         *
+         * Without this a nested struct fell to {@code setString(key,
+         * val.toString())} and went out as its own class name, and a
+         * list<struct> or map<K,struct> carried models the encoder does not
+         * speak. Nothing caught it because no example had a nested struct until
+         * customer.
+         */
+        private static Object flatten(Object v) {
+            return v != null && isModel(v.getClass()) ? toFieldMap(v) : v;
+        }
+
+        /**
+         * The way back: rebuild whatever the field declares out of the FieldMaps
+         * the decoder produced. Java erases the element type at runtime, but
+         * {@code Field.getGenericType()} still carries it, so a
+         * {@code List<Address>} or {@code Map<String, Address>} can be restored
+         * without the model naming its own class.
+         */
+        private static Object revive(java.lang.reflect.Field field, Object val) {
+            if (val == null) return null;
+            var type = field.getType();
+            if (val instanceof FieldMap fmv && isModel(type)) return fromFieldMap(fmv, type);
+            var arg = typeArg(field, type == Map.class || Map.class.isAssignableFrom(type) ? 1 : 0);
+            if (arg == null || !isModel(arg)) return val;
+            if (val instanceof List<?> list) {
+                return list.stream().map(x -> x instanceof FieldMap f ? fromFieldMap(f, arg) : x).toList();
+            }
+            if (val instanceof Map<?,?> m) {
+                var out = new LinkedHashMap<String, Object>(m.size());
+                for (var e : m.entrySet()) {
+                    out.put((String) e.getKey(),
+                            e.getValue() instanceof FieldMap f ? fromFieldMap(f, arg) : e.getValue());
+                }
+                return out;
+            }
+            return val;
+        }
+
+        /** The i-th actual type argument of a field's declared type, or null. */
+        private static Class<?> typeArg(java.lang.reflect.Field field, int i) {
+            if (!(field.getGenericType() instanceof java.lang.reflect.ParameterizedType p)) return null;
+            var args = p.getActualTypeArguments();
+            return i < args.length && args[i] instanceof Class<?> c ? c : null;
         }
     }
 }
