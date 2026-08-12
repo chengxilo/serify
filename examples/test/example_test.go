@@ -27,44 +27,37 @@ import (
 	"github.com/chengxilo/serify/internal/testutil"
 )
 
-// TestExamples_GoRust asserts real conformance for the workers that have been
-// migrated to the current case suite: go and rust implement `customer` (binary +
-// json) and `ledger` (binary). Unlike TestExamples_AllLanguages below, this one
-// fails the build if the workers disagree — it is the test that actually guards
-// the suite.
+// TestExamples_Customer asserts that every available language agrees on
+// `customer`, the only type in the suite carrying two formats. That is what
+// makes it worth the size: `binary` is a layout each worker writes by hand,
+// `json` goes through whatever encoder the language ships, and the two fail in
+// completely different ways. Both declare `oracle: semantic`, so what has to
+// match is the decoded value — under a byte oracle every worker would have to
+// reproduce Go's HTML escaping to stay green.
 //
-// `order` is not implemented by the rust worker yet and is reported as SKIPPED,
-// which is declared in expected_skips/rust.yaml, so the run still exits 0.
-func TestExamples_GoRust(t *testing.T) {
+// It is also the only type with nested structs, and porting it is what found
+// the same dead nested-struct branch in four bindings at once: node, csharp,
+// java and php each recognised a nested model by a duck-type no model has ever
+// satisfied, so every one of those branches was unreachable and a nested struct
+// went out stringified. text_escapes and boundary are the two cases that pin
+// the encoders: the first carries the characters JSON encoders disagree about,
+// the second max uint64 and min int64, which no JSON double can hold.
+func TestExamples_Customer(t *testing.T) {
+	if len(availableLangs) == 0 {
+		t.Skip("no example worker toolchains available")
+	}
 	requireLang(t, "go")
-	// Skipped rather than failed when rust is absent: this test is meaningful
-	// only in an environment that has rust, and which languages an environment
-	// must have is now declared by SERIFY_REQUIRE (see TestMain) rather than
-	// hardcoded here. That lets CI run this package with no -run filter at all.
-	skipUnless(t, "rust")
 
-	repoRoot := testutil.RepoRoot()
-	casesDir := filepath.Join(repoRoot, "examples", "cases")
-	csv := filepath.Join(t.TempDir(), "out.csv")
-
-	out, code := testutil.RunSerify(t, "run",
-		"--ref", "go",
-		"--cases", casesDir,
-		"--csv", csv,
-		"--expect-skips", filepath.Join(casesDir, "expected_skips"),
-		filepath.Join(repoRoot, "examples", "go"),
-		filepath.Join(repoRoot, "examples", "rust"),
-	)
-	require.Equal(t, 0, code, "expected exit 0, got %d\n%s", code, out)
-
-	grid := testutil.ReadResultGrid(t, csv)
-	for _, lang := range []string{"go", "rust"} {
+	grid := allWorkersGrid(t)
+	for _, lang := range availableLangs {
 		for _, op := range []string{"serialize", "deserialize"} {
-			// customer: the json format is where encoder quirks (HTML escaping,
-			// float formatting, base64) diverge between languages.
-			testutil.AssertCell(t, grid, "customer/json/text_escapes", lang, op, report.StatusPass, nil)
-			testutil.AssertCell(t, grid, "customer/json/boundary", lang, op, report.StatusPass, nil)
-			testutil.AssertCell(t, grid, "customer/binary/typical", lang, op, report.StatusPass, nil)
+			for _, format := range []string{"binary", "json"} {
+				testutil.AssertCell(t, grid, "customer/"+format+"/typical", lang, op, report.StatusPass, nil)
+				testutil.AssertCell(t, grid, "customer/"+format+"/new_account", lang, op, report.StatusPass, nil)
+				testutil.AssertCell(t, grid, "customer/"+format+"/unicode", lang, op, report.StatusPass, nil)
+				testutil.AssertCell(t, grid, "customer/"+format+"/boundary", lang, op, report.StatusPass, nil)
+				testutil.AssertCell(t, grid, "customer/"+format+"/text_escapes", lang, op, report.StatusPass, nil)
+			}
 		}
 	}
 }
@@ -72,11 +65,10 @@ func TestExamples_GoRust(t *testing.T) {
 // allWorkersGrid runs the full suite across every available worker exactly once
 // and caches the result grid.
 //
-// TestExamples_Ledger, _Notification and _Signals issue the identical command
-// and differ only in which cells they assert, so they used to pay for three
-// complete 9-worker runs. With `telemetry` and `order` implemented the package
-// crossed go test's 10-minute limit and the whole thing timed out; sharing one
-// run is both the fix and what the tests always meant.
+// Every TestExamples_* above and below issues the identical command and differs
+// only in which cells it asserts, so they used to pay for a complete 9-worker
+// run each. The package crossed go test's 10-minute limit and the whole thing
+// timed out; sharing one run is both the fix and what the tests always meant.
 var (
 	sharedGridOnce sync.Once
 	sharedGrid     testutil.ResultGrid

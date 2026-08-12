@@ -84,16 +84,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// skipUnless skips the test when the language's toolchain is unavailable. Use it
-// for a language the test needs but the environment is not obliged to have;
-// SERIFY_REQUIRE is what makes a language mandatory.
-func skipUnless(t *testing.T, lang string) {
-	t.Helper()
-	if reason, ok := missingLang[lang]; ok {
-		t.Skipf("toolchain %s unavailable: %s", lang, reason)
-	}
-}
-
 // requireLang fails the test if the language's toolchain is unavailable.
 func requireLang(t *testing.T, lang string) {
 	t.Helper()

@@ -42,13 +42,14 @@ from dataclasses import dataclass
 from serify import serify_model
 
 
-def _pack_str(s: str) -> bytes:
-    """u32 byte length, then the UTF-8 bytes."""
+def pack_str(s: str) -> bytes:
+    """u32 byte length, then the UTF-8 bytes. Public because order.py imports it
+    along with Address and Money."""
     raw = s.encode('utf-8')
     return struct.pack('<I', len(raw)) + raw
 
 
-def _unpack_str(data: bytes, pos: int):
+def unpack_str(data: bytes, pos: int):
     n = struct.unpack_from('<I', data, pos)[0]
     pos += 4
     return data[pos:pos + n].decode('utf-8'), pos + n
@@ -66,17 +67,17 @@ class Address:
     def pack(self) -> bytes:
         """A struct is its fields back to back, in schema order — no count, no
         length, nothing framing it."""
-        return (_pack_str(self.recipient) + _pack_str(self.street)
-                + _pack_str(self.city) + _pack_str(self.country)
-                + _pack_str(self.postal_code))
+        return (pack_str(self.recipient) + pack_str(self.street)
+                + pack_str(self.city) + pack_str(self.country)
+                + pack_str(self.postal_code))
 
     @classmethod
     def unpack(cls, data: bytes, pos: int):
-        recipient, pos = _unpack_str(data, pos)
-        street, pos = _unpack_str(data, pos)
-        city, pos = _unpack_str(data, pos)
-        country, pos = _unpack_str(data, pos)
-        postal_code, pos = _unpack_str(data, pos)
+        recipient, pos = unpack_str(data, pos)
+        street, pos = unpack_str(data, pos)
+        city, pos = unpack_str(data, pos)
+        country, pos = unpack_str(data, pos)
+        postal_code, pos = unpack_str(data, pos)
         return cls(recipient, street, city, country, postal_code), pos
 
 
@@ -87,11 +88,11 @@ class Money:
     amount_minor: int
 
     def pack(self) -> bytes:
-        return _pack_str(self.currency) + struct.pack('<q', self.amount_minor)
+        return pack_str(self.currency) + struct.pack('<q', self.amount_minor)
 
     @classmethod
     def unpack(cls, data: bytes, pos: int):
-        currency, pos = _unpack_str(data, pos)
+        currency, pos = unpack_str(data, pos)
         amount_minor = struct.unpack_from('<q', data, pos)[0]
         return cls(currency, amount_minor), pos + 8
 
@@ -119,8 +120,8 @@ class CustomerRecord:
     def marshal(self) -> bytes:
         buf = bytearray()
         buf += struct.pack('<Q', self.customer_id)
-        buf += _pack_str(self.email)
-        buf += _pack_str(self.display_name)
+        buf += pack_str(self.email)
+        buf += pack_str(self.display_name)
         buf += struct.pack('<BB', self.age, 1 if self.email_verified else 0)
         buf += struct.pack('<fIq', self.fraud_score, self.loyalty_points, self.signup_ts)
 
@@ -134,7 +135,7 @@ class CustomerRecord:
         if self.referral_code is None:
             buf += struct.pack('<B', 0)
         else:
-            buf += struct.pack('<B', 1) + _pack_str(self.referral_code)
+            buf += struct.pack('<B', 1) + pack_str(self.referral_code)
 
         buf += self.store_credit.pack()
 
@@ -147,15 +148,15 @@ class CustomerRecord:
         # value is what gets compared. See docs/protocol.md.
         buf += struct.pack('<I', len(self.address_book))
         for k, a in self.address_book.items():
-            buf += _pack_str(k) + a.pack()
+            buf += pack_str(k) + a.pack()
 
         buf += struct.pack('<I', len(self.wishlist_skus))
         for s in self.wishlist_skus:
-            buf += _pack_str(s)
+            buf += pack_str(s)
 
         buf += struct.pack('<I', len(self.preferences))
         for k, v in self.preferences.items():
-            buf += _pack_str(k) + _pack_str(v)
+            buf += pack_str(k) + pack_str(v)
 
         return bytes(buf)
 
@@ -165,8 +166,8 @@ class CustomerRecord:
         customer_id = struct.unpack_from('<Q', data, pos)[0]
         pos += 8
 
-        email, pos = _unpack_str(data, pos)
-        display_name, pos = _unpack_str(data, pos)
+        email, pos = unpack_str(data, pos)
+        display_name, pos = unpack_str(data, pos)
 
         age, verified, fraud_score, loyalty_points, signup_ts = struct.unpack_from('<BBfIq', data, pos)
         pos += 2 + 4 + 4 + 8
@@ -183,7 +184,7 @@ class CustomerRecord:
             referral_code = None
             pos += 1
         else:
-            referral_code, pos = _unpack_str(data, pos + 1)
+            referral_code, pos = unpack_str(data, pos + 1)
 
         store_credit, pos = Money.unpack(data, pos)
 
@@ -198,22 +199,22 @@ class CustomerRecord:
         pos += 4
         address_book = {}
         for _ in range(n):
-            k, pos = _unpack_str(data, pos)
+            k, pos = unpack_str(data, pos)
             address_book[k], pos = Address.unpack(data, pos)
 
         n = struct.unpack_from('<I', data, pos)[0]
         pos += 4
         wishlist_skus = []
         for _ in range(n):
-            s, pos = _unpack_str(data, pos)
+            s, pos = unpack_str(data, pos)
             wishlist_skus.append(s)
 
         n = struct.unpack_from('<I', data, pos)[0]
         pos += 4
         preferences = {}
         for _ in range(n):
-            k, pos = _unpack_str(data, pos)
-            preferences[k], pos = _unpack_str(data, pos)
+            k, pos = unpack_str(data, pos)
+            preferences[k], pos = unpack_str(data, pos)
 
         return cls(
             customer_id=customer_id, email=email, display_name=display_name,

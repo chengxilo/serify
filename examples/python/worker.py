@@ -19,8 +19,7 @@ names the types it can handle, one serializer/deserializer pair per format.
 Everything else lives in the modules beside it — those stand in for the types an
 application already owns, each carrying its own schema binding and byte layout.
 
-Types this worker does not register (order) are reported to the runner as
-SKIPPED.
+This worker registers every type in the suite.
 """
 
 import os
@@ -34,6 +33,7 @@ sys.path.insert(0, _lib_dir)
 from customer import CustomerRecord  # noqa: E402  (imports serify, so it follows the path setup)
 from ledger import LedgerEntry  # noqa: E402
 from notification import NotificationRecord  # noqa: E402
+from order import OrderRecord  # noqa: E402
 from serify import Format, Type, run_suite  # noqa: E402
 from signals import SignalCapture  # noqa: E402
 from telemetry import TelemetryFrame  # noqa: E402
@@ -52,6 +52,7 @@ if __name__ == '__main__':
             "json": Format(CustomerRecord.to_json, CustomerRecord.from_json),
         }),
         "ledger": _binary(LedgerEntry),
+        "order": _binary(OrderRecord),
         "signals": _binary(SignalCapture),
         "notification": _binary(NotificationRecord),
         "telemetry": _binary(TelemetryFrame),
