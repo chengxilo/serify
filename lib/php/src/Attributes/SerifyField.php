@@ -23,11 +23,22 @@ namespace Serify\Attributes;
  * Usage:
  *   #[SerifyField('user_id')]
  *   public int $userId;
+ *
+ * `elem` names the model class inside a list<struct> or map<K,struct>. Only the
+ * way back needs it: going out, a nested model is recognised by its
+ * #[SerifyModel] attribute, but PHP's `array` type says nothing about what it
+ * holds, so the class of the elements has to be declared. A plain struct
+ * property needs no declaration -- its own type says which class it is.
+ *
+ *   #[SerifyField('shipping_addresses', elem: Address::class)]
+ *   public array $shippingAddresses = [];
  */
 #[\Attribute(\Attribute::TARGET_PROPERTY)]
 class SerifyField
 {
-    public function __construct(public readonly ?string $name = null)
-    {
+    public function __construct(
+        public readonly ?string $name = null,
+        public readonly ?string $elem = null,
+    ) {
     }
 }

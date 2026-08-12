@@ -101,7 +101,7 @@ class SerifyModelHelper
                 if ($prop->hasType() && !$prop->getType()->allowsNull() && $val === null) {
                     continue;
                 }
-                $prop->setValue($obj, $val);
+                $prop->setValue($obj, self::revive($prop, $attr->elem, $val));
             }
         }
 
@@ -226,23 +226,66 @@ class SerifyModelHelper
                 // element type on the wire. Guessing from $val[0] meant an empty
                 // list — and any list of bools, floats or byte strings — was
                 // stored as though its elements were strings.
-                $fm->setRaw($key, array_map(
-                    fn($x) => is_object($x) && method_exists($x, 'toFieldMap') ? $x->toFieldMap() : $x,
-                    $val
-                ));
+                // A list<struct> is the one element type that does need
+                // converting, since the encoder speaks FieldMap, not models.
+                $fm->setRaw($key, array_map([self::class, 'flatten'], $val));
                 break;
             case is_array($val):
-                $fm->setMap($key, $val);
+                $fm->setMap($key, array_map([self::class, 'flatten'], $val));
                 break;
             case $val instanceof FieldMap:
                 $fm->setStruct($key, $val);
                 break;
-            case is_object($val) && method_exists($val, 'toFieldMap'):
-                $fm->setStruct($key, $val->toFieldMap());
+            case self::isModel($val):
+                $fm->setStruct($key, self::toFieldMap($val));
                 break;
             default:
                 $fm->setString($key, (string) $val);
                 break;
         }
+    }
+
+    /** Is this object's class marked #[SerifyModel]? */
+    private static function isModel(mixed $v): bool
+    {
+        return is_object($v) && (new \ReflectionClass($v))->getAttributes(SerifyModel::class) !== [];
+    }
+
+    /**
+     * A nested model becomes a FieldMap; anything else passes through.
+     *
+     * The check used to be method_exists($x, 'toFieldMap'), which no model has
+     * ever satisfied -- toFieldMap is a helper method on this class, not on the
+     * model -- so every nested struct fell to the (string) cast in the default
+     * arm and PHP threw on converting an object to a string. Nothing caught it
+     * because no example had a nested struct until customer.
+     */
+    private static function flatten(mixed $x): mixed
+    {
+        return self::isModel($x) ? self::toFieldMap($x) : $x;
+    }
+
+    /**
+     * The way back: rebuild whatever the property declares out of the FieldMaps
+     * the decoder produced. A plain struct is named by the property's own type;
+     * a list or map of them needs #[SerifyField(elem: ...)], because PHP's
+     * `array` says nothing about what it holds.
+     */
+    private static function revive(\ReflectionProperty $prop, ?string $elem, mixed $val): mixed
+    {
+        if ($val instanceof FieldMap) {
+            $type = $prop->getType();
+            if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
+                return self::fromFieldMap($val, $type->getName());
+            }
+            return $val;
+        }
+        if ($elem !== null && is_array($val)) {
+            return array_map(
+                fn($x) => $x instanceof FieldMap ? self::fromFieldMap($x, $elem) : $x,
+                $val
+            );
+        }
+        return $val;
     }
 }

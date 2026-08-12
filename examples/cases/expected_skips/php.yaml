@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# php has no worker for these two yet. Both are being written; until then the
-# gap is declared so it stays visible, and any *other* skip fails the run.
+# php has no worker for order yet. It is being written; until then the gap is
+# declared so it stays visible, and any *other* skip fails the run.
 types:
-  - customer
   - order

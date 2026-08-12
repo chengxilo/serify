@@ -25,8 +25,8 @@
  *
  * Requires ext-gmp (apt install php-gmp).
  *
- * Types this worker does not register (customer, order) are reported
- * to the runner as SKIPPED.
+ * Types this worker does not register (order) are reported to the runner as
+ * SKIPPED.
  */
 
 declare(strict_types=1);
@@ -38,6 +38,7 @@ require_once __DIR__ . '/../../lib/php/src/Attributes/SerifyField.php';
 require_once __DIR__ . '/../../lib/php/src/SerifyModelHelper.php';
 
 require_once __DIR__ . '/wire.php';
+require_once __DIR__ . '/customer.php';
 require_once __DIR__ . '/ledger.php';
 require_once __DIR__ . '/notification.php';
 require_once __DIR__ . '/signals.php';
@@ -62,6 +63,10 @@ function binary(string $model): Type
 }
 
 Worker::runSuite([
+    'customer'     => new Type(CustomerRecord::class, [
+        'binary' => [fn(CustomerRecord $c): string => $c->marshal(), CustomerRecord::unmarshal(...)],
+        'json'   => [fn(CustomerRecord $c): string => $c->toJson(), CustomerRecord::fromJson(...)],
+    ]),
     'ledger'       => binary(LedgerEntry::class),
     'signals'      => binary(SignalCapture::class),
     'notification' => binary(NotificationRecord::class),
