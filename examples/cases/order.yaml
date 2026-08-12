@@ -36,7 +36,8 @@ fields:
   - coupon_codes: list<string>
   - tracking_number: optional<string>  # null until shipped
 
-# Both example workers implement only the binary format for order.
+# Only the go worker implements order so far, and only in binary. Every other
+# language declares the gap in examples/cases/expected_skips/<lang>.yaml.
 formats:
   - name: binary
     oracle: semantic

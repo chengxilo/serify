@@ -54,10 +54,17 @@ flowchart LR
     RUNNER -->|"2. bind schema"| WORKERS
 
     RUNNER -->|"3.1 serialize"| WORKERS
-    WORKERS -->|"3.2 serialized bytes"| RUNNER
+    WORKERS -->|"3.2 serialized bytes<br/>(or SKIP)"| RUNNER
 
     RUNNER -->|"4.1 deserialize<br/>(reference's bytes)"| WORKERS
-    WORKERS -->|"4.2 deserialized data"| RUNNER
+    WORKERS -->|"4.2 deserialized data<br/>(or SKIP)"| RUNNER
 
     RUNNER -->|"5. diff &amp; verdict"| REPORT
 ```
+
+The runner offers every case to every worker. A worker registers only the types
+it implements and answers SKIP for the rest, so the nine above do not all take
+part in every row: `customer`, the type drawn here, is implemented by the go and
+rust workers only. A SKIP is not a failure and does not change the exit code,
+which is why `--expect-skips` exists — see [`examples/cases/expected_skips/`](../examples/cases/expected_skips/)
+for the declarations that turn an undeclared gap back into a failure.

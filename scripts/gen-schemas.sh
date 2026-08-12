@@ -53,11 +53,21 @@ esac
 go run ./cmd/serify schema "${CASE_DIRS[@]}"
 
 if [[ $check == true ]]; then
-	if ! git diff --quiet -- "${CASE_DIRS[@]}" || [[ -n $(git ls-files --others --exclude-standard -- "${CASE_DIRS[@]}") ]]; then
+	# Only the generated .schemas/ directories, not the case dirs as a whole.
+	# The schemas were just regenerated from whatever the .yaml files currently
+	# say, so an uncommitted edit to a case file is not drift — but scoping the
+	# diff to the case dir made every such edit, and every new file under one
+	# (expected_skips/, for instance), report "schemas are out of date". The
+	# pre-commit hook runs this, so that false positive blocked exactly the
+	# commits it exists to support.
+	schema_dirs=()
+	for dir in "${CASE_DIRS[@]}"; do schema_dirs+=("$dir/.schemas"); done
+
+	if ! git diff --quiet -- "${schema_dirs[@]}" || [[ -n $(git ls-files --others --exclude-standard -- "${schema_dirs[@]}") ]]; then
 		echo >&2
 		echo "error: generated schemas are out of date. Run scripts/gen-schemas.sh and commit the result." >&2
-		git --no-pager diff --stat -- "${CASE_DIRS[@]}" >&2
-		git ls-files --others --exclude-standard -- "${CASE_DIRS[@]}" >&2
+		git --no-pager diff --stat -- "${schema_dirs[@]}" >&2
+		git ls-files --others --exclude-standard -- "${schema_dirs[@]}" >&2
 		exit 1
 	fi
 	echo "schemas are up to date"

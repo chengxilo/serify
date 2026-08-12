@@ -33,8 +33,8 @@ import (
 // fails the build if the workers disagree — it is the test that actually guards
 // the suite.
 //
-// `order` and `telemetry` are not implemented by either worker yet and are
-// reported as SKIPPED, so the run still exits 0.
+// `order` is not implemented by the rust worker yet and is reported as SKIPPED,
+// which is declared in expected_skips/rust.yaml, so the run still exits 0.
 func TestExamples_GoRust(t *testing.T) {
 	requireLang(t, "go")
 	// Skipped rather than failed when rust is absent: this test is meaningful
@@ -51,6 +51,7 @@ func TestExamples_GoRust(t *testing.T) {
 		"--ref", "go",
 		"--cases", casesDir,
 		"--csv", csv,
+		"--expect-skips", filepath.Join(casesDir, "expected_skips"),
 		filepath.Join(repoRoot, "examples", "go"),
 		filepath.Join(repoRoot, "examples", "rust"),
 	)
@@ -89,7 +90,16 @@ func allWorkersGrid(t *testing.T) testutil.ResultGrid {
 		casesDir := filepath.Join(repoRoot, "examples", "cases")
 		csv := filepath.Join(os.TempDir(), "serify-examples-shared.csv")
 
-		args := []string{"run", "--ref", "go", "--cases", casesDir, "--csv", csv}
+		// --expect-skips turns this run into a coverage assertion as well as a
+		// parity one. A SKIP is exit-code-neutral, so a worker that quietly
+		// stops registering a type reads exactly like one that never did; the
+		// declarations in expected_skips/ say which gaps are known, and any
+		// other skip now fails the run. Only languages actually in the run have
+		// their file read, so a partial local run raises no stale warnings.
+		args := []string{
+			"run", "--ref", "go", "--cases", casesDir, "--csv", csv,
+			"--expect-skips", filepath.Join(casesDir, "expected_skips"),
+		}
 		for _, lang := range availableLangs {
 			args = append(args, filepath.Join(repoRoot, "examples", lang))
 		}
@@ -206,6 +216,10 @@ func TestExamples_Signals(t *testing.T) {
 // binding could express an optional<scalar>: Go's reflection shim knew only
 // *string and *big.Int, and Rust's derive only Option<String>. Both are generic
 // now, and this is what keeps them that way.
+//
+// Elixir is the one language excluded, and permanently: the BEAM has no NaN and
+// no infinity, so float_nan and float_inf are unrepresentable there. That gap is
+// declared in expected_skips/elixir.yaml rather than hidden.
 func TestExamples_Telemetry(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
@@ -213,8 +227,8 @@ func TestExamples_Telemetry(t *testing.T) {
 	requireLang(t, "go")
 
 	grid := allWorkersGrid(t)
-	for _, lang := range []string{"go", "rust"} {
-		if _, missing := missingLang[lang]; missing {
+	for _, lang := range availableLangs {
+		if lang == "elixir" {
 			continue
 		}
 		for _, op := range []string{"serialize", "deserialize"} {
@@ -223,6 +237,8 @@ func TestExamples_Telemetry(t *testing.T) {
 			testutil.AssertCell(t, grid, "telemetry/binary/nominal", lang, op, report.StatusPass, nil)
 			testutil.AssertCell(t, grid, "telemetry/binary/zero", lang, op, report.StatusPass, nil)
 			testutil.AssertCell(t, grid, "telemetry/binary/float_nan", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/float_inf", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/float_neg_zero", lang, op, report.StatusPass, nil)
 			testutil.AssertCell(t, grid, "telemetry/binary/int_boundaries", lang, op, report.StatusPass, nil)
 		}
 	}

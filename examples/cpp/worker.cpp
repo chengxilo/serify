@@ -19,7 +19,7 @@
 // beside it — those stand in for the types an application already owns, each
 // carrying its own schema binding and byte layout.
 //
-// Types this worker does not register (customer, order, telemetry) are reported
+// Types this worker does not register (customer, order) are reported
 // to the runner as SKIPPED.
 
 #include "serify.hpp"
@@ -27,6 +27,7 @@
 #include "ledger.hpp"
 #include "notification.hpp"
 #include "signals.hpp"
+#include "telemetry.hpp"
 
 using namespace serify;
 
@@ -38,6 +39,7 @@ int main() {
     suite["signals"]["binary"] = model_format<SignalCapture>(signals_marshal, signals_unmarshal);
     suite["notification"]["binary"] =
         model_format<NotificationRecord>(notification_marshal, notification_unmarshal);
+    suite["telemetry"]["binary"] = model_format<TelemetryFrame>(telemetry_marshal, telemetry_unmarshal);
     run_suite(suite);
     return 0;
 }

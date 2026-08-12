@@ -28,7 +28,7 @@ import java.util.Map;
  * beside it — those stand in for the types an application already owns, each
  * carrying its own schema binding and byte layout.
  *
- * <p>Types this worker does not register (customer, order, telemetry) are
+ * <p>Types this worker does not register (customer, order) are
  * reported to the runner as SKIPPED.
  */
 public final class Worker {
@@ -40,7 +40,9 @@ public final class Worker {
                 "signals", TypeEntry.model(SignalCapture.class, Map.of(
                         "binary", new ModelFormatPair<>(SignalCapture::marshal, SignalCapture::unmarshal))),
                 "notification", TypeEntry.model(Notification.class, Map.of(
-                        "binary", new ModelFormatPair<>(Notification::marshal, Notification::unmarshal)))));
+                        "binary", new ModelFormatPair<>(Notification::marshal, Notification::unmarshal))),
+                "telemetry", TypeEntry.model(TelemetryFrame.class, Map.of(
+                        "binary", new ModelFormatPair<>(TelemetryFrame::marshal, TelemetryFrame::unmarshal)))));
     }
 
     private Worker() {}
