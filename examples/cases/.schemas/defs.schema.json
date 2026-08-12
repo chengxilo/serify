@@ -33,10 +33,26 @@
     },
     "formatsSection": {
       "items": {
-        "enum": [
-          "binary",
-          "json"
-        ]
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "enum": [
+              "binary",
+              "json"
+            ]
+          },
+          "oracle": {
+            "enum": [
+              "bytes",
+              "semantic"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "oracle"
+        ],
+        "type": "object"
       },
       "minItems": 1,
       "type": "array"

@@ -79,17 +79,33 @@
     },
     "formats": {
       "items": {
-        "enum": [
-          "clean",
-          "mutating",
-          "value-mutating",
-          "zero-copy",
-          "list-zero-copy",
-          "unstable",
-          "deser-unstable",
-          "input-mutating",
-          "output-zero-copy"
-        ]
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "enum": [
+              "clean",
+              "mutating",
+              "value-mutating",
+              "zero-copy",
+              "list-zero-copy",
+              "unstable",
+              "deser-unstable",
+              "input-mutating",
+              "output-zero-copy"
+            ]
+          },
+          "oracle": {
+            "enum": [
+              "bytes",
+              "semantic"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "oracle"
+        ],
+        "type": "object"
       },
       "minItems": 1,
       "type": "array"

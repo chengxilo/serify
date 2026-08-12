@@ -203,11 +203,27 @@
     },
     "formats": {
       "items": {
-        "enum": [
-          "binary",
-          "json",
-          "binary_unordered"
-        ]
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "enum": [
+              "binary",
+              "json",
+              "binary_unordered"
+            ]
+          },
+          "oracle": {
+            "enum": [
+              "bytes",
+              "semantic"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "oracle"
+        ],
+        "type": "object"
       },
       "minItems": 1,
       "type": "array"

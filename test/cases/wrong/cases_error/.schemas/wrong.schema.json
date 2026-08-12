@@ -83,10 +83,26 @@
     },
     "formats": {
       "items": {
-        "enum": [
-          "err_ser",
-          "err_deser"
-        ]
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "enum": [
+              "err_ser",
+              "err_deser"
+            ]
+          },
+          "oracle": {
+            "enum": [
+              "bytes",
+              "semantic"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "oracle"
+        ],
+        "type": "object"
       },
       "minItems": 1,
       "type": "array"

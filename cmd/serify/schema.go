@@ -232,20 +232,41 @@ func writeTypeSchema(
 	return nil
 }
 
-// formatsSchema validates a formats: list against the given names — the suite
-// registry (_config.yaml) when one exists, else the file's own declared
-// formats. Format names are worker-defined, so nothing is hard-coded; with no
-// names at all (a reusable type, no registry) any non-empty string is allowed.
+// formatsSchema validates a `formats:` list. Each entry is a mapping of the
+// format's name and the oracle its output is judged by, both required:
+//
+//	formats:
+//	  - name: binary
+//	    oracle: bytes
+//
+// A bare name is rejected here even though FormatSpec.UnmarshalYAML accepts
+// one. That leniency exists only so the loader can say *which* format is
+// missing its oracle instead of failing with a YAML type error naming none;
+// the result is still an error every time. Rejecting it in the schema moves
+// that same verdict to save time, which is what these files are for.
+//
+// Names come from the suite registry (_config.yaml) when one exists, else from
+// the file's own declared formats. Format names are worker-defined, so nothing
+// is hard-coded; with no names at all (a reusable type, no registry) any
+// non-empty string is allowed.
 func formatsSchema(formats []string) J {
-	items := obj("type", "string", "minLength", 1)
+	name := obj("type", "string", "minLength", 1)
 	if len(formats) > 0 {
 		vals := make([]any, len(formats))
 		for i, f := range formats {
 			vals[i] = f
 		}
-		items = obj("enum", vals)
+		name = obj("enum", vals)
 	}
-	return obj("type", "array", "minItems", 1, "items", items)
+	entry := obj(
+		"type", "object", "additionalProperties", false,
+		"required", []any{"name", "oracle"},
+		"properties", obj(
+			"name", name,
+			"oracle", obj("enum", []any{config.OracleBytes, config.OracleSemantic}),
+		),
+	)
+	return obj("type", "array", "minItems", 1, "items", entry)
 }
 
 // typeFileSchema is the skeleton the two generated file schemas share. A case
@@ -315,9 +336,43 @@ func fieldToSchema(allTypes map[string][]config.Field, ft config.FieldType) J {
 		return obj("enum", vals)
 	case typekind.Bytes:
 		return ref("defs.schema.json#/definitions/bytes")
+	case typekind.Sum:
+		return sumSchema(allTypes, ft.Variants)
 	default:
 		return scalarSchema(ft.Base)
 	}
+}
+
+// sumSchema describes a sum value as it is written in case data. There are two
+// spellings and the loader is strict about which one applies where: a unit
+// variant is written bare, as just its tag, while a variant carrying a payload
+// must be a single-key mapping {tag: payload}. Writing a payload variant bare
+// ("variant %q needs a payload"), naming an unknown tag, or naming two variants
+// at once are all load errors, so none of them validate here either.
+//
+// Without this case a sum fell through to scalarSchema, which does not know the
+// base and answers String — so every {tag: payload} in a case file failed
+// validation against its own generated schema while loading perfectly well.
+func sumSchema(allTypes map[string][]config.Field, variants []config.Variant) J {
+	var units []any
+	tagged := J{}
+	for _, v := range variants {
+		if v.Type == nil {
+			units = append(units, v.Name)
+			tagged[v.Name] = Null
+			continue
+		}
+		tagged[v.Name] = fieldToSchema(allTypes, *v.Type)
+	}
+	mapping := obj(
+		"type", "object", "additionalProperties", false,
+		"minProperties", 1, "maxProperties", 1,
+		"properties", tagged,
+	)
+	if len(units) == 0 {
+		return mapping
+	}
+	return obj("oneOf", []any{obj("enum", units), mapping})
 }
 
 // scalarSchema maps a serify scalar type name to its JSON Schema form.

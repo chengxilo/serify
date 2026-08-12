@@ -76,8 +76,24 @@
     },
     "formats": {
       "items": {
-        "minLength": 1,
-        "type": "string"
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "oracle": {
+            "enum": [
+              "bytes",
+              "semantic"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "oracle"
+        ],
+        "type": "object"
       },
       "minItems": 1,
       "type": "array"

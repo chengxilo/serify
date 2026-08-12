@@ -73,9 +73,20 @@ cases:
 		assert.Contains(t, props, k, "top-level properties missing %q", k)
 	}
 
-	// The formats enum is generated from the file's own formats: list.
+	// A formats entry is a {name, oracle} mapping, both required — the shape
+	// the loader demands. The name enum is generated from the file's own
+	// formats: list. This used to assert a bare string enum, which is the
+	// pre-oracle syntax: the generated schema then rejected every real case
+	// file's formats: block while the loader accepted it.
 	fitems := props["formats"].(map[string]any)["items"].(map[string]any)
-	assert.Equal(t, []any{"binary"}, fitems["enum"], "formats items = %v, want enum [binary] from the declared formats", fitems)
+	assert.Equal(t, "object", fitems["type"], "a formats entry must be a mapping, got %v", fitems)
+	assert.ElementsMatch(t, []any{"name", "oracle"}, fitems["required"],
+		"both name and oracle must be required, got %v", fitems["required"])
+	fprops := fitems["properties"].(map[string]any)
+	assert.Equal(t, []any{"binary"}, fprops["name"].(map[string]any)["enum"],
+		"formats name enum = %v, want [binary] from the declared formats", fprops["name"])
+	assert.Equal(t, []any{"bytes", "semantic"}, fprops["oracle"].(map[string]any)["enum"],
+		"oracle enum = %v, want the two comparison oracles", fprops["oracle"])
 	req := person["required"].([]any)
 	foundFormats, foundCases := false, false
 	for _, r := range req {
@@ -139,7 +150,7 @@ cases:
 	require.NoError(t, json.Unmarshal(defsB, &defs), "unmarshal defs.schema.json")
 	fs, ok := defs["definitions"].(map[string]any)["formatsSection"].(map[string]any)
 	require.True(t, ok, "defs missing formatsSection despite _config.yaml registry")
-	enum := fs["items"].(map[string]any)["enum"].([]any)
+	enum := fs["items"].(map[string]any)["properties"].(map[string]any)["name"].(map[string]any)["enum"].([]any)
 	assert.Equal(t, []any{"binary", "json"}, enum, "registry enum = %v, want [binary json]", enum)
 
 	// The per-file schema refs the shared definition instead of self-enumerating.
@@ -327,6 +338,71 @@ cases:
 	arrF := props["arr"].(map[string]any)
 	assert.Equal(t, float64(4), arrF["minItems"], "array: expected minItems=4, maxItems=4, got %v", arrF)
 	assert.Equal(t, float64(4), arrF["maxItems"], "array: expected minItems=4, maxItems=4, got %v", arrF)
+}
+
+// A sum field has two spellings in case data and the loader distinguishes them:
+// a unit variant is written bare, a payload variant as a single-key mapping.
+// Neither was expressible before — a sum fell through to the scalar map, which
+// does not know the base and answers String, so every {tag: payload} in a case
+// file failed against its own generated schema while loading fine. The point of
+// generating these is save-time validation, and it was inverted for sums.
+func TestSchemaGen_SumField(t *testing.T) {
+	dir := t.TempDir()
+
+	mustWrite(t, filepath.Join(dir, "channel.yaml"), `
+variants:
+  - silent:
+  - sms: string
+  - push: uint64
+`)
+	mustWrite(t, filepath.Join(dir, "note.yaml"), `
+import:
+  - channel.yaml
+fields:
+  - channel: channel
+formats:
+  - name: binary
+    oracle: bytes
+cases:
+  - name: quiet
+    data:
+      channel: silent
+`)
+
+	require.NoError(t, runSchemaGen(dir), "runSchemaGen")
+
+	noteB, err := os.ReadFile(filepath.Join(dir, ".schemas", "note.schema.json"))
+	require.NoError(t, err, "note.schema.json")
+	var note map[string]any
+	require.NoError(t, json.Unmarshal(noteB, &note), "unmarshal note.schema.json")
+
+	data := note["properties"].(map[string]any)["cases"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["data"].(map[string]any)
+	ch := data["properties"].(map[string]any)["channel"].(map[string]any)
+
+	branches, ok := ch["oneOf"].([]any)
+	require.True(t, ok, "a sum with unit variants needs both spellings, got %v", ch)
+	require.Len(t, branches, 2, "expected the bare-tag and single-key-mapping branches, got %v", branches)
+
+	// Only the unit variant may be written bare: `channel: sms` is a load error
+	// ("variant %q needs a payload"), so it must not validate either.
+	bare := branches[0].(map[string]any)
+	assert.Equal(t, []any{"silent"}, bare["enum"],
+		"the bare form must list unit variants only, got %v", bare["enum"])
+
+	mapping := branches[1].(map[string]any)
+	assert.Equal(t, float64(1), mapping["maxProperties"],
+		"a sum value names exactly one variant, got %v", mapping)
+	assert.Equal(t, false, mapping["additionalProperties"],
+		"an unknown tag is a load error and must not validate, got %v", mapping)
+
+	tags := mapping["properties"].(map[string]any)
+	for _, tag := range []string{"silent", "sms", "push"} {
+		assert.Contains(t, tags, tag, "mapping form missing variant %q", tag)
+	}
+	assert.Equal(t, "null", tags["silent"].(map[string]any)["type"],
+		"a unit variant's payload in the mapping form is null, got %v", tags["silent"])
+	assert.Equal(t, "string", tags["sms"].(map[string]any)["type"],
+		"sms carries a string payload, got %v", tags["sms"])
 }
 
 func TestSchemaGen_RejectsEmptyDir(t *testing.T) {

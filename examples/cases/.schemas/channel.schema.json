@@ -36,7 +36,46 @@
             "additionalProperties": false,
             "properties": {
               "value": {
-                "type": "string"
+                "oneOf": [
+                  {
+                    "enum": [
+                      "silent"
+                    ]
+                  },
+                  {
+                    "additionalProperties": false,
+                    "maxProperties": 1,
+                    "minProperties": 1,
+                    "properties": {
+                      "invoice": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "amount_minor": {
+                            "$ref": "defs.schema.json#/definitions/int64"
+                          },
+                          "currency": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "currency",
+                          "amount_minor"
+                        ],
+                        "type": "object"
+                      },
+                      "push": {
+                        "$ref": "defs.schema.json#/definitions/uint64"
+                      },
+                      "silent": {
+                        "type": "null"
+                      },
+                      "sms": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                ]
               }
             },
             "required": [
