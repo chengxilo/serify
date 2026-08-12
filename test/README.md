@@ -16,6 +16,7 @@ test/
   faults_test.go     — error/timeout/crash/known-failures coverage
   wrong_meta_test.go — byte-diff detection via the `wrong` fixture
   audit_meta_test.go — audit warning detection via the `audit` fixture
+  coverage_meta_test.go — --expect-skips end-to-end (undeclared / declared / stale)
   cases/             — fixture worker directories
 ```
 
@@ -53,6 +54,18 @@ directory, and mixing fault formats into a normal run would cause spurious error
 runs the suite with and without it, asserting FAIL→XFAIL, exit-code 0, XPASS
 for the op that succeeds despite its entry, and that SKIPs are untouched.
 It is not listed in `scripts/gen-schemas.sh` because it is not a case suite.
+
+## Coverage enforcement (`--expect-skips`)
+
+`TestCLI_ExpectSkips` drives the `audit` fixture with go and python. python's
+worker does not register the four formats whose faults need a mutable alias
+into a runtime-owned buffer, so it reports eight genuine (non-cascade) SKIPs
+while go reports none — the smallest real subject for the flag in the repo.
+
+Its expect-skips directories are written per subtest into `t.TempDir()` rather
+than checked in, because the three outcomes need three different directory
+states and one of them is "the directory exists but this worker has no file".
+Unlike `known_failures/`, there is nothing to keep in sync with a suite.
 
 ## Toolchain gating
 
