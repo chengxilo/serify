@@ -25,8 +25,7 @@
  *
  * Requires ext-gmp (apt install php-gmp).
  *
- * Types this worker does not register (order) are reported to the runner as
- * SKIPPED.
+ * This worker registers every type in the suite.
  */
 
 declare(strict_types=1);
@@ -41,6 +40,7 @@ require_once __DIR__ . '/wire.php';
 require_once __DIR__ . '/customer.php';
 require_once __DIR__ . '/ledger.php';
 require_once __DIR__ . '/notification.php';
+require_once __DIR__ . '/order.php';
 require_once __DIR__ . '/signals.php';
 require_once __DIR__ . '/telemetry.php';
 
@@ -68,6 +68,7 @@ Worker::runSuite([
         'json'   => [fn(CustomerRecord $c): string => $c->toJson(), CustomerRecord::fromJson(...)],
     ]),
     'ledger'       => binary(LedgerEntry::class),
+    'order'        => binary(OrderRecord::class),
     'signals'      => binary(SignalCapture::class),
     'notification' => binary(NotificationRecord::class),
     'telemetry'    => binary(TelemetryFrame::class),
