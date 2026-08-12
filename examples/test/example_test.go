@@ -236,6 +236,38 @@ func TestExamples_Telemetry(t *testing.T) {
 	}
 }
 
+// TestExamples_Order asserts that every available language agrees on `order`,
+// the only type combining an `enum`, a `list<struct>`, a `map<string,struct>`
+// and an `optional<struct>` — and, through line_item's own `unit_price`, the
+// only struct nested inside a struct.
+//
+// `billing_address` is the suite's only `optional<struct>`, and porting order is
+// what exercised it for the first time in seven bindings: the node, csharp,
+// java and php ones had to hand back a null rather than a model, and the C++
+// one had no macro for the shape at all — SERIFY_FIELD_OPTIONAL covers an
+// optional scalar and SERIFY_FIELD_STRUCT a required struct, and the FieldMap
+// slot here is neither.
+//
+// order was the last gap: with this type in every worker, the only skip left in
+// the suite is elixir/telemetry, which cannot exist.
+func TestExamples_Order(t *testing.T) {
+	if len(availableLangs) == 0 {
+		t.Skip("no example worker toolchains available")
+	}
+	requireLang(t, "go")
+
+	grid := allWorkersGrid(t)
+	for _, lang := range availableLangs {
+		for _, op := range []string{"serialize", "deserialize"} {
+			testutil.AssertCell(t, grid, "order/binary/paid", lang, op, report.StatusPass, nil)
+			// empty_draft nulls both optionals and empties both collections, so
+			// the absent side of each is compared as well as the present one.
+			testutil.AssertCell(t, grid, "order/binary/empty_draft", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "order/binary/boundary", lang, op, report.StatusPass, nil)
+		}
+	}
+}
+
 // TestExamples_Audit runs --audit over the same worker set.
 func TestExamples_Audit(t *testing.T) {
 	if len(availableLangs) == 0 {

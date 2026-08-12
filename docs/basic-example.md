@@ -63,8 +63,9 @@ flowchart LR
 ```
 
 The runner offers every case to every worker. A worker registers only the types
-it implements and answers SKIP for the rest, so the nine above do not all take
-part in every row: `order`, for one, is implemented by the go worker alone.
-A SKIP is not a failure and does not change the exit code,
-which is why `--expect-skips` exists — see [`examples/cases/expected_skips/`](../examples/cases/expected_skips/)
-for the declarations that turn an undeclared gap back into a failure.
+it implements and answers SKIP for the rest — the nine above happen to implement
+everything but `telemetry` in elixir, where the BEAM's missing NaN and infinity
+make it impossible. A SKIP is not a failure and does not change the exit code,
+which is why `--expect-skips` exists: see
+[`examples/cases/expected_skips/`](../examples/cases/expected_skips/) for the
+declarations that turn an undeclared gap back into a failure.
