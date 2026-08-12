@@ -25,7 +25,7 @@
  *
  * Requires ext-gmp (apt install php-gmp).
  *
- * Types this worker does not register (customer, order, telemetry) are reported
+ * Types this worker does not register (customer, order) are reported
  * to the runner as SKIPPED.
  */
 
@@ -41,6 +41,7 @@ require_once __DIR__ . '/wire.php';
 require_once __DIR__ . '/ledger.php';
 require_once __DIR__ . '/notification.php';
 require_once __DIR__ . '/signals.php';
+require_once __DIR__ . '/telemetry.php';
 
 use Serify\Type;
 use Serify\Worker;
@@ -64,4 +65,5 @@ Worker::runSuite([
     'ledger'       => binary(LedgerEntry::class),
     'signals'      => binary(SignalCapture::class),
     'notification' => binary(NotificationRecord::class),
+    'telemetry'    => binary(TelemetryFrame::class),
 ]);

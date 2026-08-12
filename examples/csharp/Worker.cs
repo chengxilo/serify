@@ -19,7 +19,7 @@
 // beside it — those stand in for the types an application already owns, each
 // carrying its own schema binding and byte layout.
 //
-// Types this worker does not register (customer, order, telemetry) are reported
+// Types this worker does not register (customer, order) are reported
 // to the runner as SKIPPED.
 
 using System.Collections.Generic;
@@ -43,6 +43,10 @@ internal static class Program
             ["notification"] = TypeEntry.Model<NotificationRecord>(new()
             {
                 ["binary"] = (r => r.Marshal(), NotificationRecord.Unmarshal),
+            }),
+            ["telemetry"] = TypeEntry.Model<TelemetryFrame>(new()
+            {
+                ["binary"] = (f => f.Marshal(), TelemetryFrame.Unmarshal),
             }),
         });
     }

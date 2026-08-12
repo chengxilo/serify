@@ -1205,6 +1205,19 @@ public static class SerifyModel
             // through to the ToString() default below.
             case System.Array v: fm.Fields[key] = v; break;
             case Dictionary<string, object?> v: fm.SetMap(key, v); break;
+            // Every other string-keyed dictionary, for the same reason as the
+            // array above: the schema decides a map<K,V>'s wire form, not the
+            // runtime value type. Naming only Dictionary<string, object?> left
+            // a model declaring Dictionary<string, ulong> — the natural way to
+            // write map<string,uint64> — falling through to the ToString()
+            // default, so the map reached the wire as its own type name.
+            case System.Collections.IDictionary v:
+            {
+                var m = new Dictionary<string, object?>(v.Count);
+                foreach (System.Collections.DictionaryEntry e in v) m[(string)e.Key] = e.Value;
+                fm.SetMap(key, m);
+                break;
+            }
             case Variant v: fm.Fields[key] = v; break;
             default: fm.SetString(key, val.ToString() ?? ""); break;
         }
@@ -1215,6 +1228,21 @@ public static class SerifyModel
         if (val == null) return targetType.IsValueType ? Activator.CreateInstance(targetType) : null;
         if (targetType.IsInstanceOfType(val)) return val;
         if (targetType == typeof(FieldMap) && val is FieldMap fm) return fm;
+        // The other half of the IDictionary case in SetFieldMapValue: a map
+        // comes back as Dictionary<string, object?> and has to be rebuilt as
+        // whatever the model declared, converting each value on the way. Without
+        // this the property assignment throws InvalidCastException, so the map
+        // could go out but never come back.
+        if (val is Dictionary<string, object?> boxed
+            && targetType.IsGenericType
+            && targetType.GetGenericTypeDefinition() == typeof(Dictionary<,>)
+            && targetType.GetGenericArguments()[0] == typeof(string))
+        {
+            var valueType = targetType.GetGenericArguments()[1];
+            var typed = (System.Collections.IDictionary)Activator.CreateInstance(targetType)!;
+            foreach (var e in boxed) typed[e.Key] = ConvertValue(e.Value, valueType);
+            return typed;
+        }
         try { return Convert.ChangeType(val, targetType); }
         catch { return val; }
     }
