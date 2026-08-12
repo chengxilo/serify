@@ -19,8 +19,8 @@ names the types it can handle, one serializer/deserializer pair per format.
 Everything else lives in the modules beside it — those stand in for the types an
 application already owns, each carrying its own schema binding and byte layout.
 
-Types this worker does not register (customer, order, telemetry) are reported to
-the runner as SKIPPED.
+Types this worker does not register (order) are reported to the runner as
+SKIPPED.
 """
 
 import os
@@ -31,7 +31,8 @@ if not os.path.isdir(_lib_dir):
     raise RuntimeError(f"serify library not found at {_lib_dir}; fix the relative path")
 sys.path.insert(0, _lib_dir)
 
-from ledger import LedgerEntry  # noqa: E402  (imports serify, so it follows the path setup)
+from customer import CustomerRecord  # noqa: E402  (imports serify, so it follows the path setup)
+from ledger import LedgerEntry  # noqa: E402
 from notification import NotificationRecord  # noqa: E402
 from serify import Format, Type, run_suite  # noqa: E402
 from signals import SignalCapture  # noqa: E402
@@ -46,6 +47,10 @@ def _binary(model):
 
 if __name__ == '__main__':
     run_suite({
+        "customer": Type(CustomerRecord, {
+            "binary": Format(CustomerRecord.marshal, CustomerRecord.unmarshal),
+            "json": Format(CustomerRecord.to_json, CustomerRecord.from_json),
+        }),
         "ledger": _binary(LedgerEntry),
         "signals": _binary(SignalCapture),
         "notification": _binary(NotificationRecord),

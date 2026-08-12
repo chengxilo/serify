@@ -26,9 +26,9 @@ import (
 // the files beside it — those stand in for the types an application already
 // owns, each carrying its own schema binding and byte layout.
 //
-// `customer`, `ledger` and `notification` are implemented; `order` and
-// `telemetry` are not yet. A type this worker does not register is reported as
-// SKIPPED rather than failing the run.
+// This is the --ref worker, so it registers every type in the suite. A type a
+// worker does not register is reported as SKIPPED rather than failing the run;
+// see examples/cases/expected_skips/ for what the other workers still owe.
 func main() {
 	serify.Run(serify.Suite{
 		Types: map[string]serify.Type{
