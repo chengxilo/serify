@@ -289,7 +289,11 @@ public:
 // Simple JSON value type (enough for our protocol)
 
 struct Json {
-    enum Kind { Null, Bool, Number, String_, Array, Object } kind;
+    // Raw is a number this writer must emit exactly as spelled. JSON's only
+    // number is the double, which cannot hold a 64-bit integer: max uint64
+    // rounds up to 2^64 and comes back out of range. A worker with a u64 or i64
+    // field builds one of these from the integer's own decimal form instead.
+    enum Kind { Null, Bool, Number, String_, Array, Object, Raw } kind;
     bool b{};
     double num{};
     std::string str;
@@ -302,6 +306,7 @@ struct Json {
     static Json str_(std::string s){ Json j{String_}; j.str = std::move(s); return j; }
     static Json arr_()             { return {Array}; }
     static Json obj_()             { return {Object}; }
+    static Json raw_(std::string text){ Json j{Raw}; j.str = std::move(text); return j; }
 
     void push(Json v) { arr.push_back(std::move(v)); }
     void set(std::string k, Json v) { obj.push_back({std::move(k), std::move(v)}); }
@@ -312,6 +317,10 @@ struct Json {
     }
     std::string as_str() const { return str; }
     double as_num() const { return num; }
+    // The other half of Raw. The parser keeps every number's source text here,
+    // so a field whose value does not survive a double can be read from the
+    // token rather than from `num`.
+    const std::string& as_token() const { return str; }
     bool as_bool() const { return b; }
     bool is_null() const { return kind == Null; }
     bool is_obj()  const { return kind == Object; }
@@ -323,10 +332,25 @@ struct Json {
 static void json_write(std::ostream& o, const Json& j) {
     switch (j.kind) {
         case Json::Null:   o << "null"; break;
+        case Json::Raw:    o << j.str; break;
         case Json::Bool:   o << (j.b ? "true" : "false"); break;
         case Json::Number: {
-            if (j.num == (long long)j.num) o << (long long)j.num;
-            else o << j.num;
+            // A whole number prints as an integer so it does not come out as
+            // "1e+06", but only when it actually fits: converting a double
+            // outside long long's range is undefined, and customer's max
+            // float32 (3.4e38) is outside it.
+            constexpr double kLLMax = 9223372036854775808.0; // 2^63, exclusive
+            if (j.num > -kLLMax && j.num < kLLMax && j.num == (double)(long long)j.num) {
+                o << (long long)j.num;
+                break;
+            }
+            // Default ostream precision is 6 significant digits, which silently
+            // rounds anything needing more: max float32 went out as
+            // 3.40282e+38 and came back a different float32. 17 is what an
+            // IEEE-754 double needs to round-trip.
+            const auto saved = o.precision(17);
+            o << j.num;
+            o.precision(saved);
             break;
         }
         case Json::String_: {
@@ -476,9 +500,12 @@ struct Parser {
             return j;
         }
         char* ep;
+        const char* start = p;
         double n = strtod(p, &ep);
         p = ep;
-        return Json::num_(n);
+        Json j = Json::num_(n);
+        j.str.assign(start, static_cast<size_t>(ep - start)); // the undamaged token
+        return j;
     }
 };
 

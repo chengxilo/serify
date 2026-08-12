@@ -595,6 +595,10 @@ func LoadFormatsRegistry(dir string) ([]string, error) {
 //	types:      whole conformance types this SDK has no code for (both directions)
 //	operations: per-direction type lists, e.g. deserialize: [a, b]
 //
+// There is deliberately no per-format granularity: every worker either
+// implements a type in all its formats or in none, so a `formats:` key would be
+// a feature with no caller. Add it when a worker actually needs it.
+//
 // Deliberately no wildcards: declaring a whole direction would re-hide exactly
 // the regressions this guards against (a type that *does* have a decoder losing
 // its registration would silently skip under a blanket "deserialize").

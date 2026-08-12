@@ -19,11 +19,12 @@
 // beside it — those stand in for the types an application already owns, each
 // carrying its own schema binding and byte layout.
 //
-// Types this worker does not register (customer, order) are reported
-// to the runner as SKIPPED.
+// Types this worker does not register (order) are reported to the runner as
+// SKIPPED.
 
 #include "serify.hpp"
 
+#include "customer.hpp"
 #include "ledger.hpp"
 #include "notification.hpp"
 #include "signals.hpp"
@@ -36,6 +37,10 @@ int main() {
     // unmarshal below are the model's own functions, unwrapped.
     SuiteMap suite;
     suite["ledger"]["binary"] = model_format<LedgerEntry>(ledger_marshal, ledger_unmarshal);
+    suite["customer"]["binary"] =
+        model_format<CustomerRecord>(customer_marshal, customer_unmarshal);
+    suite["customer"]["json"] =
+        model_format<CustomerRecord>(customer_to_json, customer_from_json);
     suite["signals"]["binary"] = model_format<SignalCapture>(signals_marshal, signals_unmarshal);
     suite["notification"]["binary"] =
         model_format<NotificationRecord>(notification_marshal, notification_unmarshal);

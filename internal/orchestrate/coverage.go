@@ -64,7 +64,9 @@ func CheckExpectedSkips(rep *report.Report, expected map[string]config.ExpectedS
 	}
 
 	for testID, byLang := range rep.Results {
-		typeName, _, _ := strings.Cut(testID, "/")
+		// A test id is type/format/case.
+		typeName, rest, _ := strings.Cut(testID, "/")
+		format, _, _ := strings.Cut(rest, "/")
 		for lang, byOp := range byLang {
 			for op, res := range byOp {
 				if res.Status != report.StatusSkip || isCascadeSkip(res.Detail) {
@@ -83,9 +85,9 @@ func CheckExpectedSkips(rep *report.Report, expected map[string]config.ExpectedS
 						Operation: op,
 						Status:    report.StatusFail,
 						Detail: fmt.Sprintf(
-							"undeclared skip: %q/%s is not covered by expected-skips for %s "+
+							"undeclared skip: %q/%s/%s is not covered by expected-skips for %s "+
 								"(a real gap must be declared; otherwise coverage regressed)",
-							typeName, op, lang),
+							typeName, format, op, lang),
 					})
 				}
 			}

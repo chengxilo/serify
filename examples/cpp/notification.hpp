@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include "money.hpp"
 #include "serify.hpp"
 #include "wire.hpp"
 
@@ -35,21 +36,6 @@
 #include <string>
 #include <variant>
 #include <vector>
-
-struct Money {
-    std::string currency;
-    int64_t amount_minor{};
-};
-
-SERIFY_TO(Money,
-    SERIFY_FIELD(currency, string)
-    SERIFY_FIELD(amount_minor, i64)
-)
-
-SERIFY_FROM(Money,
-    SERIFY_FROM_FIELD(currency, string)
-    SERIFY_FROM_FIELD(amount_minor, i64)
-)
 
 using Channel = std::variant<
     std::monostate,  // arity 0 — a unit variant

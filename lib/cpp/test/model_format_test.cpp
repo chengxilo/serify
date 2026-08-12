@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -110,12 +111,40 @@ static void run_tests() {
           "a plain FormatPair still hands the serializer the FieldMap itself");
 }
 
+// Json is the library's own value type, and a worker whose payload format is
+// JSON writes through it — examples/cpp/customer.hpp does. Both checks below
+// are about a number that does not fit in a double.
+static void run_json_tests() {
+    auto text = [](const Json& j) {
+        std::ostringstream os;
+        json_write(os, j);
+        return os.str();
+    };
+
+    // An ostream's default precision is 6 significant digits. Max float32 went
+    // out as "3.40282e+38", which parses back to a *different* float32 — the
+    // one case in the suite that carries it caught this.
+    const double max_f32 = 3.4028234663852886e38;
+    check(parse_json(text(Json::num_(max_f32))).as_num() == max_f32,
+          "a double survives json_write and comes back unchanged");
+    check(text(Json::num_(1000000)) == "1000000",
+          "a whole number still prints as an integer, not in exponent form");
+
+    // JSON's only number is the double, so a 64-bit integer needs the token
+    // itself on both sides.
+    check(text(Json::raw_("18446744073709551615")) == "18446744073709551615",
+          "raw_ emits the digits it was given, undamaged");
+    check(parse_json("18446744073709551615").as_token() == "18446744073709551615",
+          "the parser keeps the number's source text for a reader that needs it");
+}
+
 int main() {
     // FieldMap getters throw on a missing key, and a broken conversion is
     // exactly the thing that leaves one missing. Catching here turns that into
     // a reported failure instead of an abort with no test output.
     try {
         run_tests();
+        run_json_tests();
     } catch (const std::exception& e) {
         std::printf("FAIL threw: %s\n", e.what());
         failures++;
