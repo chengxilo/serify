@@ -1037,10 +1037,15 @@ public static class SerifyModel
     }
 
     /// <summary>Convert a [SerifyModel] instance to a FieldMap.</summary>
-    public static FieldMap ToFieldMap<T>(T obj) where T : class
+    public static FieldMap ToFieldMap<T>(T obj) where T : class => ToFieldMapOf(typeof(T), obj);
+
+    /// <summary>Is this type a [SerifyModel]? How a nested struct is recognised.</summary>
+    private static bool IsModel(Type t) => Attribute.IsDefined(t, typeof(SerifyModelAttribute));
+
+    private static FieldMap ToFieldMapOf(Type type, object obj)
     {
         var fm = new FieldMap();
-        foreach (var prop in typeof(T).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        foreach (var prop in type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
         {
             if (!Attribute.IsDefined(prop, typeof(SerifyFieldAttribute))) continue;
             var key = (Attribute.GetCustomAttribute(prop, typeof(SerifyFieldAttribute)) as SerifyFieldAttribute)?.Name ?? DefaultKey(prop.Name);
@@ -1050,7 +1055,7 @@ public static class SerifyModel
             if (SumArms(prop.PropertyType) is { } arms) fm.Fields[key] = ToVariant(arms, key, val);
             else SetFieldMapValue(fm, key, val);
         }
-        foreach (var fld in typeof(T).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        foreach (var fld in type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
         {
             if (!Attribute.IsDefined(fld, typeof(SerifyFieldAttribute))) continue;
             var key = (Attribute.GetCustomAttribute(fld, typeof(SerifyFieldAttribute)) as SerifyFieldAttribute)?.Name ?? DefaultKey(fld.Name);
@@ -1061,10 +1066,12 @@ public static class SerifyModel
     }
 
     /// <summary>Create a [SerifyModel] instance from a FieldMap.</summary>
-    public static T FromFieldMap<T>(FieldMap fm) where T : class, new()
+    public static T FromFieldMap<T>(FieldMap fm) where T : class, new() => (T)FromFieldMapOf(typeof(T), fm);
+
+    private static object FromFieldMapOf(Type type, FieldMap fm)
     {
-        var obj = new T();
-        foreach (var prop in typeof(T).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        var obj = Activator.CreateInstance(type)!;
+        foreach (var prop in type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
         {
             if (!Attribute.IsDefined(prop, typeof(SerifyFieldAttribute))) continue;
             var key = (Attribute.GetCustomAttribute(prop, typeof(SerifyFieldAttribute)) as SerifyFieldAttribute)?.Name ?? DefaultKey(prop.Name);
@@ -1077,7 +1084,7 @@ public static class SerifyModel
                     prop.SetValue(obj, ConvertValue(val, prop.PropertyType));
             }
         }
-        foreach (var fld in typeof(T).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        foreach (var fld in type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
         {
             if (!Attribute.IsDefined(fld, typeof(SerifyFieldAttribute))) continue;
             var key = (Attribute.GetCustomAttribute(fld, typeof(SerifyFieldAttribute)) as SerifyFieldAttribute)?.Name ?? DefaultKey(fld.Name);
@@ -1203,6 +1210,11 @@ public static class SerifyModel
             // types individually is what left ushort[], sbyte[], short[], int[],
             // long[], UInt128[], Int128[], double[], bool[] and byte[][] falling
             // through to the ToString() default below.
+            // A list<struct> arrives as an array of models; convert the
+            // elements. Any other array is stored as-is.
+            case System.Array v when v.GetType().GetElementType() is { } et && IsModel(et):
+                fm.SetListStruct(key, v.Cast<object>().Select(x => ToFieldMapOf(x.GetType(), x)).ToArray());
+                break;
             case System.Array v: fm.Fields[key] = v; break;
             case Dictionary<string, object?> v: fm.SetMap(key, v); break;
             // Every other string-keyed dictionary, for the same reason as the
@@ -1214,11 +1226,22 @@ public static class SerifyModel
             case System.Collections.IDictionary v:
             {
                 var m = new Dictionary<string, object?>(v.Count);
-                foreach (System.Collections.DictionaryEntry e in v) m[(string)e.Key] = e.Value;
+                foreach (System.Collections.DictionaryEntry e in v)
+                {
+                    // map<K,struct>: the values are models and become FieldMaps,
+                    // the same conversion the array case above does.
+                    m[(string)e.Key] = e.Value is { } ev && IsModel(ev.GetType())
+                        ? ToFieldMapOf(ev.GetType(), ev)
+                        : e.Value;
+                }
                 fm.SetMap(key, m);
                 break;
             }
             case Variant v: fm.Fields[key] = v; break;
+            // A nested [SerifyModel] is a struct. Without this it reached the
+            // ToString() default below and went out as its own type name; no
+            // example had a nested struct until customer, so nothing caught it.
+            case { } v when IsModel(v.GetType()): fm.SetStruct(key, ToFieldMapOf(v.GetType(), v)); break;
             default: fm.SetString(key, val.ToString() ?? ""); break;
         }
     }
@@ -1228,6 +1251,18 @@ public static class SerifyModel
         if (val == null) return targetType.IsValueType ? Activator.CreateInstance(targetType) : null;
         if (targetType.IsInstanceOfType(val)) return val;
         if (targetType == typeof(FieldMap) && val is FieldMap fm) return fm;
+        // The way back for the two cases above. A struct arrives as a FieldMap
+        // and a list<struct> as FieldMap[]; without these the property
+        // assignment throws, so a nested struct could go out but never return.
+        if (val is FieldMap nested && IsModel(targetType)) return FromFieldMapOf(targetType, nested);
+        if (val is System.Array arr && targetType.IsArray
+            && targetType.GetElementType() is { } elemType && IsModel(elemType))
+        {
+            var built = Array.CreateInstance(elemType, arr.Length);
+            for (int i = 0; i < arr.Length; i++)
+                built.SetValue(ConvertValue(arr.GetValue(i), elemType), i);
+            return built;
+        }
         // The other half of the IDictionary case in SetFieldMapValue: a map
         // comes back as Dictionary<string, object?> and has to be rebuilt as
         // whatever the model declared, converting each value on the way. Without

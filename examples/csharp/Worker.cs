@@ -19,8 +19,8 @@
 // beside it — those stand in for the types an application already owns, each
 // carrying its own schema binding and byte layout.
 //
-// Types this worker does not register (customer, order) are reported
-// to the runner as SKIPPED.
+// Types this worker does not register (order) are reported to the runner as
+// SKIPPED.
 
 using System.Collections.Generic;
 using Serify;
@@ -32,6 +32,11 @@ internal static class Program
     {
         Serify.Worker.RunSuite(new Dictionary<string, TypeEntry>
         {
+            ["customer"] = TypeEntry.Model<CustomerRecord>(new()
+            {
+                ["binary"] = (c => c.Marshal(), CustomerRecord.Unmarshal),
+                ["json"] = (c => c.ToJson(), CustomerRecord.FromJson),
+            }),
             ["ledger"] = TypeEntry.Model<LedgerEntry>(new()
             {
                 ["binary"] = (e => e.Marshal(), LedgerEntry.Unmarshal),
