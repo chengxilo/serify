@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# order is being written, as for the other workers.
-#
-# telemetry is different: it is not coming. The BEAM has no NaN and no
-# infinity — `<<f::little-float-32>> = <<0,0,128,127>>` raises MatchError
+# telemetry is the one gap left in this suite, and it is not coming. The BEAM
+# has no NaN and no infinity — `<<f::little-float-32>> = <<0,0,128,127>>` raises MatchError
 # rather than producing +Inf — and telemetry's float_nan and float_inf cases
 # put both in scalar float fields. An Elixir worker could only answer ERROR
 # there, which is worse than declining the type. signals.yaml keeps
 # infinities out of its own data for the same reason.
 types:
-  - order
   - telemetry

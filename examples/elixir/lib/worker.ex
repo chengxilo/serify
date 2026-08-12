@@ -21,9 +21,10 @@ defmodule Worker do
   beside it — those stand in for the types an application already owns, each
   carrying its own schema binding and byte layout.
 
-  Types this worker does not register (order, telemetry) are reported to the
-  runner as SKIPPED. telemetry is not coming: the BEAM has no NaN and no
-  infinity, and its float cases carry both.
+  telemetry is the one type this worker does not register, and it is not
+  coming: the BEAM has no NaN and no infinity, and its float cases carry both.
+  It is reported to the runner as SKIPPED and declared in
+  examples/cases/expected_skips/elixir.yaml.
   """
 
   def main(_args) do
@@ -36,6 +37,7 @@ defmodule Worker do
         }
       },
       "ledger" => binary(LedgerEntry),
+      "order" => binary(OrderRecord),
       "signals" => binary(SignalCapture),
       "notification" => binary(NotificationRecord)
     })
