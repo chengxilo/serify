@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 use serify::SerifyModel;
 
-use crate::common::{Address, Money};
+use crate::common::{append_address, read_address, Address, Money};
 use crate::wire::{append_len_str, read_bytes, read_len_str};
 
 #[derive(SerifyModel)]
@@ -49,24 +49,6 @@ pub struct CustomerRecord {
 }
 
 // --- binary format -----------------------------------------------------------
-
-fn append_address(buf: &mut Vec<u8>, a: &Address) {
-    append_len_str(buf, &a.recipient);
-    append_len_str(buf, &a.street);
-    append_len_str(buf, &a.city);
-    append_len_str(buf, &a.country);
-    append_len_str(buf, &a.postal_code);
-}
-
-fn read_address(data: &[u8], p: &mut usize) -> Result<Address, String> {
-    Ok(Address {
-        recipient: read_len_str(data, p)?,
-        street: read_len_str(data, p)?,
-        city: read_len_str(data, p)?,
-        country: read_len_str(data, p)?,
-        postal_code: read_len_str(data, p)?,
-    })
-}
 
 impl CustomerRecord {
     pub fn marshal(&self) -> Result<Vec<u8>, String> {

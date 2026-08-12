@@ -22,13 +22,15 @@
 //! The Go worker (examples/go) is the --ref language and owns the byte layout;
 //! see the layout comment at the top of examples/go/wire.go.
 //!
-//! `customer`, `ledger` and `notification` are implemented; `order` and
-//! `telemetry` are reported as SKIPPED until this worker registers them.
+//! This worker registers every type in the suite. A type a worker does not
+//! register is reported as SKIPPED rather than failing the run; see
+//! examples/cases/expected_skips/ for what the other workers still owe.
 
 mod common;
 mod customer;
 mod ledger;
 mod notification;
+mod order;
 mod signals;
 mod telemetry;
 mod wire;
@@ -38,6 +40,7 @@ use serify::{run_suite, Format, Suite, Type};
 use crate::customer::CustomerRecord;
 use crate::ledger::LedgerEntry;
 use crate::notification::NotificationRecord;
+use crate::order::OrderRecord;
 use crate::signals::SignalCapture;
 use crate::telemetry::TelemetryFrame;
 
@@ -59,6 +62,15 @@ fn main() {
                             .serializer(|c| Ok(c.to_json()))
                             .deserializer(CustomerRecord::from_json),
                     ),
+            )
+            .with_type(
+                "order",
+                Type::new().with_format(
+                    "binary",
+                    Format::model::<OrderRecord>()
+                        .serializer(OrderRecord::marshal)
+                        .deserializer(OrderRecord::unmarshal),
+                ),
             )
             .with_type(
                 "ledger",

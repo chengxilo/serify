@@ -21,6 +21,8 @@
 
 use serify::SerifyModel;
 
+use crate::wire::{append_len_str, read_len_str};
+
 #[derive(SerifyModel)]
 pub struct Address {
     pub recipient: String,
@@ -34,4 +36,44 @@ pub struct Address {
 pub struct Money {
     pub currency: String,
     pub amount_minor: i64,
+}
+
+// A struct is its fields back to back, in schema order — nothing frames it, so
+// these take the surrounding buffer rather than owning one. They live here
+// rather than in customer.rs because order.rs needs the same two.
+
+pub fn append_address(buf: &mut Vec<u8>, a: &Address) {
+    append_len_str(buf, &a.recipient);
+    append_len_str(buf, &a.street);
+    append_len_str(buf, &a.city);
+    append_len_str(buf, &a.country);
+    append_len_str(buf, &a.postal_code);
+}
+
+pub fn read_address(data: &[u8], p: &mut usize) -> Result<Address, String> {
+    Ok(Address {
+        recipient: read_len_str(data, p)?,
+        street: read_len_str(data, p)?,
+        city: read_len_str(data, p)?,
+        country: read_len_str(data, p)?,
+        postal_code: read_len_str(data, p)?,
+    })
+}
+
+pub fn append_money(buf: &mut Vec<u8>, m: &Money) {
+    append_len_str(buf, &m.currency);
+    buf.extend_from_slice(&m.amount_minor.to_le_bytes());
+}
+
+pub fn read_money(data: &[u8], p: &mut usize) -> Result<Money, String> {
+    let currency = read_len_str(data, p)?;
+    if *p + 8 > data.len() {
+        return Err("truncated".into());
+    }
+    let amount_minor = i64::from_le_bytes(data[*p..*p + 8].try_into().unwrap());
+    *p += 8;
+    Ok(Money {
+        currency,
+        amount_minor,
+    })
 }
