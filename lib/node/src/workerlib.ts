@@ -363,9 +363,22 @@ function encodeField(sf: SchemaField, v: unknown): unknown {
   if (typ === 'uint8' || typ === 'uint16' || typ === 'uint32' || typ === 'int8' || typ === 'int16' || typ === 'int32') {
     return typeof v === 'bigint' ? Number(v) : v;
   }
-  if (typ === 'uint64' || typ === 'uint128' || typ === 'int64' || typ === 'int128') return (v as bigint).toString();
-  if (typ === 'float32') { const b = Buffer.alloc(4); b.writeFloatLE(v as number, 0); return b.toString('hex'); }
-  if (typ === 'float64') { const b = Buffer.alloc(8); b.writeDoubleLE(v as number, 0); return b.toString('hex'); }
+  if (typ === 'uint64' || typ === 'uint128' || typ === 'int64' || typ === 'int128') {
+    // A number is accepted, but only where it still holds the value exactly.
+    // This is the guard that used to live in the model binding, which had to
+    // guess from the value; here the schema has already said "integer", so it
+    // fires on the case it was written for and not on floats.
+    if (typeof v === 'number' && !Number.isSafeInteger(v)) {
+      throw new Error(
+        `serify: ${v} for field "${sf.name}" is ${typ} but arrived as a JS number that ` +
+        `cannot hold it exactly; use a bigint to keep full precision`);
+    }
+    return (v as bigint | number).toString();
+  }
+  // Number() so a field that arrived as a bigint still encodes: the width is
+  // the schema's to decide, and a caller writing 1n for a float is not wrong.
+  if (typ === 'float32') { const b = Buffer.alloc(4); b.writeFloatLE(Number(v), 0); return b.toString('hex'); }
+  if (typ === 'float64') { const b = Buffer.alloc(8); b.writeDoubleLE(Number(v), 0); return b.toString('hex'); }
   if (typ === 'bool')   return v;
   if (typ === 'string') return v;
   if (typ === 'bytes')  return (v as Buffer).toString('hex');
@@ -723,14 +736,14 @@ export namespace Serify {
     if (t === 'bigint') {
       fm.setI64(key, val);
     } else if (t === 'number') {
-      if (Number.isInteger(val)) {
-        if (!Number.isSafeInteger(val)) {
-          throw new Error(
-            `serify: integer ${val} for field "${key}" is not exactly representable ` +
-            `as a JS number; use a bigint to keep full precision`);
-        }
-        fm.setI64(key, BigInt(val));
-      } else fm.setF64(key, val);
+      // Store the number as-is, for the same reason the list branch below does:
+      // the schema, not the value, decides what this field is. Classifying by
+      // Number.isInteger meant an integral-valued float — 0.0, -0.0, and every
+      // float32 boundary, all of which satisfy it — was stored as a bigint and
+      // then handed to the float encoder, which cannot take one. Large ones did
+      // not even get that far: they were rejected outright as unrepresentable
+      // integers while being perfectly good floats.
+      fm._fields.set(key, val);
     } else if (t === 'boolean') {
       fm.setBool(key, val);
     } else if (t === 'string') {

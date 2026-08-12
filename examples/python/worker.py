@@ -35,6 +35,7 @@ from ledger import LedgerEntry  # noqa: E402  (imports serify, so it follows the
 from notification import NotificationRecord  # noqa: E402
 from serify import Format, Type, run_suite  # noqa: E402
 from signals import SignalCapture  # noqa: E402
+from telemetry import TelemetryFrame  # noqa: E402
 
 
 def _binary(model):
@@ -48,4 +49,5 @@ if __name__ == '__main__':
         "ledger": _binary(LedgerEntry),
         "signals": _binary(SignalCapture),
         "notification": _binary(NotificationRecord),
+        "telemetry": _binary(TelemetryFrame),
     })

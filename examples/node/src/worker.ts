@@ -22,7 +22,7 @@
  * beside it — those stand in for the types an application already owns, each
  * carrying its own schema binding and byte layout.
  *
- * Types this worker does not register (customer, order, telemetry) are reported
+ * Types this worker does not register (customer, order) are reported
  * to the runner as SKIPPED.
  */
 
@@ -31,6 +31,7 @@ import { runSuite, type } from '@chengxilo/serify';
 import { LedgerEntry } from './ledger';
 import { NotificationRecord } from './notification';
 import { SignalCapture } from './signals';
+import { TelemetryFrame } from './telemetry';
 
 /**
  * The one format each of these models carries: its own byte layout. serify
@@ -51,4 +52,5 @@ runSuite({
   ledger: binary(LedgerEntry),
   signals: binary(SignalCapture),
   notification: binary(NotificationRecord),
+  telemetry: binary(TelemetryFrame),
 });
