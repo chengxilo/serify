@@ -21,12 +21,20 @@ defmodule Worker do
   beside it — those stand in for the types an application already owns, each
   carrying its own schema binding and byte layout.
 
-  Types this worker does not register (customer, order, telemetry) are reported
-  to the runner as SKIPPED.
+  Types this worker does not register (order, telemetry) are reported to the
+  runner as SKIPPED. telemetry is not coming: the BEAM has no NaN and no
+  infinity, and its float cases carry both.
   """
 
   def main(_args) do
     WorkerLib.run_suite(%{
+      "customer" => %WorkerLib.Type{
+        model: CustomerRecord,
+        formats: %{
+          "binary" => {&CustomerRecord.marshal/1, &CustomerRecord.unmarshal/1},
+          "json" => {&CustomerRecord.to_json/1, &CustomerRecord.from_json/1}
+        }
+      },
       "ledger" => binary(LedgerEntry),
       "signals" => binary(SignalCapture),
       "notification" => binary(NotificationRecord)
