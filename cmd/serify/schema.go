@@ -51,9 +51,31 @@ func oneSection() []any {
 // defaultCasesDir is where `serify schema` looks when given no arguments.
 const defaultCasesDir = "cases"
 
-// sharedSchemaCount is the number of always-written schemas (defs + reusable),
-// on top of one per type.
-const sharedSchemaCount = 2
+// Every generated schema is self-contained: one file per case file, with the
+// definitions it uses inlined under its own `definitions` and every $ref a
+// same-document `#/definitions/...` pointer. There is no shared defs file to
+// resolve, and a schema can be read, moved or deleted on its own.
+//
+// defRef is that pointer; defRefs collects the names one file actually reached
+// for, so the file inlines that subset and nothing else — changing a bound then
+// only rewrites the schemas of types that use it.
+func defRef(name string) string { return "#/definitions/" + name }
+
+type defRefs map[string]bool
+
+// defDeps are definitions that ref other definitions; adding one pulls in its
+// closure.
+var defDeps = map[string][]string{"bytes": {typekind.Uint8}}
+
+func (d defRefs) add(names ...string) {
+	for _, n := range names {
+		if n == "" || d[n] {
+			continue
+		}
+		d[n] = true
+		d.add(defDeps[n]...)
+	}
+}
 
 // J is a JSON Schema fragment builder (map[string]any with chainable helpers).
 type J map[string]any
@@ -175,16 +197,11 @@ func runSchemaGen(casesDir string) error {
 	schemasDir := filepath.Join(casesDir, ".schemas")
 	_ = os.MkdirAll(schemasDir, 0750)
 
-	if err := writeDefs(schemasDir, registry); err != nil {
-		return err
-	}
-
 	for _, ty := range set.Types {
 		if err := writeTypeSchema(
 			casesDir,
 			schemasDir,
 			ty.Name,
-			ty.Name+".schema.json",
 			ty.Schema,
 			ty.Formats,
 			registry,
@@ -193,41 +210,40 @@ func runSchemaGen(casesDir string) error {
 			return err
 		}
 	}
-	for name, fields := range reusable {
-		if err := writeTypeSchema(casesDir, schemasDir, name, "reusable.schema.json", fields, nil, registry, allTypes); err != nil {
+	// A reusable type has no cases:, so there is no case data to describe — its
+	// schema is the file skeleton alone.
+	for name := range reusable {
+		if err := writeSchema(casesDir, schemasDir, name, reusableFileSchema()); err != nil {
 			return err
 		}
 	}
 
-	// Always-updated shared schemas.
-	reusableSchema := typeFileSchema("serify reusable type file")
-	reusableSchema.set("description", "For types with no cases of their own (pulled in via import:).")
-	_ = writeJSON(filepath.Join(schemasDir, "reusable.schema.json"), reusableSchema)
-	fmt.Println("  reusable     → .schemas/reusable.schema.json")
-	fmt.Println("  defs         → .schemas/defs.schema.json")
-	fmt.Printf("\nWrote %d schemas to %s\n",
-		len(set.Types)+len(reusable)+sharedSchemaCount, schemasDir)
+	fmt.Printf("\nWrote %d schemas to %s\n", len(set.Types)+len(reusable), schemasDir)
 	return nil
 }
 
 func writeTypeSchema(
-	casesDir, schemasDir, name, modelineFile string,
+	casesDir, schemasDir, name string,
 	fields []config.Field,
 	formats []string,
 	registry []string,
 	allTypes map[string][]config.Field,
 ) error {
-	// With a registry the formats enum is shared (defs.schema.json); without
-	// one it is generated from the file's own declared formats.
-	formatsJ := ref("defs.schema.json#/definitions/formatsSection")
-	if registry == nil {
-		formatsJ = formatsSchema(formats)
+	// A _config.yaml registry makes the format universe suite-level: every case
+	// file's enum is then the registry, not the formats the file itself uses.
+	if registry != nil {
+		formats = registry
 	}
-	schema := fileSchema(allTypes, fields, formatsJ)
+	return writeSchema(casesDir, schemasDir, name, fileSchema(allTypes, fields, formatsSchema(formats)))
+}
+
+// writeSchema writes one type's schema and points its case file at it. Every
+// case file gets exactly one schema file, named after it.
+func writeSchema(casesDir, schemasDir, name string, schema J) error {
 	if err := writeJSON(filepath.Join(schemasDir, name+".schema.json"), schema); err != nil {
 		return err
 	}
-	_ = writeModeline(filepath.Join(casesDir, name+".yaml"), modelineFile)
+	_ = writeModeline(filepath.Join(casesDir, name+".yaml"), name+".schema.json")
 	fmt.Printf("  %-12s → .schemas/%s.schema.json\n", name, name)
 	return nil
 }
@@ -272,11 +288,16 @@ func formatsSchema(formats []string) J {
 // typeFileSchema is the skeleton the two generated file schemas share. A case
 // file and a reusable file differ only in their title, in the extra properties
 // they allow, and in what they require.
-func typeFileSchema(title string, extraProps ...any) J {
+//
+// used carries whatever the caller's data schema already reached for; the
+// skeleton adds its own two and the closure is inlined as this file's
+// definitions, so the result refs nothing outside itself.
+func typeFileSchema(title string, used defRefs, extraProps ...any) J {
+	used.add("fieldsSection", "variantsSection")
 	props := []any{
 		"import", array(obj("type", "string", "pattern", "\\.yaml$")),
-		keyFields, ref("defs.schema.json#/definitions/fieldsSection"),
-		keyVariants, ref("defs.schema.json#/definitions/variantsSection"),
+		keyFields, ref(defRef("fieldsSection")),
+		keyVariants, ref(defRef("variantsSection")),
 		"transparent", obj("type", "boolean"),
 	}
 	return obj(
@@ -289,12 +310,14 @@ func typeFileSchema(title string, extraProps ...any) J {
 		"patternProperties", obj("^_", obj()),
 		"oneOf", oneSection(),
 		"properties", obj(append(props, extraProps...)...),
+		"definitions", definitions(used),
 	)
 }
 
 func fileSchema(allTypes map[string][]config.Field, fields []config.Field, formatsJ J) J {
-	data := dataSchema(allTypes, fields)
-	s := typeFileSchema("serify case file",
+	used := defRefs{}
+	data := dataSchema(allTypes, used, fields)
+	s := typeFileSchema("serify case file", used,
 		keyFormats, formatsJ,
 		keyCases, array(obj(
 			"type", "object", "additionalProperties", false,
@@ -306,28 +329,36 @@ func fileSchema(allTypes map[string][]config.Field, fields []config.Field, forma
 	return s
 }
 
-func dataSchema(allTypes map[string][]config.Field, fields []config.Field) J {
+// reusableFileSchema describes a type file with no cases of its own, pulled in
+// by another file's import:. It has no case data, so it is the skeleton alone.
+func reusableFileSchema() J {
+	s := typeFileSchema("serify reusable type file", defRefs{})
+	s.set("description", "For types with no cases of their own (pulled in via import:).")
+	return s
+}
+
+func dataSchema(allTypes map[string][]config.Field, used defRefs, fields []config.Field) J {
 	props := J{}
 	var req []string
 	for _, f := range fields {
-		props[f.Name] = fieldToSchema(allTypes, f.Type)
+		props[f.Name] = fieldToSchema(allTypes, used, f.Type)
 		req = append(req, f.Name)
 	}
 	return object(props, req)
 }
 
-func fieldToSchema(allTypes map[string][]config.Field, ft config.FieldType) J {
+func fieldToSchema(allTypes map[string][]config.Field, used defRefs, ft config.FieldType) J {
 	switch ft.Base {
 	case typekind.Optional:
-		return optional(fieldToSchema(allTypes, *ft.Elem))
+		return optional(fieldToSchema(allTypes, used, *ft.Elem))
 	case typekind.List:
-		return array(fieldToSchema(allTypes, *ft.Elem))
+		return array(fieldToSchema(allTypes, used, *ft.Elem))
 	case typekind.Array:
-		return fixedArray(ft.ArrayN, fieldToSchema(allTypes, *ft.Elem))
+		return fixedArray(ft.ArrayN, fieldToSchema(allTypes, used, *ft.Elem))
 	case typekind.Map:
-		return mapOf(fieldToSchema(allTypes, *ft.Elem))
+		return mapOf(fieldToSchema(allTypes, used, *ft.Elem))
 	case typekind.Struct:
-		return dataSchema(allTypes, ft.Fields)
+		return dataSchema(allTypes, used, ft.Fields)
 	case typekind.Enum:
 		vals := make([]any, len(ft.Values))
 		for i, v := range ft.Values {
@@ -335,11 +366,14 @@ func fieldToSchema(allTypes map[string][]config.Field, ft config.FieldType) J {
 		}
 		return obj("enum", vals)
 	case typekind.Bytes:
-		return ref("defs.schema.json#/definitions/bytes")
+		used.add(typekind.Bytes)
+		return ref(defRef(typekind.Bytes))
 	case typekind.Sum:
-		return sumSchema(allTypes, ft.Variants)
+		return sumSchema(allTypes, used, ft.Variants)
 	default:
-		return scalarSchema(ft.Base)
+		j, name := scalarSchema(ft.Base)
+		used.add(name)
+		return j
 	}
 }
 
@@ -353,7 +387,7 @@ func fieldToSchema(allTypes map[string][]config.Field, ft config.FieldType) J {
 // Without this case a sum fell through to scalarSchema, which does not know the
 // base and answers String — so every {tag: payload} in a case file failed
 // validation against its own generated schema while loading perfectly well.
-func sumSchema(allTypes map[string][]config.Field, variants []config.Variant) J {
+func sumSchema(allTypes map[string][]config.Field, used defRefs, variants []config.Variant) J {
 	var units []any
 	tagged := J{}
 	for _, v := range variants {
@@ -362,7 +396,7 @@ func sumSchema(allTypes map[string][]config.Field, variants []config.Variant) J 
 			tagged[v.Name] = Null
 			continue
 		}
-		tagged[v.Name] = fieldToSchema(allTypes, *v.Type)
+		tagged[v.Name] = fieldToSchema(allTypes, used, *v.Type)
 	}
 	mapping := obj(
 		"type", "object", "additionalProperties", false,
@@ -375,11 +409,14 @@ func sumSchema(allTypes map[string][]config.Field, variants []config.Variant) J 
 	return obj("oneOf", []any{obj("enum", units), mapping})
 }
 
-// scalarSchema maps a serify scalar type name to its JSON Schema form.
+// scalarSchema maps a serify scalar type name to its JSON Schema form, and
+// names the definition that form refs (empty when it is written inline, so the
+// caller can record it without a special case).
 // The mapping derives from typekind.Scalars — every integer scalar gets a $ref,
 // floats get a number with description, string/bool get their canonical forms.
-var scalarSchema = func() func(string) J {
+var scalarSchema = func() func(string) (J, string) {
 	m := make(map[string]J, len(typekind.Scalars))
+	refs := make(map[string]string, len(typekind.Scalars))
 	for _, s := range typekind.Scalars {
 		switch s {
 		case typekind.Bytes:
@@ -392,14 +429,15 @@ var scalarSchema = func() func(string) J {
 			m[s] = obj("type", "number",
 				"description", "YAML float; .nan/.inf/-.inf are accepted for binary-only types.")
 		default:
-			m[s] = ref("defs.schema.json#/definitions/" + s)
+			m[s] = ref(defRef(s))
+			refs[s] = s
 		}
 	}
-	return func(base string) J {
+	return func(base string) (J, string) {
 		if j, ok := m[base]; ok {
-			return j
+			return j, refs[base]
 		}
-		return String
+		return String, ""
 	}
 }()
 
@@ -450,37 +488,58 @@ func writeModeline(yamlPath, schemaFile string) error {
 	if strings.Contains(content, want) {
 		return nil
 	}
-	// Strip existing modeline lines.
+	// An existing modeline is rewritten where it stands. Stripping and
+	// re-inserting instead would shuffle it to the bottom of the file's
+	// hand-written header prose every time its target changes.
 	var filtered []string
+	replaced := false
 	for line := range strings.SplitSeq(content, "\n") {
 		if !strings.HasPrefix(strings.TrimSpace(line), "# yaml-language-server:") {
 			filtered = append(filtered, line)
+			continue
+		}
+		if !replaced {
+			filtered = append(filtered, want)
+			replaced = true
 		}
 	}
-	// Insert after the last leading #-comment line (license header).
-	insertAt := 0
-	for i, line := range filtered {
-		if trimmed := strings.TrimSpace(line); trimmed != "" && !strings.HasPrefix(trimmed, "#") {
-			break
+	out := filtered
+	if !replaced {
+		// No modeline yet: insert after the last leading #-comment line
+		// (license header).
+		insertAt := 0
+		for i, line := range filtered {
+			if trimmed := strings.TrimSpace(line); trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+				break
+			}
+			insertAt = i + 1
 		}
-		insertAt = i + 1
+		out = slices.Insert(filtered, insertAt, want)
 	}
-	out := slices.Insert(filtered, insertAt, want)
 	// #nosec G703 -- yamlPath is the case file we just read above, under a cases
 	// dir the developer named on their own command line. There is no privilege
 	// boundary here to traverse across.
 	return os.WriteFile(yamlPath, []byte(strings.Join(out, "\n")), 0600)
 }
 
-// writeDefs writes the shared scalar-bounds and helper definitions.
-func writeDefs(dir string, registry []string) error {
-	defs := J{}
-
-	// With a _config.yaml registry, the format universe is suite-level and
-	// shared: every case file's formats: refs this definition.
-	if registry != nil {
-		defs.set("formatsSection", formatsSchema(registry))
+// definitions returns the `definitions` block for one file: the subset of the
+// catalogue that file reached for. Filtering rather than emitting all of them
+// keeps the generated schemas to what their own type needs, so a change to one
+// scalar's bounds rewrites only the schemas that spell that scalar.
+func definitions(used defRefs) J {
+	out := J{}
+	for name, def := range allDefinitions {
+		if used[name] {
+			out.set(name, def)
+		}
 	}
+	return out
+}
+
+// allDefinitions is every definition a generated schema may inline: scalar
+// bounds and the file-level helpers.
+var allDefinitions = func() J {
+	defs := J{}
 
 	// Plain integer scalars.
 	for _, s := range []struct {
@@ -536,15 +595,8 @@ func writeDefs(dir string, registry []string) error {
 	))
 	defs.set("bytes", obj("anyOf", []any{
 		obj("type", "string", "pattern", "^([0-9a-fA-F]{2})*$", "description", "hex string"),
-		obj("type", "array", "items", ref("#/definitions/uint8"), "description", "byte array, e.g. [0xde, 0xad]"),
+		obj("type", "array", "items", ref(defRef(typekind.Uint8)), "description", "byte array, e.g. [0xde, 0xad]"),
 	}))
 
-	schema := obj(
-		"$schema", "http://json-schema.org/draft-07/schema#",
-		"$comment", "AUTO-GENERATED by `serify schema`. Do not edit manually.",
-		"title", "serify shared definitions",
-		"description", "Scalar bounds, file-level helpers, and shared structs. Regenerate with `serify schema`.",
-		"definitions", defs,
-	)
-	return writeJSON(filepath.Join(dir, "defs.schema.json"), schema)
-}
+	return defs
+}()

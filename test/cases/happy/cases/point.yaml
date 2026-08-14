@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# yaml-language-server: $schema=.schemas/reusable.schema.json
+# yaml-language-server: $schema=.schemas/point.schema.json
 fields:
   - x: int32
   - y: int32

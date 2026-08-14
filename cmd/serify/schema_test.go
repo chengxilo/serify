@@ -48,24 +48,34 @@ cases:
 	sd := filepath.Join(dir, ".schemas")
 	require.DirExists(t, sd, ".schemas/ not created")
 
-	// Verify defs.schema.json exists and has required definitions.
-	defsB, err := os.ReadFile(filepath.Join(sd, "defs.schema.json"))
-	require.NoError(t, err, "defs.schema.json")
-	var defs map[string]any
-	require.NoError(t, json.Unmarshal(defsB, &defs), "unmarshal defs.schema.json")
-	d := defs["definitions"].(map[string]any)
-	for _, name := range []string{"uint8", "uint64", "int64", "uint128", "int128", "bytes", "fieldsSection"} {
-		assert.Contains(t, d, name, "missing definition %q", name)
+	// One file per case file and nothing else: the definitions live inside each
+	// schema, so there is no shared defs/reusable file to resolve.
+	entries, err := os.ReadDir(sd)
+	require.NoError(t, err, "read .schemas")
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
 	}
-	// formats is per-file (enum of the file's own declared formats), so it
-	// must not be a shared definition.
-	assert.NotContains(t, d, "formatsSection", "formatsSection must not be in defs: formats are per-file, generated from the user's formats list")
+	assert.Equal(t, []string{"person.schema.json"}, names, ".schemas must hold exactly one schema per case file")
 
 	// Verify person.schema.json is a file-level schema.
 	personB, err := os.ReadFile(filepath.Join(sd, "person.schema.json"))
 	require.NoError(t, err, "person.schema.json")
 	var person map[string]any
 	require.NoError(t, json.Unmarshal(personB, &person), "unmarshal person.schema.json")
+
+	// The schema carries the definitions it refs — and only those, so editing
+	// one scalar's bounds does not rewrite every type's schema.
+	d := person["definitions"].(map[string]any)
+	for _, name := range []string{"uint64", "fieldsSection", "variantsSection"} {
+		assert.Contains(t, d, name, "missing definition %q", name)
+	}
+	for _, name := range []string{"int128", "bytes", "uint8"} {
+		assert.NotContains(t, d, name, "definition %q is not used by this type and must not be inlined", name)
+	}
+	assert.Equal(t, "#/definitions/uint64",
+		person["properties"].(map[string]any)["cases"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)["data"].(map[string]any)["properties"].(map[string]any)["id"].(map[string]any)["$ref"],
+		"a scalar must ref this file's own definitions, not another document")
 
 	assert.Equal(t, "object", person["type"], "top-level schema must be object")
 	props := person["properties"].(map[string]any)
@@ -143,23 +153,15 @@ cases:
 
 	require.NoError(t, runSchemaGen(dir), "runSchemaGen")
 
-	// The registry becomes the shared formatsSection enum in defs.
-	defsB, err := os.ReadFile(filepath.Join(dir, ".schemas", "defs.schema.json"))
-	require.NoError(t, err, "defs.schema.json")
-	var defs map[string]any
-	require.NoError(t, json.Unmarshal(defsB, &defs), "unmarshal defs.schema.json")
-	fs, ok := defs["definitions"].(map[string]any)["formatsSection"].(map[string]any)
-	require.True(t, ok, "defs missing formatsSection despite _config.yaml registry")
-	enum := fs["items"].(map[string]any)["properties"].(map[string]any)["name"].(map[string]any)["enum"].([]any)
-	assert.Equal(t, []any{"binary", "json"}, enum, "registry enum = %v, want [binary json]", enum)
-
-	// The per-file schema refs the shared definition instead of self-enumerating.
+	// The registry, not the file's own formats:, becomes the enum — person.yaml
+	// declares only binary but the suite allows json too.
 	personB, err := os.ReadFile(filepath.Join(dir, ".schemas", "person.schema.json"))
 	require.NoError(t, err, "person.schema.json")
 	var person map[string]any
 	require.NoError(t, json.Unmarshal(personB, &person), "unmarshal person.schema.json")
 	f := person["properties"].(map[string]any)["formats"].(map[string]any)
-	assert.Equal(t, "defs.schema.json#/definitions/formatsSection", f["$ref"], "formats = %v, want $ref to defs formatsSection", f)
+	enum := f["items"].(map[string]any)["properties"].(map[string]any)["name"].(map[string]any)["enum"].([]any)
+	assert.Equal(t, []any{"binary", "json"}, enum, "registry enum = %v, want [binary json]", enum)
 }
 
 func TestSchemaGen_FormatsRegistryViolation(t *testing.T) {
@@ -198,21 +200,22 @@ fields:
 
 	require.NoError(t, runSchemaGen(dir), "runSchemaGen")
 
-	// Reusable type must point to reusable.schema.json.
+	// A reusable type gets its own schema, like every other case file.
 	yamlB, err := os.ReadFile(filepath.Join(dir, "addr.yaml"))
 	require.NoError(t, err, "read addr.yaml")
-	assert.Contains(t, string(yamlB), "# yaml-language-server: $schema=.schemas/reusable.schema.json", "reusable type must use reusable.schema.json")
+	assert.Contains(t, string(yamlB), "# yaml-language-server: $schema=.schemas/addr.schema.json", "reusable type must point at its own schema")
 
-	// reusable.schema.json must exist and NOT require formats/cases.
-	rb, err := os.ReadFile(filepath.Join(dir, ".schemas", "reusable.schema.json"))
-	require.NoError(t, err, "reusable.schema.json")
+	// It must NOT require formats/cases — having neither is what makes it reusable.
+	rb, err := os.ReadFile(filepath.Join(dir, ".schemas", "addr.schema.json"))
+	require.NoError(t, err, "addr.schema.json")
 	var reusable map[string]any
-	require.NoError(t, json.Unmarshal(rb, &reusable), "unmarshal reusable.schema.json")
+	require.NoError(t, json.Unmarshal(rb, &reusable), "unmarshal addr.schema.json")
 	if req, ok := reusable["required"].([]any); ok {
 		assert.NotContains(t, req, "formats", "reusable schema must not require formats")
 		assert.NotContains(t, req, "cases", "reusable schema must not require cases")
 	}
 	assert.Len(t, reusable["oneOf"], 2, "expected a two-branch oneOf for schema/variants, got %v", reusable["oneOf"])
+	assert.Contains(t, reusable["definitions"], "fieldsSection", "the skeleton's own refs must be inlined, got %v", reusable["definitions"])
 }
 
 func TestSchemaGen_ModelineUpdate(t *testing.T) {

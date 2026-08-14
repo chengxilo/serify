@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# yaml-language-server: $schema=.schemas/reusable.schema.json
+# yaml-language-server: $schema=.schemas/channel.schema.json
 # How a notification is delivered: exactly one of these variants. A `variants:`
 # section declares a sum: each entry is `tag: payload`, the payload types are
 # ordinary schema expressions, and an entry with no type is a unit variant.

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# yaml-language-server: $schema=.schemas/reusable.schema.json
+# yaml-language-server: $schema=.schemas/address.schema.json
 # A postal address — reusable type (no cases), pulled in via `import:`.
 # postal_code is a string on purpose: real postal codes have leading zeros
 # and letters (e.g. "M5V 2T6", "01234").
