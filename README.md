@@ -16,7 +16,15 @@ agreement by hand.
 - [Install](#install-serify-cli)
 - [Quick start](#quick-start)
 - [Supported languages](#supported-languages)
-  - [Go: writing a worker](#go)
+  - [Go: writing a worker](#go-writing-a-worker)
+  - [Rust](#rust)
+  - [Python](#python)
+  - [Node / TypeScript](#node--typescript)
+  - [C#](#c)
+  - [C++](#c-1)
+  - [Elixir](#elixir)
+  - [Java](#java)
+  - [PHP](#php)
 - [Case definition syntax](#case-definition-syntax)
   - [Directory layout](#directory-layout)
   - [Defining a type](#defining-a-type)
@@ -37,7 +45,7 @@ agreement by hand.
 2. `serify` CLI drives all workers through the same test cases and compares their outputs byte-for-byte.
 
 ```mermaid
-flowchart LR
+flowchart-elk LR
     subgraph CASES["Case Definition (customer.yaml)"]
         direction TB
         C1["<div align='left'>
@@ -70,9 +78,11 @@ flowchart LR
         </div>"]
     end
 
+    RUNNER["Serify Runner"]
+
     subgraph WORKERS["Language Workers"]
         direction TD
-        W1["Go — the reference"]
+        W1["Go"]
         W2["Rust"]
         W3["Python"]
         W4["C#"]
@@ -81,21 +91,26 @@ flowchart LR
         W7["Elixir"]
         W8["Java"]
         W9["PHP"]
+        W1 ~~~ W2 ~~~ W3 ~~~ W4 ~~~ W5 ~~~ W6 ~~~ W7 ~~~ W8 ~~~ W9
     end
 
     REPORT["Test Report"]
 
-    CASES -->|"1. load &amp; validate"| RUNNER["Serify Runner"]
+    Load["1. load &amp; validate"]
+    Bind["2. bind schema"]
+    SerReq["3.1 serialize"]
+    SerResp["3.2 serialized bytes (or SKIP)"]
+    DeReq["4.1 deserialize (reference's bytes)"]
+    DeResp["4.2 deserialized data (or SKIP)"]
+    Verdict["5. diff &amp; verdict"]
 
-    RUNNER -->|"2. bind schema"| WORKERS
-
-    RUNNER -->|"3.1 serialize"| WORKERS
-    WORKERS -->|"3.2 serialized bytes<br/>(or SKIP)"| RUNNER
-
-    RUNNER -->|"4.1 deserialize<br/>(reference's bytes)"| WORKERS
-    WORKERS -->|"4.2 deserialized data<br/>(or SKIP)"| RUNNER
-
-    RUNNER -->|"5. diff &amp; verdict"| REPORT
+    CASES --> Load --> RUNNER
+    RUNNER --> Bind --> WORKERS
+    RUNNER --> SerReq --> WORKERS
+    WORKERS --> SerResp --> RUNNER
+    RUNNER --> DeReq --> WORKERS
+    WORKERS --> DeResp --> RUNNER
+    RUNNER --> Verdict --> REPORT
 ```
 
 ## Install Serify CLI
@@ -154,19 +169,15 @@ modules resolve straight from the repo, so `go get` works today.
 | Java     | `examples/java`   | `io.serify:workerlib` (unpublished)         | local Maven module |
 | PHP      | `examples/php`    | `chengxilo/serify` (unpublished)            | `require_once lib/php/src/*.php` |
 
-### Go
+### Go: writing a worker
 
-Define your struct with `serify:` tags for field mapping, then provide named serializer/deserializer functions in a `Suite`. Field mapping (schema ↔ struct) is handled automatically via reflection; byte encoding is entirely under your control.
-
-- Field names map to schema keys via snake_case conversion (`Username` → `username`)
-- Use `serify:"key"` tag to override (e.g. ```UserID uint64 `serify:"user_id"` ```)
-- Nested structs are mapped recursively
+Struct tags are the binding: field names map to schema keys by
+snake_case conversion (`Username` → `username`), nested structs map
+recursively, and `serify:"key"` renames a field. You supply the byte layout
+as ordinary functions and register them per format:
 
 ```go
 import (
-    "encoding/binary"
-    "math"
-
     "github.com/chengxilo/serify/lib/go/serify"
 )
 
@@ -176,21 +187,14 @@ type UserRecord struct {
     Score    float32
 }
 
-// You own the byte layout — encode however your format requires.
+// serialize/deserialize are your byte layout.
 func serialize(u *UserRecord) ([]byte, error) {
-    var b []byte
-    b = binary.LittleEndian.AppendUint64(b, u.UserID)
-    b = binary.LittleEndian.AppendUint32(b, uint32(len(u.Username)))
-    b = append(b, u.Username...)
-    b = binary.LittleEndian.AppendUint32(b, math.Float32bits(u.Score))
-    return b, nil
+    /* your byte layout */
+    return nil, nil
 }
 
 func deserialize(u *UserRecord, data []byte) error {
-    u.UserID = binary.LittleEndian.Uint64(data[:8])
-    n := binary.LittleEndian.Uint32(data[8:12])
-    u.Username = string(data[12 : 12+n])
-    u.Score = math.Float32frombits(binary.LittleEndian.Uint32(data[12+n : 16+n]))
+    /* its inverse */
     return nil
 }
 
@@ -239,6 +243,277 @@ serify.Run(serify.Suite{
 ```
 
 See [`examples/go/`](examples/go/) for more detail.
+
+### Rust
+
+The `serify` crate derives the schema binding (`#[derive(SerifyModel)]`,
+renames via `#[serify(rename = "key")]`); you supply the byte layout as
+ordinary functions and register them per format:
+
+```rust
+use serify::{run_suite, Format, SerifyModel, Suite, Type};
+
+#[derive(SerifyModel)]
+struct UserRecord {
+    user_id: u64,
+    username: String,
+    score: f32,
+}
+
+// marshal/unmarshal are your byte layout — the same job the Go
+// serialize/deserialize above do.
+
+fn main() {
+    run_suite(Suite::new().with_type(
+        "user",
+        Type::new().with_format(
+            "binary",
+            Format::model::<UserRecord>()
+                .serializer(UserRecord::marshal)
+                .deserializer(UserRecord::unmarshal),
+        ),
+    ));
+}
+```
+
+See [`examples/rust/`](examples/rust/) for the full worker.
+
+### Python
+
+`@serify_model` reads the dataclass annotations (renames via
+`metadata={"serify": "key"}`) and generates the field-map conversion:
+
+```python
+from dataclasses import dataclass
+
+from serify import Format, Type, run_suite, serify_model
+
+
+@serify_model
+@dataclass
+class UserRecord:
+    user_id: int
+    username: str
+    score: float
+
+    def marshal(self) -> bytes:
+        ...  # your byte layout
+
+    @classmethod
+    def unmarshal(cls, data: bytes) -> "UserRecord":
+        ...  # its inverse
+
+
+if __name__ == "__main__":
+    run_suite({
+        "user": Type(UserRecord, {
+            "binary": Format(UserRecord.marshal, UserRecord.unmarshal),
+        }),
+    })
+```
+
+See [`examples/python/`](examples/python/) for the full worker.
+
+### Node / TypeScript
+
+`@Serify.Model()` plus one `@Serify.field()` per property is the binding
+(renames via `@Serify.field({ rename: "key" })`):
+
+```typescript
+import { Serify, runSuite, type } from '@chengxilo/serify';
+
+@Serify.Model()
+export class UserRecord {
+  @Serify.field() user_id: bigint = 0n;
+  @Serify.field() username = '';
+  @Serify.field() score = 0;
+
+  marshal(): Buffer {
+    /* your byte layout */
+  }
+  static unmarshal(data: Buffer): UserRecord {
+    /* its inverse */
+  }
+}
+
+runSuite({
+  user: type(UserRecord, {
+    binary: {
+      serialize: (u: UserRecord) => u.marshal(),
+      deserialize: (d: Buffer) => UserRecord.unmarshal(d),
+    },
+  }),
+});
+```
+
+See [`examples/node/`](examples/node/) for the full worker.
+
+### C#
+
+`[SerifyModel]` plus one `[SerifyField]` per property is the binding (rename
+by passing the key: `[SerifyField("user_id")]`):
+
+```csharp
+using System.Collections.Generic;
+using Serify;
+
+[SerifyModel]
+internal sealed class UserRecord
+{
+    [SerifyField("user_id")] public ulong UserId { get; set; }
+    [SerifyField] public string Username { get; set; } = "";
+    [SerifyField] public float Score { get; set; }
+
+    public byte[] Marshal() { /* your byte layout */ }
+    public static UserRecord Unmarshal(byte[] data) { /* its inverse */ }
+}
+
+internal static class Program
+{
+    private static void Main()
+    {
+        Serify.Worker.RunSuite(new Dictionary<string, TypeEntry>
+        {
+            ["user"] = TypeEntry.Model<UserRecord>(new()
+            {
+                ["binary"] = (u => u.Marshal(), UserRecord.Unmarshal),
+            }),
+        });
+    }
+}
+```
+
+See [`examples/csharp/`](examples/csharp/) for the full worker.
+
+### C++
+
+`SERIFY_TO` / `SERIFY_FROM` macro blocks are the binding (renames via
+`SERIFY_FIELD_RENAMED(name, kind, "key")`):
+
+```cpp
+#include "serify.hpp"
+
+struct UserRecord {
+    uint64_t user_id{};
+    std::string username;
+    float score{};
+};
+
+SERIFY_TO(UserRecord,
+    SERIFY_FIELD(user_id, u64)
+    SERIFY_FIELD(username, string)
+    SERIFY_FIELD(score, f32)
+)
+SERIFY_FROM(UserRecord,
+    SERIFY_FROM_FIELD(user_id, u64)
+    SERIFY_FROM_FIELD(username, string)
+    SERIFY_FROM_FIELD(score, f32)
+)
+
+// user_marshal / user_unmarshal are your byte layout — the same job the Go
+// serialize/deserialize above do.
+
+int main() {
+    using namespace serify;
+    SuiteMap suite;
+    suite["user"]["binary"] = model_format<UserRecord>(user_marshal, user_unmarshal);
+    run_suite(suite);
+}
+```
+
+See [`examples/cpp/`](examples/cpp/) for the full worker.
+
+### Elixir
+
+`use WorkerLib.Serify.Model` plus one `serify_field` per field is the binding
+(renames via `key:`):
+
+```elixir
+defmodule UserRecord do
+  use WorkerLib.Serify.Model
+
+  defstruct [:user_id, :username, :score]
+
+  serify_field(:user_id, :u64)
+  serify_field(:username, :string)
+  serify_field(:score, :f32)
+
+  # marshal/1 and unmarshal/1 are your byte layout — Elixir's bitstring syntax
+  # makes one whole wire format read as a single <<...>> literal.
+end
+
+defmodule Worker do
+  def main(_args) do
+    WorkerLib.run_suite(%{
+      "user" => %WorkerLib.Type{
+        model: UserRecord,
+        formats: %{"binary" => {&UserRecord.marshal/1, &UserRecord.unmarshal/1}}
+      }
+    })
+  end
+end
+```
+
+See [`examples/elixir/`](examples/elixir/) for the full worker.
+
+### Java
+
+`@SerifyModel` plus one `@SerifyField` per field is the binding (rename by
+passing the key):
+
+```java
+import io.serify.WorkerLib;
+import io.serify.WorkerLib.ModelFormatPair;
+import io.serify.WorkerLib.TypeEntry;
+import java.util.Map;
+
+@WorkerLib.SerifyModel
+public final class UserRecord {
+    @SerifyField("user_id") public Long userId = 0L;
+    @SerifyField public String username = "";
+    @SerifyField public Float score = 0f;
+
+    public byte[] marshal() { /* your byte layout */ }
+    public static UserRecord unmarshal(byte[] data) { /* its inverse */ }
+}
+
+WorkerLib.runSuite(Map.of(
+    "user", TypeEntry.model(UserRecord.class, Map.of(
+        "binary", new ModelFormatPair<>(UserRecord::marshal, UserRecord::unmarshal)))));
+```
+
+See [`examples/java/`](examples/java/) for the full worker.
+
+### PHP
+
+`#[SerifyModel]` plus one `#[SerifyField]` per property is the binding (rename
+by passing the key):
+
+```php
+use Serify\Attributes\SerifyField;
+use Serify\Attributes\SerifyModel;
+use Serify\Type;
+use Serify\Worker;
+
+#[SerifyModel]
+class UserRecord
+{
+    #[SerifyField('user_id')] public int $userId = 0;
+    #[SerifyField] public string $username = '';
+    #[SerifyField] public float $score = 0.0;
+
+    public function marshal(): string { /* your byte layout */ }
+    public static function unmarshal(string $data): self { /* its inverse */ }
+}
+
+Worker::runSuite([
+    'user' => new Type(UserRecord::class, [
+        'binary' => [fn(UserRecord $u): string => $u->marshal(), UserRecord::unmarshal(...)],
+    ]),
+]);
+```
+
+See [`examples/php/`](examples/php/) for the full worker.
 
 ## Case definition syntax
 
