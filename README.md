@@ -169,7 +169,7 @@ modules resolve straight from the repo, so `go get` works today.
 | Java     | `examples/java`   | `io.serify:workerlib` (unpublished)         | local Maven module |
 | PHP      | `examples/php`    | `chengxilo/serify` (unpublished)            | `require_once lib/php/src/*.php` |
 
-### Go: writing a worker
+### Go
 
 Struct tags are the binding: field names map to schema keys by
 snake_case conversion (`Username` → `username`), nested structs map
