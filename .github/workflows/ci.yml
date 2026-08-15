@@ -21,6 +21,9 @@ on:
 env:
   GOTOOLCHAIN: local
 
+permissions:
+  contents: read
+
 jobs:
   build-serify:
     runs-on: ubuntu-latest

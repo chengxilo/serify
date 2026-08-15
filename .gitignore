@@ -46,6 +46,7 @@ obj/
 
 # act
 .act/
+.actrc
 
 # Design docs (internal, not shipped)
 design/
