@@ -64,14 +64,14 @@ const ProtocolVersion = 2
 // PingRequest is the startup health check. It names no type and carries no
 // schema: it only asks whether the worker is up and which protocol it speaks.
 type PingRequest struct {
-	Op string `json:"op"` // "ping"
+	Op Op `json:"op"` // "ping"
 }
 
 // BindRequest points the worker at one (type, format) and its schema. The
 // runner sends one per (type, format) group; it is not a once-per-process
 // initialisation, which is why it is not called init.
 type BindRequest struct {
-	Op     string        `json:"op"`
+	Op     Op            `json:"op"`
 	Schema []SchemaField `json:"schema"`
 	Type   string        `json:"type,omitempty"`
 	Format string        `json:"format,omitempty"`
@@ -98,23 +98,47 @@ type SchemaVariant struct {
 
 type SerializeRequest struct {
 	ID   string         `json:"id"`
-	Op   string         `json:"op"` // "serialize"
+	Op   Op             `json:"op"` // "serialize"
 	Data map[string]any `json:"data"`
 }
 
 type DeserializeRequest struct {
 	ID  string `json:"id"`
-	Op  string `json:"op"` // "deserialize"
+	Op  Op     `json:"op"` // "deserialize"
 	Hex string `json:"hex"`
 }
 
 type ExitRequest struct {
-	Op string `json:"op"` // "exit"
+	Op Op `json:"op"` // "exit"
+}
+
+// Constructors stamp each request with its own op: the wire format wants an
+// explicit "op" on every message, and the request type is the one place that
+// knows it. Callers pass the payload fields and never spell an op.
+
+func NewPingRequest() PingRequest {
+	return PingRequest{Op: OpPing}
+}
+
+func NewBindRequest(schema []SchemaField, typ, format string, audit bool) BindRequest {
+	return BindRequest{Op: OpBind, Schema: schema, Type: typ, Format: format, Audit: audit}
+}
+
+func NewSerializeRequest(id string, data map[string]any) SerializeRequest {
+	return SerializeRequest{Op: OpSerialize, ID: id, Data: data}
+}
+
+func NewDeserializeRequest(id, hex string) DeserializeRequest {
+	return DeserializeRequest{Op: OpDeserialize, ID: id, Hex: hex}
+}
+
+func NewExitRequest() ExitRequest {
+	return ExitRequest{Op: OpExit}
 }
 
 type Response struct {
 	ID     string `json:"id"`
-	Op     string `json:"op"`
+	Op     Op     `json:"op"`
 	Status Status `json:"status"` // OK, ERROR, SKIPPED
 
 	Hex  string         `json:"hex,omitempty"`

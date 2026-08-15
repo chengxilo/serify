@@ -134,7 +134,7 @@ func TestSend_SerializeOK(t *testing.T) {
 	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
-	resp, err := w.Send(context.Background(), protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{"x": 1}}, 3)
+	resp, err := w.Send(context.Background(), protocol.NewSerializeRequest("t1", map[string]any{"x": 1}), 3)
 	require.NoError(t, err, "Send failed: %v", err)
 	assert.Equal(t, protocol.StatusOK, resp.Status, "Status = %q, want OK", resp.Status)
 	assert.NotEmpty(t, resp.Hex, "expected non-empty hex")
@@ -169,7 +169,7 @@ func TestSend_ResponseIDMismatch(t *testing.T) {
 		reader:   protocol.NewReader(stdout),
 	}
 
-	_, err = w.Send(context.Background(), protocol.SerializeRequest{ID: "correct", Op: "serialize", Data: map[string]any{}}, 2)
+	_, err = w.Send(context.Background(), protocol.NewSerializeRequest("correct", map[string]any{}), 2)
 	assert.Error(t, err, "expected error for response ID mismatch")
 	if err != nil {
 		assert.Contains(t, strings.ToLower(err.Error()), "id mismatch", "error should mention id mismatch: %v", err)
@@ -201,7 +201,7 @@ func TestSend_WrongOpSameID(t *testing.T) {
 	}
 
 	_, err := w.Send(context.Background(),
-		protocol.DeserializeRequest{ID: "c1", Op: "deserialize", Hex: "aa"}, 2)
+		protocol.NewDeserializeRequest("c1", "aa"), 2)
 	require.Error(t, err, "expected an error for a serialize response to a deserialize request")
 	assert.Contains(t, strings.ToLower(err.Error()), "op mismatch", "error should mention op mismatch: %v", err)
 	assert.True(t, w.dead, "worker should be marked dead: the stream is desynced")
@@ -222,7 +222,7 @@ func TestSend_Timeout(t *testing.T) {
 		reader:   protocol.NewReader(stdout),
 	}
 
-	_, err := w.Send(context.Background(), protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{}}, 1)
+	_, err := w.Send(context.Background(), protocol.NewSerializeRequest("t1", map[string]any{}), 1)
 	assert.Error(t, err, "expected timeout error")
 	assert.True(t, w.dead, "worker should be marked dead after timeout")
 }
@@ -241,7 +241,7 @@ func TestSend_CrashMidRequest(t *testing.T) {
 		reader:   protocol.NewReader(stdout),
 	}
 
-	_, err := w.Send(context.Background(), protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{}}, 2)
+	_, err := w.Send(context.Background(), protocol.NewSerializeRequest("t1", map[string]any{}), 2)
 	assert.Error(t, err, "expected error from crashed worker")
 }
 
@@ -293,7 +293,7 @@ func TestSend_ContextCancelInterruptsWait(t *testing.T) {
 	}()
 
 	start := time.Now()
-	_, err := w.Send(ctx, protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{}}, 30)
+	_, err := w.Send(ctx, protocol.NewSerializeRequest("t1", map[string]any{}), 30)
 	require.Error(t, err, "expected error from cancelled context")
 	elapsed := time.Since(start)
 	assert.Less(t, elapsed, 5*time.Second, "Send took %v; cancellation should interrupt the wait well before the 30s timeout", elapsed)
@@ -377,7 +377,7 @@ func TestSend_DeserializeOK(t *testing.T) {
 	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
-	resp, err := w.Send(context.Background(), protocol.DeserializeRequest{ID: "t2", Op: "deserialize", Hex: "aabb"}, 3)
+	resp, err := w.Send(context.Background(), protocol.NewDeserializeRequest("t2", "aabb"), 3)
 	require.NoError(t, err, "Send failed: %v", err)
 	assert.Equal(t, protocol.StatusOK, resp.Status, "Status = %q, want OK", resp.Status)
 	assert.NotNil(t, resp.Data, "expected non-nil data")
@@ -390,7 +390,7 @@ func TestSend_DeadWorker(t *testing.T) {
 	err = w.Stop()
 	require.NoError(t, err, "Stop failed: %v", err)
 
-	_, err = w.Send(context.Background(), protocol.SerializeRequest{ID: "t1", Op: "serialize", Data: map[string]any{}}, 2)
+	_, err = w.Send(context.Background(), protocol.NewSerializeRequest("t1", map[string]any{}), 2)
 	assert.Error(t, err, "expected error from dead worker")
 }
 

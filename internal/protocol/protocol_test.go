@@ -15,6 +15,7 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"math"
@@ -203,4 +204,27 @@ func TestEncodeData_UnknownField(t *testing.T) {
 
 	_, err := EncodeData(data, schema)
 	require.Error(t, err, "expected error for unknown field")
+}
+
+// The wire must carry type names literally. Writer.Write deliberately disables
+// HTML escaping, so a hand-rolled worker parser never sees
+// "optional\u003cstring\u003e" — the mangled form escaping would produce.
+func TestWriter_NoHTMLEscaping(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	require.NoError(t, w.Write(NewBindRequest(
+		[]SchemaField{{Name: "profile", Type: "optional<string>"}},
+		"customer", "binary", false)))
+	line := buf.String()
+	assert.Contains(t, line, `"optional<string>"`)
+	assert.NotContains(t, line, `\u003c`)
+	assert.Contains(t, line, `"op":"bind"`)
+}
+
+func TestNewRequests_StampOp(t *testing.T) {
+	assert.Equal(t, OpPing, NewPingRequest().Op)
+	assert.Equal(t, OpBind, NewBindRequest(nil, "", "", false).Op)
+	assert.Equal(t, OpSerialize, NewSerializeRequest("", nil).Op)
+	assert.Equal(t, OpDeserialize, NewDeserializeRequest("", "").Op)
+	assert.Equal(t, OpExit, NewExitRequest().Op)
 }

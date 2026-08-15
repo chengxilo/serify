@@ -219,11 +219,7 @@ func Run(
 		for _, lang := range langs {
 			w := workers[lang]
 			g.Go(func() error {
-				resp, err := w.Send(gctx, protocol.SerializeRequest{
-					ID:   tc.Name,
-					Op:   "serialize",
-					Data: encoded,
-				}, opts.TimeoutSec)
+				resp, err := w.Send(gctx, protocol.NewSerializeRequest(tc.Name, encoded), opts.TimeoutSec)
 
 				// Check context cancellation during the send.
 				select {
@@ -350,11 +346,7 @@ func Run(
 		for _, lang := range langs {
 			w := workers[lang]
 			g2.Go(func() error {
-				resp, err := w.Send(gctx2, protocol.DeserializeRequest{
-					ID:  tc.Name,
-					Op:  "deserialize",
-					Hex: refHex,
-				}, opts.TimeoutSec)
+				resp, err := w.Send(gctx2, protocol.NewDeserializeRequest(tc.Name, refHex), opts.TimeoutSec)
 
 				select {
 				case <-gctx2.Done():
@@ -446,11 +438,7 @@ func runMatrix(
 			}
 			w := workers[dstLang]
 			g.Go(func() error {
-				resp, err := w.Send(gctx, protocol.DeserializeRequest{
-					ID:  fmt.Sprintf("%s/matrix-%s→%s", tc.Name, srcLang, dstLang),
-					Op:  report.OpDeserialize,
-					Hex: srcHex,
-				}, opts.TimeoutSec)
+				resp, err := w.Send(gctx, protocol.NewDeserializeRequest(fmt.Sprintf("%s/matrix-%s→%s", tc.Name, srcLang, dstLang), srcHex), opts.TimeoutSec)
 				status, detail := resolveResult(dstLang, tc.Name, resp, err, opts.KnownFails)
 				if status == report.StatusPass && resp != nil {
 					diff := compare.DataDiff(encoded, resp.Data, fieldNames, floatFields)
@@ -487,11 +475,7 @@ func semanticSerializeDiff(
 	floatFields map[string]bool,
 	timeoutSec int,
 ) string {
-	resp, err := ref.Send(ctx, protocol.DeserializeRequest{
-		ID:  fmt.Sprintf("%s/semantic-%s", testID, srcLang),
-		Op:  "deserialize",
-		Hex: srcHex,
-	}, timeoutSec)
+	resp, err := ref.Send(ctx, protocol.NewDeserializeRequest(fmt.Sprintf("%s/semantic-%s", testID, srcLang), srcHex), timeoutSec)
 	if err != nil {
 		return fmt.Sprintf("reference could not deserialize %s output: %v", srcLang, err)
 	}

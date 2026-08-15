@@ -148,11 +148,11 @@ func Start(ctx context.Context, info StartInfo, timeoutSec int) (*Worker, error)
 // ping is the startup handshake: it confirms the process came up and speaks the
 // same protocol revision as this runner.
 func (w *Worker) ping(ctx context.Context, timeoutSec int) error {
-	if err := w.writer.Write(protocol.PingRequest{Op: string(protocol.OpPing)}); err != nil {
+	if err := w.writer.Write(protocol.NewPingRequest()); err != nil {
 		return err
 	}
 
-	resp, err := w.readWithTimeout(ctx, string(protocol.OpPing), "", timeoutSec)
+	resp, err := w.readWithTimeout(ctx, protocol.OpPing, "", timeoutSec)
 	if err != nil {
 		w.markFatal(err)
 		return err
@@ -203,18 +203,12 @@ func (w *Worker) Bind(
 		return errors.New("bind requires a format")
 	}
 
-	req := protocol.BindRequest{
-		Op:     string(protocol.OpBind),
-		Schema: protocol.SchemaFields(schema),
-		Type:   typ,
-		Format: format,
-		Audit:  audit,
-	}
+	req := protocol.NewBindRequest(protocol.SchemaFields(schema), typ, format, audit)
 	if err := w.writer.Write(req); err != nil {
 		return err
 	}
 
-	resp, err := w.readWithTimeout(ctx, string(protocol.OpBind), "", timeoutSec)
+	resp, err := w.readWithTimeout(ctx, protocol.OpBind, "", timeoutSec)
 	if err != nil {
 		w.markFatal(err)
 		return err
@@ -272,7 +266,7 @@ func (w *Worker) markFatal(err error) {
 
 // extractOp returns the op of a request value, or "" if it is not one the
 // runner correlates by op.
-func extractOp(req any) string {
+func extractOp(req any) protocol.Op {
 	switch r := req.(type) {
 	case protocol.SerializeRequest:
 		return r.Op
@@ -297,7 +291,7 @@ func extractID(req any) string {
 
 func (w *Worker) readWithTimeout(
 	ctx context.Context,
-	expectOp, expectID string,
+	expectOp protocol.Op, expectID string,
 	timeoutSec int,
 ) (*protocol.Response, error) {
 	type result struct {
@@ -358,7 +352,7 @@ func (w *Worker) Stop() error {
 	w.mu.Unlock()
 
 	// Send exit and close stdin.
-	_ = w.writer.Write(protocol.ExitRequest{Op: "exit"})
+	_ = w.writer.Write(protocol.NewExitRequest())
 	_ = w.stdin.Close()
 
 	if w.cmd == nil || w.cmd.Process == nil {
