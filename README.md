@@ -16,7 +16,7 @@ agreement by hand.
 - [Install](#install-serify-cli)
 - [Quick start](#quick-start)
 - [Supported languages](#supported-languages)
-  - [Go: writing a worker](#go-writing-a-worker)
+  - [Go](#go-writing-a-worker)
   - [Rust](#rust)
   - [Python](#python)
   - [Node / TypeScript](#node--typescript)
