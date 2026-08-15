@@ -1,6 +1,6 @@
 # serify
 
-Cross-language binary serialization test framework. Define a schema once, verify that every language's serialization implementation produces identical bytes.
+Cross-language serialization test framework. Define a schema once, verify that every language's serialization implementation produces identical bytes.
 
 serify is a conformance harness, not a tool for writing a good serializer. It
 assumes you already have one language whose tests you trust, and makes that the
