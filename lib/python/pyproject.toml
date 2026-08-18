@@ -13,17 +13,31 @@
 # limitations under the License.
 
 [build-system]
-requires = ["setuptools>=61"]
+# 77 is the first release with PEP 639 `license` / `license-files`.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "serify"
 version = "0.1.0"
 description = "Cross-language serialization conformance worker library for Python"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "Chengxi Luo" }]
 readme = "README.md"
 requires-python = ">=3.9"
+keywords = ["serialization", "conformance", "testing", "interoperability"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.urls]
+Homepage = "https://github.com/chengxilo/serify"
+Repository = "https://github.com/chengxilo/serify"
+Issues = "https://github.com/chengxilo/serify/issues"
 
 [tool.setuptools]
 py-modules = ["serify"]

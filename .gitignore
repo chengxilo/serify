@@ -74,5 +74,11 @@ out.csv
 # maven-shade regenerates these on every build, stripping license headers
 dependency-reduced-pom.xml
 
+# Packaging artifacts (see RELEASING.md); dist/ is already ignored above
+*.tgz
+*.crate
+*.nupkg
+lib/elixir/serify-*.tar
+
 # Go example worker binary (rebuilt by go build ./...)
 /examples/go/example-go

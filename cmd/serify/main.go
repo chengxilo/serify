@@ -18,15 +18,35 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 )
 
-var version = "0.1.0"
+// version is stamped by the release build with
+// -ldflags "-X main.version=<tag>". A hardcoded literal here is the one copy
+// of the version number nothing else updates, so it goes stale by default;
+// resolveVersion recovers the real one instead.
+var version = "dev"
+
+// resolveVersion prefers the stamped version, then the module version the Go
+// toolchain records for a `go install`ed binary, which covers the install path
+// the README documents.
+func resolveVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return version
+}
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
-	root := NewRootCmd(version)
+	root := NewRootCmd(resolveVersion())
 	root.SetContext(ctx)
 	err := root.Execute()
 

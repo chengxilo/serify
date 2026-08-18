@@ -20,6 +20,7 @@ description = "Derive macro for serify — cross-language serialization conforma
 license = "Apache-2.0"
 repository = "https://github.com/chengxilo/serify"
 keywords = ["serialization", "conformance", "derive", "testing"]
+readme = "README.md"
 
 [lib]
 proc-macro = true

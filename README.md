@@ -123,13 +123,16 @@ flowchart-elk LR
 go install github.com/chengxilo/serify/cmd/serify@latest
 ```
 
+Or download a prebuilt binary for your platform from the
+[releases page](https://github.com/chengxilo/serify/releases).
+
 ## Quick start
 
-**Work inside a clone for now.** The worker libraries are not published to any
-package registry yet, so every example worker refers to its library by relative
-path (`replace => ../../`, `path = "../../lib/rust/serify"`, `file:../../lib/node`,
-…). A worker copied outside the repository will not build until those are
-published — see [Supported languages](#supported-languages).
+The example workers in this repository refer to their library by relative path
+(`replace => ../../`, `path = "../../lib/rust/serify"`, `file:../../lib/node`,
+…), so they build from a clone without waiting on a registry. A worker of your
+own outside the repository takes the published package instead — see
+[Supported languages](#supported-languages).
 
 ```bash
 git clone https://github.com/chengxilo/serify && cd serify
@@ -156,22 +159,27 @@ serify run --ref go --cases examples/cases examples/go examples/my-worker
 
 ## Supported languages
 
-**No library is published to a package registry yet.** The manifests exist and
-name the intended coordinates, but nothing is released, so a worker takes its
-library by relative path from inside this repository. Go is the exception: Go
-modules resolve straight from the repo, so `go get` works today.
+Each library is published to its language's own registry. C++ is the exception:
+it is a single header, and it ships in the GitHub release rather than through a
+package manager.
 
-| Language | Example worker    | Library                                     | How a worker takes it today |
-|----------|-------------------|---------------------------------------------|------------------------------|
-| Go       | `examples/go`     | `github.com/chengxilo/serify/lib/go/serify` | `go get` works; the example also uses a `replace` |
-| Rust     | `examples/rust`   | `serify` crate (unpublished)                | `path = "../../lib/rust/serify"` |
-| Python   | `examples/python` | `serify.py` (unpublished)                   | `sys.path` entry for `lib/python` |
-| Node/TS  | `examples/node`   | `@chengxilo/serify` (unpublished)           | `file:../../lib/node` |
-| C#       | `examples/csharp` | `Serify.cs` (unpublished)                   | compiled into the worker project |
-| C++      | `examples/cpp`    | `serify.hpp` (header-only, unpublished)     | `-I lib/cpp` |
-| Elixir   | `examples/elixir` | `serify.ex` (unpublished)                   | path dependency on `lib/elixir` |
-| Java     | `examples/java`   | `io.serify:workerlib` (unpublished)         | local Maven module |
-| PHP      | `examples/php`    | `chengxilo/serify` (unpublished)            | `require_once lib/php/src/*.php` |
+The example workers in this repository deliberately do **not** take the
+published packages — they use a relative path into `lib/`, so a change to a
+library is exercised by the conformance suite before it is released.
+
+| Language | Example worker    | Install                                     | How the example takes it |
+|----------|-------------------|---------------------------------------------|--------------------------|
+| Go       | `examples/go`     | `go get github.com/chengxilo/serify/lib/go/serify` | `replace` directive |
+| Rust     | `examples/rust`   | `cargo add serify`                          | `path = "../../lib/rust/serify"` |
+| Python   | `examples/python` | `pip install serify`                        | `sys.path` entry for `lib/python` |
+| Node/TS  | `examples/node`   | `npm install @chengxilo/serify`             | `file:../../lib/node` |
+| C#       | `examples/csharp` | `dotnet add package Serify`                 | compiled into the worker project |
+| C++      | `examples/cpp`    | vendor `serify.hpp`                         | `-I lib/cpp` |
+| Elixir   | `examples/elixir` | `{:serify, "~> 0.1"}`                       | path dependency on `lib/elixir` |
+| Java     | `examples/java`   | `io.github.chengxilo:serify`                | local Maven module |
+| PHP      | `examples/php`    | `composer require chengxilo/serify`         | `require_once lib/php/src/*.php` |
+
+All ten ship from this repository under one shared version and one tag.
 
 ### Go
 

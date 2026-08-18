@@ -20,6 +20,7 @@ description = "Cross-language serialization conformance worker library for Rust"
 license = "Apache-2.0"
 repository = "https://github.com/chengxilo/serify"
 keywords = ["serialization", "conformance", "testing"]
+readme = "README.md"
 
 [lib]
 name = "serify"

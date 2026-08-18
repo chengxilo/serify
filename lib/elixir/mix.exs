@@ -24,7 +24,11 @@ defmodule WorkerLib.MixProject do
       source_url: "https://github.com/chengxilo/serify",
       package: [
         licenses: ["Apache-2.0"],
-        links: %{"GitHub" => "https://github.com/chengxilo/serify"}
+        links: %{"GitHub" => "https://github.com/chengxilo/serify"},
+        # Explicit, because the default list is silently satisfied by lib/ and
+        # mix.exs alone — the published tarball shipped neither the README nor
+        # the LICENSE until both were copied in beside mix.exs.
+        files: ~w(lib mix.exs README.md LICENSE)
       ],
       deps: deps()
     ]

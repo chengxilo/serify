@@ -307,11 +307,13 @@ Key files:
 
 Each language wires the same detections into its NDJSON loop. The XOR-flip active overwrite for zero-copy/output-ZC detection, the double-serialize/deserialize for stability, and the before/after comparison for mutation work identically across languages — except output-ZC, which only applies where the language's memory model lets a model field mutably alias the output buffer.
 
-**This is not a public API yet.** Design decisions should be clean and appropriate, not burdened by backward-compatibility concerns. There are no external users — compatibility shims have no upside, only cost.
+**This is a published 0.x API.** The nine libraries are on their registries, so a breaking change is now a version bump rather than a free edit — but 0.x is exactly the promise that breaking changes are still allowed. Design decisions should stay clean and appropriate, not burdened by backward-compatibility concerns; compatibility shims still have no upside. What changed is only that a break must ride a release, not that it must be avoided.
 
 ## Commands
 
 Go module is `github.com/chengxilo/serify` (Go 1.25). Rust is a Cargo workspace (`Cargo.toml`); `lib/` holds the per-language libraries (formerly `sdks/`), with the Go library at `lib/go/serify` (Thrift-style: import path ends in the package name).
+
+**Releases:** pushing a `v*` tag ships all ten artifacts, and `.github/workflows/release.yml` is the whole procedure — there is no release doc, deliberately; its header comment carries the external setup (registry tokens, PyPI trusted publisher, Maven namespace) that cannot be re-derived from the repo. goreleaser (`.goreleaser.yaml`) builds the CLI, then one job per registry publishes the libraries. Two things are easy to get wrong from inside the code: the version lives in eight manifests that nothing keeps in sync (the CLI is not one of them — it reads its version from the tag), and `serify-derive` must reach crates.io before `serify`, which names it by version. `scripts/check-versions.sh` enforces the first and is the release's gate: it fails the run before any upload, which is all that stands between a forgotten bump and five registries carrying one version while the sixth carries another, unfixably.
 
 Also Thrift-style, the npm and Composer **publish** manifests live at the repo root — `package.json` and `composer.json` are the source of truth for entry points and autoload paths; don't restate their contents elsewhere. `npm test` runs the node library tests; `prepack` (not `prepare` — installs must stay side-effect-free so fresh clones work) builds `lib/node/dist` at publish time. In-repo node workers link the library via `file:` deps on `lib/node` (which keeps a minimal `private: true` manifest as the link target) and build it themselves via `npx tsc -p node_modules/@chengxilo/serify` in their build commands. PHP workers `require_once` `lib/php/src/*.php` directly.
 

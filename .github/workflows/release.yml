@@ -1,0 +1,209 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Pushing a v* tag releases all ten artifacts.
+#
+# goreleaser handles the CLI (.goreleaser.yaml). It has no notion of crates.io,
+# PyPI, hex.pm or Maven Central — `after:` hooks are a Pro feature and
+# `publishers:` runs once per built artifact — so each library gets a job here
+# instead. They are deliberately separate jobs: one registry rejecting an
+# upload must not take the other six down with it.
+#
+# Every publish is irreversible; no registry here lets a version be replaced.
+# Two things stand in front of that: check-versions fails the run before
+# anything is uploaded if the manifests disagree with the tag, and the publish
+# jobs name the `release` environment, so adding a required reviewer to it in
+# repo settings turns the whole second half into a manual approval.
+#
+# Secrets: CARGO_REGISTRY_TOKEN, NPM_TOKEN, HEX_API_KEY, NUGET_API_KEY,
+# MAVEN_CENTRAL_TOKEN_USERNAME, MAVEN_CENTRAL_TOKEN_PASSWORD,
+# MAVEN_GPG_PRIVATE_KEY, MAVEN_GPG_PASSPHRASE. PyPI uses trusted publishing.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  GOTOOLCHAIN: local
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/check-versions.sh "${GITHUB_REF_NAME}"
+
+  goreleaser:
+    needs: check-versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # goreleaser builds the changelog from the log, and a shallow clone
+          # gives it nothing to build from.
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  # ---------------------------------------------------------------- libraries
+  # All of these wait on goreleaser: if the GitHub release itself cannot be
+  # cut, nothing should already be sitting on six registries.
+
+  crates:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # serify depends on serify-derive by version, so publishing them in one
+      # step fails: the index has to serve the macro before the crate that
+      # names it can be verified.
+      - name: Publish serify-derive
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p serify-derive
+      - name: Wait for the index
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for _ in $(seq 1 60); do
+            if curl -sfA "serify-release" \
+              "https://crates.io/api/v1/crates/serify-derive/${version}" >/dev/null; then
+              echo "serify-derive ${version} is on the index"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "serify-derive ${version} never appeared on the index" >&2
+          exit 1
+      - name: Publish serify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p serify
+
+  pypi:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      # Trusted publishing: PyPI verifies this token against the publisher
+      # configured for the project, so there is no API token to leak. It needs
+      # the trusted publisher configured on PyPI (see the header).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build
+      - run: python -m build
+        working-directory: lib/python
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: lib/python/dist
+
+  npm:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+      - run: npm install
+      # Scoped packages default to private; --access public is what makes the
+      # first publish of @chengxilo/serify land. prepack builds lib/node/dist.
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  hex:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.17"
+          otp-version: "27"
+      - run: mix deps.get
+        working-directory: lib/elixir
+      - run: mix hex.publish --yes
+        working-directory: lib/elixir
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+
+  nuget:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0"
+      - run: dotnet pack lib/csharp/Serify.csproj -c Release -o dist
+      - run: |
+          dotnet nuget push "dist/*.nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --skip-duplicate
+
+  maven:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          # Writes the settings.xml the central-publishing plugin reads, and
+          # imports the key the gpg plugin signs with. Central rejects an
+          # upload that is unsigned or missing the sources/javadoc jars, all of
+          # which the pom's `release` profile attaches.
+          server-id: central
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+      - run: mvn -B -P release deploy
+        working-directory: lib/java
+        env:
+          MAVEN_USERNAME: ${{ secrets.MAVEN_CENTRAL_TOKEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_CENTRAL_TOKEN_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
