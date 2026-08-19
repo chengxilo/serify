@@ -206,8 +206,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      # Node 20 ships npm 10; the OIDC exchange needs >= 11.5.1.
+          node-version: "24"
+      # The OIDC exchange needs npm >= 11.5.1 and npm@latest (12) needs Node
+      # 22.22+/24.15+, so both the major and npm itself get upgraded here.
       - run: npm install -g npm@latest
       - run: npm install
       # Scoped packages default to private; --access public is what makes the
@@ -269,6 +270,24 @@ jobs:
     environment: release
     steps:
       - uses: actions/checkout@v4
+      # A deployment created by an earlier attempt outlives the job that made
+      # it (the first run here crashed parsing Central's response after the
+      # deployment went through), and Central rejects a duplicate. Skip when
+      # one exists in any state but FAILED.
+      - name: Skip an existing Central deployment
+        env:
+          MAVEN_USERNAME: ${{ secrets.MAVEN_CENTRAL_TOKEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_CENTRAL_TOKEN_PASSWORD }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          status=$(curl -s -u "$MAVEN_USERNAME:$MAVEN_PASSWORD" \
+            "https://central.sonatype.com/api/v1/publisher/deployment/status?namespace=io.github.chengxilo&name=serify&version=${version}") || true
+          if printf '%s' "$status" | grep -q '"deploymentState"' &&
+             ! printf '%s' "$status" | grep -q '"deploymentState" *: *"FAILED"'; then
+            echo "io.github.chengxilo:serify:${version} already has a Central deployment — skipping"
+            exit 0
+          fi
+          echo "no non-failed Central deployment for ${version} — proceeding"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

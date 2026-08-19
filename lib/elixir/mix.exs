@@ -40,7 +40,10 @@ defmodule WorkerLib.MixProject do
 
   defp deps do
     [
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      # hex.publish builds the docs by default, and the "docs" task comes
+      # from ex_doc. It is dev-only: nothing in lib/ needs it at runtime.
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
   end
 end
