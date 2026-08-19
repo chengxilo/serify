@@ -26,9 +26,46 @@
 # jobs name the `release` environment, so adding a required reviewer to it in
 # repo settings turns the whole second half into a manual approval.
 #
-# Secrets: CARGO_REGISTRY_TOKEN, NPM_TOKEN, HEX_API_KEY, NUGET_API_KEY,
-# MAVEN_CENTRAL_TOKEN_USERNAME, MAVEN_CENTRAL_TOKEN_PASSWORD,
-# MAVEN_GPG_PRIVATE_KEY, MAVEN_GPG_PASSPHRASE. PyPI uses trusted publishing.
+# Auth is OIDC trusted publishing wherever a registry supports it: pypi,
+# crates.io, npm and nuget each mint a short-lived token from GitHub's OIDC
+# claim for this repo, this workflow and the `release` environment. No
+# registry attaches a trusted publisher to a package that does not exist yet,
+# so the FIRST version of each of those packages is published manually once —
+# the bootstrap below — and the publish steps skip a version already on its
+# registry instead of failing on it.
+#
+# One-time external setup (none of this can be re-derived from the repo):
+#
+#   PyPI — the project does not exist yet, so add a PENDING publisher at
+#   https://pypi.org/manage/account/publishing/ : project serify, owner
+#   chengxilo, repository serify, workflow release.yml, environment release.
+#   The first upload creates the project; the publisher becomes permanent.
+#
+#   crates.io — per crate (serify AND serify-derive), Settings → trusted
+#   publishing → GitHub Actions publisher: chengxilo / serify / release.yml /
+#   environment release. Only possible after the bootstrap publish.
+#
+#   npm — for @chengxilo/serify, package Settings → Publishing access →
+#   GitHub Actions trusted publisher: chengxilo / serify / release.yml /
+#   environment release. Only possible after the bootstrap publish.
+#
+#   nuget.org — per owner, not per package: account → Trusted Publishing →
+#   GitHub Actions policy: chengxilo / serify / release.yml / environment
+#   release. Also add a repository VARIABLE NUGET_USER holding the nuget.org
+#   profile name (not the email address).
+#
+#   hex.pm and Maven Central have no trusted publishing, so their tokens stay
+#   secrets: HEX_API_KEY, MAVEN_CENTRAL_TOKEN_USERNAME,
+#   MAVEN_CENTRAL_TOKEN_PASSWORD, MAVEN_GPG_PRIVATE_KEY, MAVEN_GPG_PASSPHRASE.
+#
+# Bootstrap (once, before the first tag, from a local checkout, with one-off
+# tokens that are deleted afterwards and never become GitHub secrets):
+#   cargo publish -p serify-derive && cargo publish -p serify
+#   npm publish --access public
+#   dotnet nuget push lib/csharp/bin/Release/Serify.<version>.nupkg \
+#     --source https://api.nuget.org/v3/index.json --api-key <one-off key>
+# The tagged release then skips those three and publishes everything else;
+# from the second version on, all four registries go through OIDC.
 
 name: Release
 
@@ -83,16 +120,31 @@ jobs:
     needs: goreleaser
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      contents: read
+      # Trusted publishing: the auth action exchanges GitHub's OIDC token for
+      # a short-lived crates.io token, revoked when the job ends.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
       # serify depends on serify-derive by version, so publishing them in one
       # step fails: the index has to serve the macro before the crate that
-      # names it can be verified.
+      # names it can be verified. Both steps skip a version already on the
+      # index — the bootstrap publish, or a resumed run.
       - name: Publish serify-derive
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p serify-derive
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if curl -sfA "serify-release" \
+            "https://crates.io/api/v1/crates/serify-derive/${version}" >/dev/null; then
+            echo "serify-derive ${version} already published — skipping"
+            exit 0
+          fi
+          cargo publish -p serify-derive
       - name: Wait for the index
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -108,8 +160,15 @@ jobs:
           exit 1
       - name: Publish serify
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p serify
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if curl -sfA "serify-release" \
+            "https://crates.io/api/v1/crates/serify/${version}" >/dev/null; then
+            echo "serify ${version} already published — skipping"
+            exit 0
+          fi
+          cargo publish -p serify
 
   pypi:
     needs: goreleaser
@@ -117,8 +176,8 @@ jobs:
     environment: release
     permissions:
       # Trusted publishing: PyPI verifies this token against the publisher
-      # configured for the project, so there is no API token to leak. It needs
-      # the trusted publisher configured on PyPI (see the header).
+      # configured for the project, so there is no API token to leak. The
+      # project is brand new, so it needs a pending publisher (see the header).
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -136,18 +195,31 @@ jobs:
     needs: goreleaser
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      contents: read
+      # Trusted publishing: the npm CLI performs the OIDC exchange itself, so
+      # no auth may be configured — setup-node's registry-url input would
+      # plant an _authToken line in .npmrc that makes npm refuse to fall
+      # through to OIDC, hence neither it nor NODE_AUTH_TOKEN appears here.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          registry-url: https://registry.npmjs.org
+      # Node 20 ships npm 10; the OIDC exchange needs >= 11.5.1.
+      - run: npm install -g npm@latest
       - run: npm install
       # Scoped packages default to private; --access public is what makes the
       # first publish of @chengxilo/serify land. prepack builds lib/node/dist.
-      - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # A version already on the registry is skipped (bootstrap or resumed run).
+      - run: |
+          version="${GITHUB_REF_NAME#v}"
+          if npm view "@chengxilo/serify@${version}" version >/dev/null 2>&1; then
+            echo "@chengxilo/serify ${version} already published — skipping"
+            exit 0
+          fi
+          npm publish --access public
 
   hex:
     needs: goreleaser
@@ -170,16 +242,25 @@ jobs:
     needs: goreleaser
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      contents: read
+      # Trusted publishing: NuGet/login exchanges GitHub's OIDC token for a
+      # one-hour nuget.org API key; NUGET_USER is the nuget.org profile name.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0"
       - run: dotnet pack lib/csharp/Serify.csproj -c Release -o dist
+      - uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ vars.NUGET_USER }}
       - run: |
           dotnet nuget push "dist/*.nupkg" \
             --source https://api.nuget.org/v3/index.json \
-            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
             --skip-duplicate
 
   maven:
