@@ -1,5 +1,16 @@
 <div align="center"> 
 <img src="docs/logo.svg" width="43%" alt="logo"/>
+
+[![release](https://img.shields.io/github/v/release/chengxilo/serify?logo=github&label=release)](https://github.com/chengxilo/serify/releases/latest)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
+[![Go](https://img.shields.io/github/v/tag/chengxilo/serify?logo=go&logoColor=white&label=go&color=00ADD8)](https://pkg.go.dev/github.com/chengxilo/serify/lib/go/serify)
+[![crates.io](https://img.shields.io/crates/v/serify?logo=rust&logoColor=white&label=crates.io)](https://crates.io/crates/serify)
+[![PyPI](https://img.shields.io/pypi/v/serify?logo=pypi&logoColor=white&label=pypi)](https://pypi.org/project/serify/)
+[![npm](https://img.shields.io/npm/v/%40chengxilo%2Fserify?logo=npm&logoColor=white&label=npm)](https://www.npmjs.com/package/@chengxilo/serify)
+[![NuGet](https://img.shields.io/nuget/v/Serify?logo=nuget&logoColor=white&label=nuget)](https://www.nuget.org/packages/Serify)
+[![Hex.pm](https://img.shields.io/hexpm/v/serify?logo=elixir&logoColor=white&label=hex.pm)](https://hex.pm/packages/serify)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.chengxilo/serify?logo=apachemaven&logoColor=white&label=maven%20central)](https://central.sonatype.com/artifact/io.github.chengxilo/serify)
 </div>
 
 # What is Serify
@@ -167,19 +178,20 @@ The example workers in this repository deliberately do **not** take the
 published packages — they use a relative path into `lib/`, so a change to a
 library is exercised by the conformance suite before it is released.
 
-| Language | Example worker    | Install                                     | How the example takes it |
-|----------|-------------------|---------------------------------------------|--------------------------|
-| Go       | `examples/go`     | `go get github.com/chengxilo/serify/lib/go/serify` | `replace` directive |
-| Rust     | `examples/rust`   | `cargo add serify`                          | `path = "../../lib/rust/serify"` |
-| Python   | `examples/python` | `pip install serify`                        | `sys.path` entry for `lib/python` |
-| Node/TS  | `examples/node`   | `npm install @chengxilo/serify`             | `file:../../lib/node` |
-| C#       | `examples/csharp` | `dotnet add package Serify`                 | compiled into the worker project |
-| C++      | `examples/cpp`    | vendor `serify.hpp`                         | `-I lib/cpp` |
-| Elixir   | `examples/elixir` | `{:serify, "~> 0.1"}`                       | path dependency on `lib/elixir` |
-| Java     | `examples/java`   | `io.github.chengxilo:serify`                | local Maven module |
-| PHP      | `examples/php`    | `composer require chengxilo/serify`         | `require_once lib/php/src/*.php` |
+| Language | Example worker    | Install                                     | Published                                                                                     | How the example takes it |
+|----------|-------------------|---------------------------------------------|-----------------------------------------------------------------------------------------------|--------------------------|
+| Go       | `examples/go`     | `go get github.com/chengxilo/serify/lib/go/serify` | [pkg.go.dev](https://pkg.go.dev/github.com/chengxilo/serify/lib/go/serify)                | `replace` directive |
+| Rust     | `examples/rust`   | `cargo add serify`                          | [crates.io/serify](https://crates.io/crates/serify)                                             | `path = "../../lib/rust/serify"` |
+| Python   | `examples/python` | `pip install serify`                        | [pypi.org/serify](https://pypi.org/project/serify/)                                             | `sys.path` entry for `lib/python` |
+| Node/TS  | `examples/node`   | `npm install @chengxilo/serify`             | [npmjs.com/@chengxilo/serify](https://www.npmjs.com/package/@chengxilo/serify)                   | `file:../../lib/node` |
+| C#       | `examples/csharp` | `dotnet add package Serify`                 | [nuget.org/Serify](https://www.nuget.org/packages/Serify)                                       | compiled into the worker project |
+| C++      | `examples/cpp`    | vendor `serify.hpp`                         | [`serify.hpp` in the release](https://github.com/chengxilo/serify/releases/latest)              | `-I lib/cpp` |
+| Elixir   | `examples/elixir` | `{:serify, "~> 0.1"}`                       | [hex.pm/serify](https://hex.pm/packages/serify)                                                 | path dependency on `lib/elixir` |
+| Java     | `examples/java`   | `io.github.chengxilo:serify`                | [Maven Central](https://central.sonatype.com/artifact/io.github.chengxilo/serify)               | local Maven module |
+| PHP      | `examples/php`    | `composer require chengxilo/serify`         | not yet on [Packagist](https://packagist.org/)                                                  | `require_once lib/php/src/*.php` |
 
-All ten ship from this repository under one shared version and one tag.
+All ten ship from this repository under one shared version and one tag; the
+current release is [`v0.1.0`](https://github.com/chengxilo/serify/releases/tag/v0.1.0).
 
 ### Go
 
