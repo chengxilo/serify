@@ -59,74 +59,12 @@ agreement by hand.
 1. You write `worker` for your target languages — a small program that reads an NDJSON protocol on stdin and answers serialize/deserialize requests.
 2. `serify` CLI drives all workers through the same test cases and compares their outputs byte-for-byte.
 
-```mermaid
-flowchart-elk LR
-    subgraph CASES["Case Definition (customer.yaml)"]
-        direction TB
-        C1["<div align='left'>
-        fields:
-        &nbsp;&nbsp;- customer_id: uint64
-        &nbsp;&nbsp;- email: string
-        &nbsp;&nbsp;- age: uint8
-        &nbsp;&nbsp;- fraud_score: float32
-        &nbsp;&nbsp;- pin: array&lt;uint8,4&gt;
-        &nbsp;&nbsp;- referral_code: optional&lt;string&gt;
-        </div>"]
-        C2["<div align='left'>
-        cases:
-        &nbsp;&nbsp;- name: typical
-        &nbsp;&nbsp;&nbsp;&nbsp;data:
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;customer_id: 90211054
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;email: dana@example.com
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;age: 34
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fraud_score: 0.03
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pin: [4, 9, 3, 1]
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;referral_code: FRIEND-2025
-        &nbsp;&nbsp;- name: new_account
-        &nbsp;&nbsp;&nbsp;&nbsp;data:
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;customer_id: 90211055
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;email: new@example.com
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;age: 0
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fraud_score: 0.0
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pin: [0, 0, 0, 0]
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;referral_code: null
-        </div>"]
-    end
+<div align="center">
+<img src="docs/how-it-works.svg" alt="serify: cases feed the runner, the runner drives every language worker over the same protocol, the report compares them" width="100%"/>
+</div>
 
-    RUNNER["Serify Runner"]
-
-    subgraph WORKERS["Language Workers"]
-        direction TD
-        W1["Go"]
-        W2["Rust"]
-        W3["Python"]
-        W4["C#"]
-        W5["C++"]
-        W6["Node.js"]
-        W7["Elixir"]
-        W8["Java"]
-        W9["PHP"]
-        W1 ~~~ W2 ~~~ W3 ~~~ W4 ~~~ W5 ~~~ W6 ~~~ W7 ~~~ W8 ~~~ W9
-    end
-
-    REPORT["Test Report"]
-
-    Load["1. load &amp; validate"]
-    Bind["2. bind schema"]
-    SerReq["3.1 serialize"]
-    SerResp["3.2 serialized bytes (or SKIP)"]
-    DeReq["4.1 deserialize (reference's bytes)"]
-    DeResp["4.2 deserialized data (or SKIP)"]
-    Verdict["5. diff &amp; verdict"]
-
-    CASES --> Load --> RUNNER
-    RUNNER --> Bind --> WORKERS
-    RUNNER --> SerReq --> WORKERS
-    WORKERS --> SerResp --> RUNNER
-    RUNNER --> DeReq --> WORKERS
-    WORKERS --> DeResp --> RUNNER
-    RUNNER --> Verdict --> REPORT
-```
+<sub>Diagram source: [`docs/how-it-works.drawio`](docs/how-it-works.drawio) — open it (or the SVG above, which
+carries the same XML) in [draw.io](https://app.diagrams.net/) and re-export the SVG after editing.</sub>
 
 ## Install Serify CLI
 
