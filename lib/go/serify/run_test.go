@@ -69,9 +69,9 @@ var u64Schema = `[{"name":"user_id","type":"uint64"}]`
 var fullSchema string
 
 func TestMain(m *testing.M) {
-	// Verify examples/cases parse cleanly; fullSchema is a self-contained inline
+	// Verify examples/appdata/cases parse cleanly; fullSchema is a self-contained inline
 	// schema so the library tests below don't depend on the exact example suite layout.
-	if _, err := config.LoadSuite(filepath.Join(testutil.RepoRoot(), "examples", "cases")); err != nil {
+	if _, err := config.LoadSuite(filepath.Join(testutil.RepoRoot(), "examples", "appdata", "cases")); err != nil {
 		panic("load cases: " + err.Error())
 	}
 	fullSchema = `[{"name":"user_id","type":"uint64"},{"name":"username","type":"string"},{"name":"score","type":"float32"},{"name":"active","type":"bool"},{"name":"metadata","type":"bytes"},{"name":"tags","type":"list<string>"},{"name":"profile","type":"optional<string>"},{"name":"counts","type":"array<uint32,4>"},{"name":"address","type":"struct","fields":[{"name":"street","type":"string"},{"name":"zip","type":"uint32"}]},{"name":"scores","type":"map<string,uint32>","key_type":"string"},{"name":"labels","type":"map<string,struct>","key_type":"string","fields":[{"name":"value","type":"string"},{"name":"priority","type":"uint32"}]}]`

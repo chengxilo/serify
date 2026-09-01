@@ -169,7 +169,7 @@ jobs:
         run: cargo build -p serify --no-default-features
 
   # Cross-language binary byte-parity over the example workers. One cell per
-  # language: it builds examples/go (the reference) plus examples/<language> and
+  # language: it builds examples/appdata/go (the reference) plus examples/appdata/<language> and
   # requires that language to match. fail-fast:false makes the grid a per-language
   # status map — a lagging example fails only its own cell.
   conformance:
@@ -226,7 +226,7 @@ jobs:
       - name: Binary parity (go ref vs ${{ matrix.language }})
         env:
           SERIFY_REQUIRE: go,${{ matrix.language }}
-        run: go test -count=1 -v ./examples/test/
+        run: go test -count=1 -v ./examples/appdata/test/
 
   # Integration meta-tests (wrong-worker detection, audit mode, CLI tests).
   # happy, wrong and audit all run in every language now, and requireWorkers
@@ -253,7 +253,7 @@ jobs:
         with:
           php-version: "8.2"
           extensions: gmp
-      # No SERIFY_REQUIRE here: that variable is read by examples/test, whose
+      # No SERIFY_REQUIRE here: that variable is read by examples/appdata/test, whose
       # TestMain skips absent languages by default. ./test's requireWorkers
       # already fails on a missing toolchain, so the guarantee is unconditional.
       - name: Integration tests

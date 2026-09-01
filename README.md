@@ -78,7 +78,7 @@ Or download a prebuilt binary for your platform from the
 ## Quick start
 
 The example workers in this repository refer to their library by relative path
-(`replace => ../../`, `path = "../../lib/rust/serify"`, `file:../../lib/node`,
+(`replace => ../../../`, `path = "../../../lib/rust/serify"`, `file:../../../lib/node`,
 …), so they build from a clone without waiting on a registry. A worker of your
 own outside the repository takes the published package instead — see
 [Supported languages](#supported-languages).
@@ -90,16 +90,18 @@ go install ./cmd/serify
 # Run the bundled suite across two workers. --cases is a directory of per-type
 # case files; --ref names the worker the others are compared against, and it
 # must be one of the workers you pass.
-serify run --ref go --cases examples/cases examples/go examples/rust
+serify run --ref go --cases examples/appdata/cases examples/appdata/go examples/appdata/rust
 ```
 
-To start your own worker, copy the example for your language *inside* `examples/`
-so its relative path to `lib/<lang>` still resolves, then run it against a
-reference worker in a **different** language:
+To start your own worker, copy the example for your language *beside* it, inside
+`examples/appdata/`, so its relative path to `lib/<lang>` still resolves — the
+workers reach the library with `../../../lib/<lang>`, so a copy one directory
+higher would look outside the repository. Then run it against a reference worker
+in a **different** language:
 
 ```bash
-cp -r examples/python examples/my-worker
-serify run --ref go --cases examples/cases examples/go examples/my-worker
+cp -r examples/appdata/python examples/appdata/my-worker
+serify run --ref go --cases examples/appdata/cases examples/appdata/go examples/appdata/my-worker
 ```
 
 > Results are reported per language, so only one worker per language can run at a
@@ -118,15 +120,15 @@ library is exercised by the conformance suite before it is released.
 
 | Language | Example worker    | Install                                     | Published                                                                                     | How the example takes it |
 |----------|-------------------|---------------------------------------------|-----------------------------------------------------------------------------------------------|--------------------------|
-| Go       | `examples/go`     | `go get github.com/chengxilo/serify/lib/go/serify` | [pkg.go.dev](https://pkg.go.dev/github.com/chengxilo/serify/lib/go/serify)                | `replace` directive |
-| Rust     | `examples/rust`   | `cargo add serify`                          | [crates.io/serify](https://crates.io/crates/serify)                                             | `path = "../../lib/rust/serify"` |
-| Python   | `examples/python` | `pip install serify`                        | [pypi.org/serify](https://pypi.org/project/serify/)                                             | `sys.path` entry for `lib/python` |
-| Node/TS  | `examples/node`   | `npm install @chengxilo/serify`             | [npmjs.com/@chengxilo/serify](https://www.npmjs.com/package/@chengxilo/serify)                   | `file:../../lib/node` |
-| C#       | `examples/csharp` | `dotnet add package Serify`                 | [nuget.org/Serify](https://www.nuget.org/packages/Serify)                                       | compiled into the worker project |
-| C++      | `examples/cpp`    | vendor `serify.hpp`                         | [`serify.hpp` in the release](https://github.com/chengxilo/serify/releases/latest)              | `-I lib/cpp` |
-| Elixir   | `examples/elixir` | `{:serify, "~> 0.1"}`                       | [hex.pm/serify](https://hex.pm/packages/serify)                                                 | path dependency on `lib/elixir` |
-| Java     | `examples/java`   | `io.github.chengxilo:serify`                | [Maven Central](https://central.sonatype.com/artifact/io.github.chengxilo/serify)               | local Maven module |
-| PHP      | `examples/php`    | `composer require chengxilo/serify`         | not yet on [Packagist](https://packagist.org/)                                                  | `require_once lib/php/src/*.php` |
+| Go       | `examples/appdata/go`     | `go get github.com/chengxilo/serify/lib/go/serify` | [pkg.go.dev](https://pkg.go.dev/github.com/chengxilo/serify/lib/go/serify)                | `replace` directive |
+| Rust     | `examples/appdata/rust`   | `cargo add serify`                          | [crates.io/serify](https://crates.io/crates/serify)                                             | `path = "../../../lib/rust/serify"` |
+| Python   | `examples/appdata/python` | `pip install serify`                        | [pypi.org/serify](https://pypi.org/project/serify/)                                             | `sys.path` entry for `lib/python` |
+| Node/TS  | `examples/appdata/node`   | `npm install @chengxilo/serify`             | [npmjs.com/@chengxilo/serify](https://www.npmjs.com/package/@chengxilo/serify)                   | `file:../../../lib/node` |
+| C#       | `examples/appdata/csharp` | `dotnet add package Serify`                 | [nuget.org/Serify](https://www.nuget.org/packages/Serify)                                       | compiled into the worker project |
+| C++      | `examples/appdata/cpp`    | vendor `serify.hpp`                         | [`serify.hpp` in the release](https://github.com/chengxilo/serify/releases/latest)              | `-I lib/cpp` |
+| Elixir   | `examples/appdata/elixir` | `{:serify, "~> 0.1"}`                       | [hex.pm/serify](https://hex.pm/packages/serify)                                                 | path dependency on `lib/elixir` |
+| Java     | `examples/appdata/java`   | `io.github.chengxilo:serify`                | [Maven Central](https://central.sonatype.com/artifact/io.github.chengxilo/serify)               | local Maven module |
+| PHP      | `examples/appdata/php`    | `composer require chengxilo/serify`         | not yet on [Packagist](https://packagist.org/)                                                  | `require_once lib/php/src/*.php` |
 
 All ten ship from this repository under one shared version and one tag; the
 current release is [`v0.1.0`](https://github.com/chengxilo/serify/releases/tag/v0.1.0).
@@ -204,7 +206,7 @@ serify.Run(serify.Suite{
 })
 ```
 
-See [`examples/go/`](examples/go/) for more detail.
+See [`examples/appdata/go/`](examples/appdata/go/) for more detail.
 
 ### Rust
 
@@ -238,7 +240,7 @@ fn main() {
 }
 ```
 
-See [`examples/rust/`](examples/rust/) for the full worker.
+See [`examples/appdata/rust/`](examples/appdata/rust/) for the full worker.
 
 ### Python
 
@@ -274,7 +276,7 @@ if __name__ == "__main__":
     })
 ```
 
-See [`examples/python/`](examples/python/) for the full worker.
+See [`examples/appdata/python/`](examples/appdata/python/) for the full worker.
 
 ### Node / TypeScript
 
@@ -308,7 +310,7 @@ runSuite({
 });
 ```
 
-See [`examples/node/`](examples/node/) for the full worker.
+See [`examples/appdata/node/`](examples/appdata/node/) for the full worker.
 
 ### C#
 
@@ -345,7 +347,7 @@ internal static class Program
 }
 ```
 
-See [`examples/csharp/`](examples/csharp/) for the full worker.
+See [`examples/appdata/csharp/`](examples/appdata/csharp/) for the full worker.
 
 ### C++
 
@@ -383,7 +385,7 @@ int main() {
 }
 ```
 
-See [`examples/cpp/`](examples/cpp/) for the full worker.
+See [`examples/appdata/cpp/`](examples/appdata/cpp/) for the full worker.
 
 ### Elixir
 
@@ -416,7 +418,7 @@ defmodule Worker do
 end
 ```
 
-See [`examples/elixir/`](examples/elixir/) for the full worker.
+See [`examples/appdata/elixir/`](examples/appdata/elixir/) for the full worker.
 
 ### Java
 
@@ -444,7 +446,7 @@ WorkerLib.runSuite(Map.of(
         "binary", new ModelFormatPair<>(UserRecord::marshal, UserRecord::unmarshal)))));
 ```
 
-See [`examples/java/`](examples/java/) for the full worker.
+See [`examples/appdata/java/`](examples/appdata/java/) for the full worker.
 
 ### PHP
 
@@ -475,7 +477,7 @@ Worker::runSuite([
 ]);
 ```
 
-See [`examples/php/`](examples/php/) for the full worker.
+See [`examples/appdata/php/`](examples/appdata/php/) for the full worker.
 
 ## Case definition syntax
 
@@ -739,7 +741,7 @@ interface cannot be enumerated).
 
 All nine share one arity rule: **0 fields → unit variant, 1 field → that value is
 the payload, N fields → the payload is a struct**; tags are the arm's type name
-in snake_case. See `examples/*/notification.*` for a worked example per language.
+in snake_case. See `examples/appdata/*/notification.*` for a worked example per language.
 
 ### Rust — `#[derive(SerifyModel)]`
 
@@ -760,8 +762,8 @@ Generates `to_field_map(&self)` and `from_field_map(fm: &FieldMap) -> Result<Sel
 
 ```bash
 serify validate                        # validate ./cases
-serify validate --cases examples/cases # validate a named directory
-serify validate --cases examples/cases examples/go   # also detect a worker
+serify validate --cases examples/appdata/cases # validate a named directory
+serify validate --cases examples/appdata/cases examples/appdata/go   # also detect a worker
 ```
 
 Checks the case files for structural validity (schema consistency, cross-references, format declarations) without running workers. Useful as a pre-commit check.

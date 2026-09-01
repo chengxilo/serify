@@ -31,7 +31,7 @@ cd "$(git rev-parse --show-toplevel)"
 # test/cases/invalid_schema/cases is deliberately absent: its case file is
 # malformed on purpose, so `serify schema` (rightly) refuses to load it.
 CASE_DIRS=(
-	examples/cases
+	examples/appdata/cases
 	test/cases/audit/cases
 	test/cases/happy/cases
 	test/cases/wrong/cases

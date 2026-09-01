@@ -68,7 +68,7 @@ dep_version() { # dep_version <pom>
 		grep -o '<artifactId>serify</artifactId><version>[^<]*' |
 		head -1 | sed 's/.*<version>//'
 }
-for pom in examples/java/pom.xml test/cases/*/java/pom.xml; do
+for pom in examples/*/java/pom.xml test/cases/*/java/pom.xml; do
 	report "$pom (serify dependency)" "$(dep_version "$pom")"
 done
 

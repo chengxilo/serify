@@ -74,8 +74,8 @@ the required language toolchain isn't available (e.g. `cargo` not on PATH).
 
 ## Multi-language tests
 
-`examples/test/` drives all example workers (`examples/<lang>/`) through the
-shared conformance suite; `examples/test/example_test.go` documents itself.
+`examples/appdata/test/` drives all example workers (`examples/appdata/<lang>/`) through the
+shared conformance suite; `examples/appdata/test/example_test.go` documents itself.
 Multi-language builds may need network (first `npm install` / `mix deps.get` /
 `composer install`). serify always invokes the build command and lets each
 language's build tool decide what to recompile, so repeat runs are cheap without
@@ -88,5 +88,5 @@ serify caching anything itself.
 go test ./test/... -v
 
 # Run multi-language conformance (example workers — needs all toolchains)
-go test ./examples/test/... -v
+go test ./examples/appdata/test/... -v
 ```

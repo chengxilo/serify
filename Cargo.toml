@@ -16,6 +16,6 @@
 members = [
     "lib/rust/serify",
     "lib/rust/derive",
-    "examples/rust",
+    "examples/appdata/rust",
 ]
 resolver = "2"

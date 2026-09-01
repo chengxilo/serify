@@ -197,7 +197,7 @@ func TestCheckKeys(t *testing.T) {
 }
 
 func TestLoadSuite_Directory(t *testing.T) {
-	set, err := LoadSuite(filepath.Join("..", "..", "examples", "cases"))
+	set, err := LoadSuite(filepath.Join("..", "..", "examples", "appdata", "cases"))
 	require.NoError(t, err, "LoadSuite: %v", err)
 	byName := map[string]*CasesFile{}
 	for _, ty := range set.Types {

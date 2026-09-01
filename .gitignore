@@ -80,5 +80,6 @@ dependency-reduced-pom.xml
 *.nupkg
 lib/elixir/serify-*.tar
 
-# Go example worker binary (rebuilt by go build ./...)
-/examples/go/example-go
+# Go example worker binaries: each example module's name ends in the binary
+# `go build` drops beside its source (examples/appdata/go -> example-go).
+/examples/*/go/example-*

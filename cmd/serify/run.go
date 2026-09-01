@@ -45,7 +45,7 @@ files (go.mod, Cargo.toml, etc.). An optional worker.yaml can override the
 default build and run commands.
 
 Examples:
-  serify run --ref rust --cases examples/cases go rust
+  serify run --ref rust --cases examples/appdata/cases go rust
   serify run --ref rust --full-matrix --output json go rust
   serify run --ref rust --audit --csv out.csv go rust`,
 		Args: cobra.MinimumNArgs(1),

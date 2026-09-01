@@ -135,7 +135,7 @@ Accepts multiple directories. If none given, defaults to "cases".
 
 Examples:
   serify schema                          # generate for ./cases
-  serify schema examples/cases           # single directory
+  serify schema examples/appdata/cases           # single directory
   serify schema cases1 cases2 cases3     # multiple directories`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(_ *cobra.Command, args []string) error {
