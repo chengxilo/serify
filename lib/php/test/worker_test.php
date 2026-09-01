@@ -37,6 +37,7 @@ require_once __DIR__ . '/../src/Worker.php';
 use Serify\Attributes\SerifyField;
 use Serify\Attributes\SerifyModel;
 use Serify\FieldMap;
+use Serify\SerifyModelHelper;
 use Serify\Type;
 use Serify\Worker;
 
@@ -136,6 +137,47 @@ if ($pair === null) {
 
 $wild = ['*' => ['*' => [fn(FieldMap $fm): string => 'w', fn(string $d): FieldMap => new FieldMap()]]];
 check(Worker::resolveRegistered($wild, 'anything', 'anyhow') !== null, 'the * wildcard still matches any (type, format)');
+
+// ── A sum arm whose payload is a model ────────────────────────────────────
+//
+// Both directions were broken: going out, a duck-type check no model satisfies
+// meant the conversion never ran; coming back, the raw FieldMap was assigned
+// straight to a typed property.
+
+#[SerifyModel]
+class ArmPayload
+{
+    #[SerifyField] public string $city = '';
+}
+
+/** arity 1, and the one property is a model. */
+class Wrapped
+{
+    public function __construct(public ArmPayload $value = new ArmPayload()) {}
+}
+
+class Bare {}
+
+#[SerifyModel]
+class ArmHolder
+{
+    #[SerifyField] public Bare|Wrapped $pick;
+}
+
+$payload = new ArmPayload();
+$payload->city = 'Toronto';
+$holder = new ArmHolder();
+$holder->pick = new Wrapped($payload);
+
+$back = SerifyModelHelper::fromFieldMap(SerifyModelHelper::toFieldMap($holder), ArmHolder::class);
+check($back->pick instanceof Wrapped, 'a sum arm holding a model stays its own arm class');
+check($back->pick->value instanceof ArmPayload,
+    'a sum arm holding a model comes back as that model, not a FieldMap');
+check($back->pick->value->city === 'Toronto', 'the arm payload keeps its field values');
+
+$holder->pick = new Bare();
+$back = SerifyModelHelper::fromFieldMap(SerifyModelHelper::toFieldMap($holder), ArmHolder::class);
+check($back->pick instanceof Bare, 'a unit arm is untouched by the model path');
 
 echo $failures === 0 ? "\nall tests passed\n" : "\n$failures test(s) failed\n";
 exit($failures === 0 ? 0 : 1);

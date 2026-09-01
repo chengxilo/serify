@@ -153,10 +153,10 @@ class SerifyModelHelper
         if (count($props) === 1) {
             $payload = $props[0]->getValue($val);
             // A single payload that is itself a model travels as a struct.
+            // The test is isModel, not method_exists('toFieldMap'): toFieldMap
+            // is a static helper here, so the old duck-type check never fired.
             return new Variant(self::armTag($arm),
-                is_object($payload) && method_exists($payload, 'toFieldMap')
-                    ? $payload->toFieldMap()
-                    : $payload);
+                self::isModel($payload) ? self::toFieldMap($payload) : $payload);
         }
 
         $payload = new FieldMap();                                  // N props -> a struct
@@ -178,7 +178,16 @@ class SerifyModelHelper
             $props = self::armProps($arm);
 
             if (count($props) === 1) {
-                $props[0]->setValue($obj, $v->value);
+                // The way back for the branch above: the property's declared
+                // type says which model to rebuild the FieldMap into.
+                $value = $v->value;
+                $pt    = $props[0]->getType();
+                if ($value instanceof FieldMap
+                    && $pt instanceof \ReflectionNamedType
+                    && self::isModelClass($pt->getName())) {
+                    $value = self::fromFieldMap($value, $pt->getName());
+                }
+                $props[0]->setValue($obj, $value);
             } elseif (count($props) > 1) {
                 if (!$v->value instanceof FieldMap) {
                     throw new \RuntimeException("variant \"{$v->tag}\" needs a struct payload");
@@ -249,6 +258,13 @@ class SerifyModelHelper
     private static function isModel(mixed $v): bool
     {
         return is_object($v) && (new \ReflectionClass($v))->getAttributes(SerifyModel::class) !== [];
+    }
+
+    /** Whether a class name names a #[SerifyModel]. */
+    private static function isModelClass(string $class): bool
+    {
+        return class_exists($class)
+            && (new \ReflectionClass($class))->getAttributes(SerifyModel::class) !== [];
     }
 
     /**

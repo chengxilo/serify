@@ -1140,7 +1140,15 @@ public static class SerifyModel
 
         var ps = ArmParams(arm);
         if (ps.Length == 0) return new Variant(ArmTag(arm), null);
-        if (ps.Length == 1) return new Variant(ArmTag(arm), ArmValue(arm, val, ps[0]));
+        if (ps.Length == 1)
+        {
+            var payload1 = ArmValue(arm, val, ps[0]);
+            // A single payload that is itself a model travels as a struct.
+            // FromVariant already had the way back, in ConvertValue's
+            // FieldMap-to-model branch; only this direction was missing.
+            if (payload1 is { } m && IsModel(m.GetType())) payload1 = ToFieldMapOf(m.GetType(), m);
+            return new Variant(ArmTag(arm), payload1);
+        }
 
         var payload = new FieldMap();                       // N parameters -> a struct
         foreach (var p in ps) SetFieldMapValue(payload, DefaultKey(p.Name!), ArmValue(arm, val, p));

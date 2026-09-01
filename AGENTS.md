@@ -163,7 +163,17 @@ enumerated).
 
 All nine share one arity rule: **0 fields → unit variant, 1 field → that value is
 the payload, N fields → the payload is a struct**; tags are the arm's type name
-in snake_case. See "`sum` and your own types" in `docs/protocol.md` for the
+in snake_case.
+
+The 1-field case has a sub-rule that is easy to half-implement: **a single
+payload that is itself a model travels as a struct**, and it has to work in
+*both* directions. Node, C# and PHP each shipped only one half — node converted
+out but handed the arm a raw `FieldMap` coming back, C# had the way back but
+never converted going out, and PHP's outbound branch tested
+`method_exists($payload, 'toFieldMap')`, a duck-type no model satisfies because
+the binding exposes `toFieldMap` as a static helper. `lib/node/test/` and
+`lib/php/test/` guard them now. Check both directions when adding a tenth
+language. See "`sum` and your own types" in `docs/protocol.md` for the
 full table, and `examples/appdata/*/notification.*` for a worked example per language.
 
 ### Registering a model with the suite

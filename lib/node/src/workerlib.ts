@@ -676,7 +676,16 @@ export namespace Serify {
     }
     const props = armProps(arm);
     if (props.length === 0) return new arm();
-    if (props.length === 1) return new arm(v.value);
+    if (props.length === 1) {
+      // A single model payload arrives as a FieldMap; the arm's own default
+      // value says which model it is. Without this, toVariant's model branch
+      // has no inverse and the arm is handed a raw FieldMap.
+      const fallback = new arm()[props[0]];
+      if (v.value instanceof FieldMap && isModel(fallback)) {
+        return new arm(fromFieldMap(fallback.constructor as any, v.value));
+      }
+      return new arm(v.value);
+    }
     if (!(v.value instanceof FieldMap)) {
       throw new Error(`variant "${v.tag}" needs a struct payload`);
     }
