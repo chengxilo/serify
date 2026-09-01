@@ -190,3 +190,26 @@ func TestSnapshotFieldMap_DeepCopy(t *testing.T) {
 	gotStr, _ := snap.GetString("tag")
 	assert.Equal(t, "hello", gotStr, "expected hello, got %v", gotStr)
 }
+
+// TestCompareFieldMaps_NilValuesAreNotMutations guards cloneValue's typed nils.
+// A bare `nil` there loses the type, valuesEqual's typed branches stop matching,
+// and any worker holding a nil slice is told it mutated its input, aliased its
+// output and deserialized unstably.
+func TestCompareFieldMaps_NilValuesAreNotMutations(t *testing.T) {
+	fm := NewFieldMap()
+	fm.SetBytes("payload", nil)
+	fm.SetListString("tags", nil)
+	fm.SetListStruct("items", nil)
+	fm.SetMap("labels", nil)
+	fm.SetVariant("choice", "silent", nil)
+	fm.fields["raw"] = []any(nil)
+
+	// A snapshot of an untouched FieldMap must compare equal to it.
+	assert.Empty(t, CompareFieldMaps(SnapshotFieldMap(fm), fm),
+		"a FieldMap full of nil values reported mutations against its own snapshot")
+
+	// A real change to one of those fields must still be caught.
+	before := SnapshotFieldMap(fm)
+	fm.SetBytes("payload", []byte{1})
+	assert.Equal(t, []string{"payload"}, CompareFieldMaps(before, fm))
+}

@@ -305,6 +305,8 @@ Key files:
 | Elixir | ✅ Full except output-ZC (BEAM binaries are immutable — output aliasing is impossible) |
 | PHP | ✅ Full except output-ZC (strings are copy-on-write values — output aliasing is impossible) |
 
+**A typed nil is load-bearing in `cloneValue`** (`lib/go/serify/auditcheck.go`). It returns a nil slice, map or variant *as itself* rather than as a bare `nil`, because `return nil` yields an interface with no type in it: `valuesEqual`'s `a.([]byte)` and every other typed branch then fail to match, the comparison falls through to `reflect.DeepEqual(nil, []byte(nil))`, and the field reads as changed. Six value kinds had this, so any worker holding a nil slice was told it had mutated its input, aliased its output and deserialized unstably — three false findings for code that did nothing. `TestCompareFieldMaps_NilValuesAreNotMutations` guards it.
+
 Each language wires the same detections into its NDJSON loop. The XOR-flip active overwrite for zero-copy/output-ZC detection, the double-serialize/deserialize for stability, and the before/after comparison for mutation work identically across languages — except output-ZC, which only applies where the language's memory model lets a model field mutably alias the output buffer.
 
 **This is a published 0.x API.** The nine libraries are on their registries, so a breaking change is now a version bump rather than a free edit — but 0.x is exactly the promise that breaking changes are still allowed. Design decisions should stay clean and appropriate, not burdened by backward-compatibility concerns; compatibility shims still have no upside. What changed is only that a break must ride a release, not that it must be avoided.

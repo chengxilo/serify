@@ -60,19 +60,25 @@ func SnapshotFieldMap(src *FieldMap) *FieldMap {
 // []string slices, []any slices, and recursing into *FieldMap, []*FieldMap,
 // and map[string]any.
 //
+// A nil slice, map or variant is returned as itself rather than as a bare
+// `nil`: `return nil` yields an interface with no type in it, so valuesEqual's
+// typed branches fail to match and the comparison falls through to
+// reflect.DeepEqual(nil, []byte(nil)) — false. Every field holding a nil slice
+// would then read as mutated.
+//
 //nolint:gocognit // deep clone must enumerate every FieldMap value kind
 func cloneValue(v any) any {
 	switch x := v.(type) {
 	case []byte:
 		if x == nil {
-			return nil
+			return x // typed nil: see the note on valuesEqual
 		}
 		return bytes.Clone(x)
 	case string:
 		return strings.Clone(x)
 	case []string:
 		if x == nil {
-			return nil
+			return x // typed nil: see the note on valuesEqual
 		}
 		out := make([]string, len(x))
 		for i, s := range x {
@@ -81,7 +87,7 @@ func cloneValue(v any) any {
 		return out
 	case []any:
 		if x == nil {
-			return nil
+			return x // typed nil: see the note on valuesEqual
 		}
 		out := make([]any, len(x))
 		for i, elem := range x {
@@ -92,7 +98,7 @@ func cloneValue(v any) any {
 		return SnapshotFieldMap(x)
 	case []*FieldMap:
 		if x == nil {
-			return nil
+			return x // typed nil: see the note on valuesEqual
 		}
 		out := make([]*FieldMap, len(x))
 		for i, fm := range x {
@@ -101,7 +107,7 @@ func cloneValue(v any) any {
 		return out
 	case map[string]any:
 		if x == nil {
-			return nil
+			return x // typed nil: see the note on valuesEqual
 		}
 		out := make(map[string]any, len(x))
 		for mk, mv := range x {
@@ -112,7 +118,7 @@ func cloneValue(v any) any {
 		// A sum payload is aliasing-capable (bytes, string, nested struct), so
 		// the snapshot needs its own copy or a mutation would show up in both.
 		if x == nil {
-			return nil
+			return x // typed nil: see the note on valuesEqual
 		}
 		return &Variant{Tag: strings.Clone(x.Tag), Value: cloneValue(x.Value)}
 	default:
