@@ -26,7 +26,51 @@ Understanding this split is essential — they are different audiences with thei
    - `examples/appdata/<lang>/` — reference worker implementations, exercised by `examples/appdata/test/` (not by `test/`, which drives its own fixtures under `test/cases/`). `examples/appdata/cases/` holds the shared conformance suite (one `.yaml` file per type; tested: `customer`, `order`, `telemetry`, `ledger`, `notification`, `signals`, plus reusable `address`/`money`/`line_item`). `notification` is the `sum` type and is implemented by **all nine** example workers, so `TestExamples_Notification` is what actually guards sum-type parity across the libraries. `signals` plays the same role for `list<T>` and `array<T,N>`: its fields use every scalar the schema allows as a list element, so `TestExamples_Signals` is what keeps a library from quietly dropping one — three libraries once failed *silently* on the element types they did not handle. `telemetry` (**all but elixir** — the BEAM has no NaN and no infinity, so its float cases are unrepresentable there and the gap is declared in `examples/appdata/cases/expected_skips/elixir.yaml`) carries the only `optional<scalar>`, the only `uint128`, and the float NaN/Inf cases; `customer` (**all nine**) is the only type with a `json` format beside `binary`, so it is what keeps the JSON encoders honest — and, being the only type with nested structs, it is what found the same dead nested-struct branch in the node, csharp, java and php bindings; `order` (**all nine**) is the only type combining `enum`, `list<struct>`, `map<string,struct>` and `optional<struct>`, and through line_item the only struct nested inside a struct. Every worker now implements every type except elixir/telemetry, so that one entry is the entire content of `expected_skips/`. `--expect-skips` (wired into `examples/appdata/test/`) turns any *undeclared* skip into a failure — a column of SKIP otherwise reads exactly like a passing run. Each file carries a `fields:` (or `variants:`) section plus `formats:`/`cases:`; generated JSON Schemas (`.schemas/*.schema.json`, from `scripts/gen-schemas.sh`) give editors save-time validation of case data.
    - There is **no `serify init` / `templates/` scaffolding** — it was removed and will be rebuilt once libraries/protocol stabilize; new workers start by copying an `examples/appdata/<lang>` worker (into `examples/appdata/`, so its `../../../lib/<lang>` path still resolves).
 
-**Go and Rust are the reference implementations.** When changing protocol or library behavior, update Go (`lib/go/serify`) and Rust (`lib/rust/`) first, then propagate to the other languages. All 9 libraries are currently at parity for core features (audit, `map<K,V>`, `sum<...>`, FieldMap types).
+**Go and Rust are the reference implementations.** When changing protocol or library behavior, update Go (`lib/go/serify`) and Rust (`lib/rust/`) first, then propagate to the other languages. All 9 libraries are currently at parity for core features (audit, `map<K,V>`, `sum<...>`, FieldMap types), at the FieldMap boundary and through the model path alike — the latter only since the fix described in the next section.
+
+## Audit on the model path
+
+**All nine bindings now see through the model path.** They did not: eight of nine wrapped a model format as a pure conversion — convert the FieldMap in, call the worker, throw the model away — while the run loop's audit probes compared the *outer FieldMap*, which the model never touched. A serializer that scribbled on the object it was handed was invisible, and so was a decoder that returned a model viewing the input buffer. Only Go was ever right.
+
+`Format::model` and its equivalents are what every binding's documentation calls the canonical worker pattern, so the workers most likely to be audited were exactly the ones audit could not see.
+
+The fix is one shape everywhere: **retain the model instance the call used, and re-derive the FieldMap from it at each probe point** instead of converting once and discarding. How each binding spells it:
+
+| Language | Where | Mechanism |
+|---|---|---|
+| Go | `lib/go/serify/suite.go:210-262` | the original — `buildSerializer` keeps `msgPtr` alive and re-extracts with `codec.extract` before the call, after it, and again after the XOR flip |
+| Rust | `lib/rust/serify/src/lib.rs` | `ModelFormat` holds the instance in an `Rc<RefCell<Option<M>>>` and exposes a `ModelHook { before, probe }` |
+| Python | `lib/python/serify.py` | `Format._bind` retains it and hangs `serify_model_probe` / `serify_model_before` on the wrapper closures |
+| Node | `lib/node/src/workerlib.ts` | same idea — `serifyModelProbe` / `serifyModelBefore` properties on the wrapper functions (`ModelProbed`) |
+| C# | `lib/csharp/Serify.cs` | `ModelAuditHook` carried as a third member of `FormatPair` |
+| Java | `lib/java/.../WorkerLib.java` | `ModelAuditHook` as a third component of the `FormatPair` record |
+| PHP | `lib/php/src/Type.php` | `ModelSerializer`, an invokable class — a PHP closure cannot carry the state alongside itself |
+| C++ | `lib/cpp/serify.hpp` | `shared_ptr<ModelAuditHook>` on `FormatPair`; the wrapper keeps the model in a `shared_ptr<M>` the probe captures |
+| Elixir | `lib/elixir/lib/serify.ex` | untouched — BEAM terms are immutable and cannot alias, so there is nothing for these probes to catch |
+
+Two details are load-bearing:
+
+- **The zero-copy probe must run *before* the stability re-call** (Go, Rust, Python, Node). That re-call overwrites the retained model with one built from the pristine snapshot — a model that never viewed the buffer and so cannot react to the flip.
+- **Only Go and Rust need the deserialize half at all.** Everywhere else a string or array cannot view part of another buffer, so a model can never alias the input; those bindings implement the serialize (mutation) half only, and say so where the counterpart would go.
+
+What was silently off before the fix: **mutation**, **mutation-induced instability** (the model is rebuilt from an untouched FieldMap for the stability re-call), **input zero-copy** (the conversion copies, so the alias is gone before `detect_zero_copy` flips the buffer) and **output zero-copy**. Still working: `input_mutated`, `deser_stable`, and instability that is visible in the returned bytes (a counter, a timestamp).
+
+All measured, not inferred:
+- Before the fix, porting `examples/audit/rust` to `Format::model` made all three of its `fast` zero-copy findings vanish (WARN 10 → 7). It now runs on the model path with all ten intact.
+- Before the fix, a Python model worker whose serializer scrubs `f.payload` — the exact bug Go's `handoff` reports — passed conformance and reported nothing. It now reports `audit-mutation`.
+- Rust's `audit_model/mutating` is **not** a gap: a serify serializer there receives `&M`, so mutating it is UB, and a release build discards the write (verified with a standalone `rustc -O` probe). Rust declines that format, as it declines `value-mutating` and `handoff`.
+
+Why it matters: `Format::model` is what every doc calls the canonical worker pattern, so the workers most likely to be audited are the ones audit cannot see.
+
+**The `audit_model` fixture pins this down.** `test/cases/audit/cases/audit_model.yaml` is `audit`'s twin — the same faults over the same byte layout, registered through each binding's model path — and all nine workers implement it. Its three-way split is what makes the evidence unambiguous:
+
+| format | reports | reads as |
+|---|---|---|
+| `unstable` | **all nine** | the positive control: this fault is visible in the returned bytes, so it does not need the model to survive the call. Proof every worker was built, bound, driven and audited — which is what made `mutating`'s original silence damning rather than ambiguous. |
+| `mutating` | **seven** (rust skips, elixir silent) | the subject. Elixir is legitimately silent (immutable terms); Rust declines the format, because mutating `&M` is UB and a release build discards the write. |
+| `zero-copy` | **go, rust** (seven skip) | the deserialize half. Only Go and Rust can express it at all — a managed runtime's string is a copy by construction. |
+
+`test/audit_meta_test.go`'s `auditModelWarnings` holds that grid. It is now a plain regression test: a binding that drifts back to a pure conversion goes silent and its `warn` assertion fails.
 
 ## Model-binding mechanisms per language
 
@@ -196,7 +240,9 @@ library has it; each spells it the way its type system wants:
 | **PHP** | `new Serify\Type(M::class, …)` | `new Type(null, …)`, or the plain format array |
 
 The model-less path is not legacy: a type with no natural struct needs it, and
-the audit fixtures are exactly that — they mutate a FieldMap on purpose.
+the audit fixtures are exactly that — they mutate a FieldMap on purpose. It is
+no longer the only path audit can see through, in Rust or anywhere else — see
+"Audit on the model path" above.
 
 Two things about *how* the two paths are told apart, because they decide
 whether a language needs a unit test for its resolver:

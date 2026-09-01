@@ -21,7 +21,11 @@ use std::collections::HashMap;
 #[cfg(feature = "worker")]
 use serde_json::{json, Value};
 #[cfg(feature = "worker")]
+use std::cell::RefCell;
+#[cfg(feature = "worker")]
 use std::io::{BufRead, Write};
+#[cfg(feature = "worker")]
+use std::rc::Rc;
 
 // SerifyModel - trait for structs that can round-trip through a FieldMap
 
@@ -1285,11 +1289,29 @@ pub type SerializeFn = Box<dyn Fn(&FieldMap) -> Result<Vec<u8>, String>>;
 #[cfg(feature = "worker")]
 pub type DeserializeFn = Box<dyn Fn(&[u8]) -> Result<FieldMap, String>>;
 
+/// Re-derives a FieldMap from the model instance the most recent call used.
+#[cfg(feature = "worker")]
+pub type ModelProbeFn = Box<dyn Fn() -> Option<FieldMap>>;
+
+/// Lets `--audit` probe the model a call actually used. Without it a model
+/// format is a pure conversion and the probes only ever see the caller's
+/// FieldMap, which the worker never touched.
+#[cfg(feature = "worker")]
+struct ModelHook {
+    /// The model's state on entry. Unused for deserialize.
+    before: Rc<RefCell<Option<FieldMap>>>,
+    probe: ModelProbeFn,
+}
+
 /// A named serialization format with optional serializer and deserializer.
 #[cfg(feature = "worker")]
 pub struct Format {
     serializer: Option<SerializeFn>,
     deserializer: Option<DeserializeFn>,
+    /// Set only by [`Format::model`]; `None` means the worker's functions speak
+    /// the FieldMap directly, so the caller's `fm` already is the live state.
+    ser_hook: Option<ModelHook>,
+    deser_hook: Option<ModelHook>,
 }
 
 #[cfg(feature = "worker")]
@@ -1298,6 +1320,8 @@ impl Format {
         Self {
             serializer: None,
             deserializer: None,
+            ser_hook: None,
+            deser_hook: None,
         }
     }
 
@@ -1310,6 +1334,8 @@ impl Format {
         Self {
             serializer: Some(Box::new(serialize)),
             deserializer: Some(Box::new(deserialize)),
+            ser_hook: None,
+            deser_hook: None,
         }
     }
 
@@ -1322,6 +1348,8 @@ impl Format {
         Self {
             serializer: Some(Box::new(serialize)),
             deserializer: None,
+            ser_hook: None,
+            deser_hook: None,
         }
     }
 
@@ -1398,7 +1426,26 @@ impl<M: SerifyModel + 'static> ModelFormat<M> {
     where
         F: Fn(&M) -> Result<Vec<u8>, String> + 'static,
     {
-        self.format = self.format.serializer(move |fm| f(&M::from_field_map(fm)?));
+        let live: Rc<RefCell<Option<M>>> = Rc::new(RefCell::new(None));
+        let before: Rc<RefCell<Option<FieldMap>>> = Rc::new(RefCell::new(None));
+
+        let live_ser = Rc::clone(&live);
+        let before_ser = Rc::clone(&before);
+        self.format = self.format.serializer(move |fm| {
+            let m = M::from_field_map(fm)?;
+            *before_ser.borrow_mut() = Some(m.to_field_map());
+            let out = f(&m)?;
+            // Moving the model moves its Vec/String headers, not the heap
+            // buffers, so anything `out` aliases stays aliased.
+            *live_ser.borrow_mut() = Some(m);
+            Ok(out)
+        });
+
+        let live_probe = Rc::clone(&live);
+        self.format.ser_hook = Some(ModelHook {
+            before,
+            probe: Box::new(move || live_probe.borrow().as_ref().map(SerifyModel::to_field_map)),
+        });
         self
     }
 
@@ -1406,9 +1453,23 @@ impl<M: SerifyModel + 'static> ModelFormat<M> {
     where
         F: Fn(&[u8]) -> Result<M, String> + 'static,
     {
-        self.format = self
-            .format
-            .deserializer(move |data| Ok(f(data)?.to_field_map()));
+        let live: Rc<RefCell<Option<M>>> = Rc::new(RefCell::new(None));
+
+        let live_de = Rc::clone(&live);
+        self.format = self.format.deserializer(move |data| {
+            let m = f(data)?;
+            let fm = m.to_field_map();
+            // `fm` is an owned copy; only the model still views the input
+            // buffer once it is flipped.
+            *live_de.borrow_mut() = Some(m);
+            Ok(fm)
+        });
+
+        let live_probe = Rc::clone(&live);
+        self.format.deser_hook = Some(ModelHook {
+            before: Rc::new(RefCell::new(None)),
+            probe: Box::new(move || live_probe.borrow().as_ref().map(SerifyModel::to_field_map)),
+        });
         self
     }
 }
@@ -1701,7 +1762,6 @@ pub fn run_suite(suite: Suite) {
 
                     let mut audit_map = serde_json::Map::new();
 
-                    // Mutation: snapshot FieldMap before, compare after.
                     let before_snap = if audit_enabled {
                         Some(fm.clone())
                     } else {
@@ -1711,15 +1771,34 @@ pub fn run_suite(suite: Suite) {
                     let mut b = ser(&fm)?;
 
                     if audit_enabled {
-                        // Mutation check
-                        if let Some(ref before) = before_snap {
-                            let diffs = field_map_diffs(before, &fm);
+                        // With no model, `fm` already is the live state.
+                        let hook = fmt.ser_hook.as_ref();
+                        let current = || -> FieldMap {
+                            match hook {
+                                Some(h) => (h.probe)().unwrap_or_else(|| fm.clone()),
+                                None => fm.clone(),
+                            }
+                        };
+                        let before = match hook {
+                            Some(h) => h.before.borrow().clone(),
+                            None => before_snap.clone(),
+                        };
+
+                        let after = current();
+
+                        if let Some(ref before) = before {
+                            let diffs = field_map_diffs(before, &after);
                             if !diffs.is_empty() {
                                 audit_map.insert("mutations".into(), json!(diffs));
                             }
+                        }
 
-                            // Output zero-copy: does returned buffer alias model fields?
-                            let ozc = detect_output_zero_copy(&fm, &mut b);
+                        // Output zero-copy: does `b` alias the model's memory?
+                        if !b.is_empty() {
+                            xor_flip(&mut b);
+                            let flipped = current();
+                            xor_flip(&mut b); // involutive: restores aliased memory too
+                            let ozc = field_map_diffs(&after, &flipped);
                             if !ozc.is_empty() {
                                 audit_map.insert("output_zero_copy_fields".into(), json!(ozc));
                             }
@@ -1794,19 +1873,34 @@ pub fn run_suite(suite: Suite) {
                             }
                         }
 
-                        // Deserialize stability: re-deserialize from the pristine
-                        // buffer snapshot (before zero-copy corrupts it).
+                        // Runs BEFORE the stability re-call: that re-call
+                        // overwrites the retained model with one built from the
+                        // pristine snapshot, which never viewed `bytes` and so
+                        // cannot react to the flip. Both arms restore the buffer.
+                        let zc_fields = match fmt.deser_hook.as_ref() {
+                            Some(h) => {
+                                let snap = fm.clone();
+                                xor_flip(&mut bytes);
+                                let flipped = (h.probe)().unwrap_or_else(|| snap.clone());
+                                xor_flip(&mut bytes);
+                                field_map_diffs(&snap, &flipped)
+                            }
+                            None => {
+                                let zc = detect_zero_copy(&mut fm, &mut bytes);
+                                xor_flip(&mut bytes); // detect_zero_copy leaves it flipped
+                                zc
+                            }
+                        };
+                        if !zc_fields.is_empty() {
+                            a.insert("zero_copy_fields".into(), json!(zc_fields));
+                        }
+
+                        // Deserialize stability: re-deserialize from the
+                        // pristine buffer snapshot.
                         if let Some(ref snap) = buf_snapshot {
                             if !matches!(des(snap), Ok(fm2) if fm2 == fm) {
                                 a.insert("deser_stable".into(), json!(false));
                             }
-                        }
-
-                        // Zero-copy: overwrite buffer, check FieldMap, restore.
-                        // (must run LAST — it corrupts the buffer)
-                        let zc_fields = detect_zero_copy(&mut fm, &mut bytes);
-                        if !zc_fields.is_empty() {
-                            a.insert("zero_copy_fields".into(), json!(zc_fields));
                         }
 
                         if !a.is_empty() {

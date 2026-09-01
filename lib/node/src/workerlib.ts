@@ -510,6 +510,17 @@ export function dictDiffs(before: Record<string, unknown>, after: Record<string,
   return diffs;
 }
 
+/** A serialize wrapper that can re-derive the model instance it last used. */
+type ModelProbed = ((fm: FieldMap) => Buffer) & {
+  serifyModelBefore?: () => FieldMap | null;
+  serifyModelProbe?: () => FieldMap | null;
+};
+
+/** The deserialize equivalent. */
+type ModelProbedDeser = ((data: Buffer) => FieldMap) & {
+  serifyModelProbe?: () => FieldMap | null;
+};
+
 /**
  * XOR-flips the input buffer and reports which FieldMap fields changed with it,
  * i.e. which alias it. Restores the original values before returning.
@@ -904,12 +915,39 @@ export function resolveRegistered(
 
   const { model } = entry;
   const { serialize, deserialize } = fmt;
-  return {
-    serialize: (fm: FieldMap) => serialize(Serify.fromFieldMap(model as any, fm)),
-    deserialize: deserialize
-      ? (data: Buffer) => Serify.toFieldMap(deserialize(data))
-      : undefined,
+
+  // The wrappers retain the instance each call used so --audit can read the
+  // model live, rather than the caller's FieldMap the worker never touched.
+  const state: { serModel: unknown; serBefore: FieldMap | null; deserModel: unknown } = {
+    serModel: null,
+    serBefore: null,
+    deserModel: null,
   };
+
+  const ser: ModelProbed = (fm: FieldMap) => {
+    const m = Serify.fromFieldMap(model as any, fm);
+    state.serBefore = Serify.toFieldMap(m as any);
+    const out = serialize(m);
+    state.serModel = m;
+    return out;
+  };
+  ser.serifyModelBefore = () => state.serBefore;
+  ser.serifyModelProbe = () =>
+    state.serModel == null ? null : Serify.toFieldMap(state.serModel as any);
+
+  let deser: ModelProbedDeser | undefined;
+  if (deserialize) {
+    deser = (data: Buffer) => {
+      const m = deserialize(data);
+      const fm = Serify.toFieldMap(m as any);
+      state.deserModel = m;
+      return fm;
+    };
+    deser.serifyModelProbe = () =>
+      state.deserModel == null ? null : Serify.toFieldMap(state.deserModel as any);
+  }
+
+  return { serialize: ser, deserialize: deser };
 }
 
 /** Single-type worker: handles whatever type/format the runner asks for. */
@@ -986,18 +1024,26 @@ export function runSuite(
 
           const audit: Record<string, unknown> = {};
           if (auditEnabled && before) {
-            // Mutation: compare FieldMap before/after serialization.
-            const after = encodeFieldMap(fm, schema);
-            const diffs = dictDiffs(before, after);
+            // With no model, `fm` already is the live state.
+            const probe = (serialize as ModelProbed).serifyModelProbe;
+            const current = (): Record<string, unknown> => {
+              const got = probe?.();
+              return encodeFieldMap(got ?? fm, schema);
+            };
+            const modelBefore = (serialize as ModelProbed).serifyModelBefore?.();
+            const baseline = modelBefore ? encodeFieldMap(modelBefore, schema) : before;
+
+            // Mutation: compare the state before/after serialization.
+            const after = current();
+            const diffs = dictDiffs(baseline, after);
             if (diffs.length > 0) audit['mutations'] = diffs;
 
             // Output zero-copy: does returned buffer alias model fields?
             if (buf.length > 0) {
-              const beforeClone = encodeFieldMap(fm, schema);
               for (let i = 0; i < buf.length; i++) buf[i] ^= 0xFF;
-              const afterFlip = encodeFieldMap(fm, schema);
+              const afterFlip = current();
               for (let i = 0; i < buf.length; i++) buf[i] ^= 0xFF; // restore
-              const ozc = dictDiffs(beforeClone, afterFlip);
+              const ozc = dictDiffs(after, afterFlip);
               if (ozc.length > 0) audit['output_zero_copy_fields'] = ozc;
             }
 
@@ -1042,6 +1088,23 @@ export function runSuite(
               audit['input_mutated'] = true;
             }
 
+            // Zero-copy: XOR-flip buffer, check what moved with it. Runs
+            // BEFORE the stability re-call: that re-call overwrites the
+            // retained model with one built from the pristine snapshot, which
+            // never viewed `buf` and so cannot react to the flip.
+            const dprobe = (deserialize as ModelProbedDeser | undefined)?.serifyModelProbe;
+            let zc: string[];
+            if (dprobe) {
+              const snap = encodeFieldMap(fm, schema);
+              for (let i = 0; i < buf.length; i++) buf[i] ^= 0xFF;
+              const flipped = dprobe();
+              for (let i = 0; i < buf.length; i++) buf[i] ^= 0xFF; // restore
+              zc = flipped ? dictDiffs(snap, encodeFieldMap(flipped, schema)) : [];
+            } else {
+              zc = detectZeroCopy(fm, buf);
+            }
+            if (zc.length > 0) audit['zero_copy_fields'] = zc;
+
             // Deserialize stability: re-deserialize from a fresh clone.
             if (bufSnapshot) {
               try {
@@ -1055,10 +1118,6 @@ export function runSuite(
                 audit['deser_stable'] = false;
               }
             }
-
-            // Zero-copy: XOR-flip buffer, check FieldMap, restore.
-            const zc = detectZeroCopy(fm, buf);
-            if (zc.length > 0) audit['zero_copy_fields'] = zc;
           }
 
           const data = encodeFieldMap(fm, schema);

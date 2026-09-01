@@ -30,6 +30,11 @@
 //
 // All nine workers are driven, and every language is asserted independently
 // so a failure in one library cannot mask another.
+//
+// The `audit_model` type is the same idea one layer up: the same faults over
+// the same byte layout, registered through each binding's **model** path rather
+// than at the FieldMap boundary. See auditModelWarnings below and "Audit on the
+// model path" in AGENTS.md.
 
 package test
 
@@ -138,6 +143,62 @@ var auditWarnings = []struct {
 	},
 }
 
+// auditModelSkipped is auditSkipped's twin for the `audit_model` type: only Go
+// and Rust can hand back a model that views the input buffer instead of copying
+// it, so everyone else declines `zero-copy`.
+var auditModelSkipped = map[string][]string{
+	"zero-copy": {language.Cpp, language.CSharp, language.Elixir, language.Java, language.Node, language.PHP, language.Python},
+	// Rust declines `mutating`: a serify serializer there receives `&M`, so
+	// mutating it is UB and a release build discards the write outright. Not a
+	// fault an honest Rust worker can commit through a model — the same reason
+	// it declines `value-mutating` above and `handoff` in examples/audit.
+	"mutating": {language.Rust},
+}
+
+// auditModelWarnings is the expected grid for the model path. Every binding
+// retains the model instance a call used and re-derives the FieldMap at each
+// probe point; one that regresses to a pure conversion goes silent here and the
+// `warn` assertion fails. `why` covers a language whose silence is legitimate,
+// exactly as it does for auditWarnings.
+var auditModelWarnings = []struct {
+	format string
+	op     string
+	detail string
+	warn   []string
+	why    string
+}{
+	{
+		// The subject: a serializer that scribbles on the object it was handed.
+		format: "mutating",
+		op:     report.OpAuditMutation,
+		detail: "mutated fields: value",
+		warn: []string{
+			language.Cpp, language.CSharp, language.Go, language.Java,
+			language.Node, language.PHP, language.Python,
+		},
+		why: "elixir: every BEAM term is immutable, so a serializer cannot mutate the struct it was handed — its silence is about the runtime, not about audit",
+	},
+	{
+		// The positive control: this fault is visible in the returned bytes, so
+		// it does not depend on the model surviving the call. Every language
+		// reporting it is what proves each model worker really ran under
+		// --audit, which is what makes a silence elsewhere meaningful.
+		format: "unstable",
+		op:     report.OpAuditStability,
+		detail: "serializer produced different output on repeat call",
+		warn:   language.All,
+	},
+	{
+		// The deserialize half: a model that views the input buffer rather than
+		// copying it. Only Go and Rust can express it at all — a managed
+		// runtime's string is a copy by construction.
+		format: "zero-copy",
+		op:     report.OpAuditZeroCopy,
+		detail: "zero-copy fields: payload",
+		warn:   []string{language.Go, language.Rust},
+	},
+}
+
 func TestAuditWarningsAreReported(t *testing.T) {
 	requireWorkers(t, audit.langs...)
 
@@ -177,6 +238,38 @@ func TestAuditWarningsAreReported(t *testing.T) {
 			}
 		}
 	}
+
+	// The same grid, one layer up: the model path. Same CLI run, so this costs
+	// nothing beyond the assertions.
+	t.Run("model path", func(t *testing.T) {
+		// Control group: a model worker that does nothing wrong is silent.
+		for _, lang := range audit.langs {
+			assertNoAuditRow(t, grid, "audit_model/clean/basic", lang)
+		}
+
+		for format, langs := range auditModelSkipped {
+			id := "audit_model/" + format + "/basic"
+			for _, lang := range langs {
+				testutil.AssertCell(t, grid, id, lang, report.OpSerialize, report.StatusSkip, nil)
+				testutil.AssertCell(t, grid, id, lang, report.OpDeserialize, report.StatusSkip, nil)
+				assertNoAuditRow(t, grid, id, lang)
+			}
+		}
+
+		for _, exp := range auditModelWarnings {
+			id := "audit_model/" + exp.format + "/basic"
+			for _, lang := range audit.langs {
+				switch {
+				case slices.Contains(exp.warn, lang):
+					testutil.AssertCell(t, grid, id, lang, exp.op, report.StatusWarn, ptr(exp.detail))
+				case slices.Contains(auditModelSkipped[exp.format], lang):
+					// Already asserted SKIP above.
+				default:
+					assertNoAuditOp(t, grid, id, lang, exp.op, exp.why)
+				}
+			}
+		}
+	})
 }
 
 // assertNoAuditOp checks that one audit op did not fire, quoting why the

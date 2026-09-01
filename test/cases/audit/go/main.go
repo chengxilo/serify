@@ -208,6 +208,17 @@ func (a *Audit) MarshalUnstable() ([]byte, error) {
 
 // --- format: deser-unstable ----------------------------------------------
 
+// audit_model keeps its own counter: sharing one would leave this type
+// starting wherever `audit` left off, desyncing it across languages.
+var modelUnstableCounter int
+
+func (a *Audit) MarshalModelUnstable() ([]byte, error) {
+	data := marshalAudit(a)
+	data = append(data, byte(modelUnstableCounter))
+	modelUnstableCounter++
+	return data, nil
+}
+
 var deserUnstableCounter int
 
 func (a *Audit) UnmarshalDeserUnstable(data []byte) error {
@@ -286,6 +297,32 @@ func main() {
 					"output-zero-copy": {
 						Serializer:   (*Audit).MarshalOutputZeroCopy,
 						Deserializer: (*Audit).UnmarshalClean,
+					},
+				},
+			},
+
+			// audit_model: the same faults over the same layout, through the
+			// model path. Go's `audit` type above already registers this way, so
+			// this entry is a near-duplicate — it is the reference row the other
+			// eight bindings are checked against.
+			"audit_model": {
+				Model: &Audit{},
+				Formats: map[string]serify.Format{
+					"clean": {
+						Serializer:   (*Audit).MarshalClean,
+						Deserializer: (*Audit).UnmarshalClean,
+					},
+					"mutating": {
+						Serializer:   (*Audit).MarshalMutating,
+						Deserializer: (*Audit).UnmarshalClean,
+					},
+					"unstable": {
+						Serializer:   (*Audit).MarshalModelUnstable,
+						Deserializer: (*Audit).UnmarshalClean,
+					},
+					"zero-copy": {
+						Serializer:   (*Audit).MarshalClean,
+						Deserializer: (*Audit).UnmarshalZeroCopy,
 					},
 				},
 			},

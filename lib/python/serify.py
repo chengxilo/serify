@@ -866,11 +866,33 @@ class Format:
 
         from_fm = model.from_field_map  # type: ignore[attr-defined]
 
+        # The wrappers retain the instance each call used so --audit can read
+        # the model live, rather than the caller's FieldMap the worker never
+        # touched.
+        state: dict[str, Any] = {"ser_model": None, "ser_before": None, "deser_model": None}
+
         def _serialize(fm: FieldMap) -> bytes:
-            return cast(bytes, ser(from_fm(fm)))
+            m = from_fm(fm)
+            state["ser_before"] = m.to_field_map()
+            out = ser(m)
+            state["ser_model"] = m
+            return cast(bytes, out)
 
         def _deserialize(data: bytes) -> FieldMap:
-            return cast(FieldMap, deser(data).to_field_map())
+            m = deser(data)
+            fm = m.to_field_map()
+            state["deser_model"] = m
+            return cast(FieldMap, fm)
+
+        def _probe(key: str) -> Callable[[], FieldMap | None]:
+            def probe() -> FieldMap | None:
+                m = state[key]
+                return m.to_field_map() if m is not None else None
+            return probe
+
+        _serialize.serify_model_before = lambda: state["ser_before"]  # type: ignore[attr-defined]
+        _serialize.serify_model_probe = _probe("ser_model")           # type: ignore[attr-defined]
+        _deserialize.serify_model_probe = _probe("deser_model")       # type: ignore[attr-defined]
 
         return (
             _serialize if ser is not None else None,
@@ -983,8 +1005,22 @@ def _run_loop(
 
                 audit: dict[str, Any] = {}
                 if audit_enabled:
-                    # Mutation: compare FieldMap before/after serialization.
-                    after = encode_field_map(fm, schema)
+                    # With no model, `fm` already is the live state.
+                    probe = getattr(serialize_fn, "serify_model_probe", None)
+
+                    def _current() -> dict[str, Any]:
+                        if probe is not None:
+                            got = probe()
+                            if got is not None:
+                                return encode_field_map(got, schema)
+                        return encode_field_map(fm, schema)
+
+                    model_before = getattr(serialize_fn, "serify_model_before", None)
+                    if model_before is not None and model_before() is not None:
+                        before = encode_field_map(model_before(), schema)
+
+                    # Mutation: compare the state before/after serialization.
+                    after = _current()
                     diffs = _dict_diffs(before, after)
                     if diffs:
                         audit["mutations"] = diffs
@@ -994,13 +1030,12 @@ def _run_loop(
                     # flipped in place; immutable bytes cannot alias mutably, so
                     # there is nothing to detect for them.
                     if isinstance(b, (bytearray, memoryview)) and len(b) > 0:
-                        before_clone = encode_field_map(fm, schema)
                         for i in range(len(b)):
                             b[i] ^= 0xFF
-                        after_flip = encode_field_map(fm, schema)
+                        after_flip = _current()
                         for i in range(len(b)):
                             b[i] ^= 0xFF  # restore
-                        ozc = _dict_diffs(before_clone, after_flip)
+                        ozc = _dict_diffs(after, after_flip)
                         if ozc:
                             audit["output_zero_copy_fields"] = ozc
 
@@ -1035,6 +1070,24 @@ def _run_loop(
                     if buf_snapshot != bytes(buf):
                         daudit["input_mutated"] = True
 
+                    # Zero-copy: XOR-flip buffer, check what moved with it. Runs
+                    # BEFORE the stability re-call: that re-call overwrites the
+                    # retained model with one built from the pristine snapshot,
+                    # which never viewed `buf` and so cannot react to the flip.
+                    dprobe = getattr(deserialize_fn, "serify_model_probe", None)
+                    if dprobe is not None:
+                        snap = encode_field_map(fm, schema)
+                        for i in range(len(buf)):
+                            buf[i] ^= 0xFF
+                        flipped = dprobe()
+                        zc = _dict_diffs(snap, encode_field_map(flipped, schema)) if flipped is not None else []
+                        for i in range(len(buf)):
+                            buf[i] ^= 0xFF  # restore
+                    else:
+                        zc = _detect_zero_copy(fm, buf)
+                    if zc:
+                        daudit["zero_copy_fields"] = zc
+
                     # Deserialize stability: re-deserialize from a fresh clone.
                     if buf_snapshot is not None:
                         try:
@@ -1047,11 +1100,6 @@ def _run_loop(
                                 daudit["deser_stable"] = False
                         except Exception:
                             daudit["deser_stable"] = False
-
-                    # Zero-copy: XOR-flip buffer, check FieldMap, restore.
-                    zc = _detect_zero_copy(fm, buf)
-                    if zc:
-                        daudit["zero_copy_fields"] = zc
 
                 data = encode_field_map(fm, schema)
                 resp = {"id": msg_id, "op": "deserialize", "status": "OK", "data": data}

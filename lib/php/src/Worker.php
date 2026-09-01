@@ -143,8 +143,20 @@ class Worker
 
                         $audit = [];
                         if ($auditEnabled && $before !== null) {
-                            // Mutation: compare before/after
-                            $after = self::encodeFieldMap($fm, $schema);
+                            // Mutation: compare before/after. On a model format
+                            // the live state is the model, not the caller's $fm.
+                            if ($serialize instanceof ModelSerializer) {
+                                $mb = $serialize->auditBefore();
+                                $mp = $serialize->auditProbe();
+                                if ($mb !== null) {
+                                    $before = self::encodeFieldMap($mb, $schema);
+                                }
+                                $after = $mp !== null
+                                    ? self::encodeFieldMap($mp, $schema)
+                                    : self::encodeFieldMap($fm, $schema);
+                            } else {
+                                $after = self::encodeFieldMap($fm, $schema);
+                            }
                             $diffs = self::dictDiffs($before, $after);
                             if (!empty($diffs)) {
                                 $audit['mutations'] = $diffs;

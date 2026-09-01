@@ -36,24 +36,30 @@ import (
 // which is the failure mode this flag exists to prevent in workers.
 //
 // The fixture is the audit suite driven by go and python. python's worker does
-// not register the four formats whose faults need a mutable alias into a
-// runtime-owned buffer, so it reports eight genuine SKIPs (four formats x two
-// directions) while go reports none. They are coverage skips, not the cascade
-// kind CheckExpectedSkips exempts, which makes this the smallest real subject
-// in the repo: two workers, one type, one side skipping.
+// not register the formats whose faults need a mutable alias into a
+// runtime-owned buffer — four under `audit` and one under `audit_model` — so it
+// reports ten genuine SKIPs (five formats x two directions) while go reports
+// none. They are coverage skips, not the cascade kind CheckExpectedSkips
+// exempts.
 
 // auditCoverage is the (type, language) pair the assertions below hang on.
 const (
-	coverageType    = "audit"
-	coverageSkipper = language.Python
+	coverageType = "audit"
+	// The audit suite carries a second type, exercising the same faults through
+	// each binding's model path. python declines `zero-copy` there for the same
+	// reason it declines the four below. A declaration has to name both types or
+	// the run is not actually green.
+	coverageModelType = "audit_model"
+	coverageSkipper   = language.Python
 )
 
-// coverageSkipIDs are the eight rows python skips, as test ids.
+// coverageSkipIDs are the ten rows python skips, as test ids.
 var coverageSkipIDs = []string{
 	"audit/value-mutating/basic",
 	"audit/zero-copy/basic",
 	"audit/list-zero-copy/basic",
 	"audit/output-zero-copy/basic",
+	"audit_model/zero-copy/basic",
 }
 
 // writeExpectSkips creates an expect-skips directory holding one file per
@@ -124,7 +130,9 @@ func TestCLI_ExpectSkips(t *testing.T) {
 
 	// A declared gap is the honest case and stays green.
 	t.Run("declared skip stays green", func(t *testing.T) {
-		dir := writeExpectSkips(t, map[string][]string{coverageSkipper: {coverageType}})
+		dir := writeExpectSkips(t, map[string][]string{
+			coverageSkipper: {coverageType, coverageModelType},
+		})
 		out, code, grid := run(t, "--expect-skips", dir)
 		require.Equal(t, 0, code, "serify exit = %d, want 0 (the gap is declared)\n%s", code, out)
 		for _, id := range coverageSkipIDs {
@@ -139,7 +147,9 @@ func TestCLI_ExpectSkips(t *testing.T) {
 	// merely stale. go skips nothing here, so its entry is exactly that.
 	t.Run("stale declaration warns without failing", func(t *testing.T) {
 		dir := writeExpectSkips(t, map[string][]string{
-			coverageSkipper: {coverageType},
+			// python's real gaps, so the only thing left for the run to
+			// complain about is go's entry.
+			coverageSkipper: {coverageType, coverageModelType},
 			language.Go:     {coverageType},
 		})
 		out, code, _ := run(t, "--expect-skips", dir)

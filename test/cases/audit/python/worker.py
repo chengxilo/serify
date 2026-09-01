@@ -12,16 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Python audit worker: 5 cross-language audit formats."""
+"""Python audit worker: 5 FieldMap-level audit formats, plus 3 model-level ones.
+
+The `audit_model` type at the bottom injects the same faults over the same
+layout through the *model* path — what real workers use.
+"""
 import os, struct, sys
+from dataclasses import dataclass, field
 _lib_dir = os.path.join(os.path.dirname(__file__), '../../../../lib/python')
 if not os.path.isdir(_lib_dir):
     raise RuntimeError(f"serify library not found at {_lib_dir}; fix the relative path")
 sys.path.insert(0, _lib_dir)
-from serify import FieldMap, run_suite  # noqa: E402
+from serify import FieldMap, Format, Type, run_suite, serify_model  # noqa: E402
 
 _unstable_ctr = 0
 _deser_unstable_ctr = 0
+_model_unstable_ctr = 0
 
 
 def _marshal(fm):
@@ -95,8 +101,69 @@ def input_mutating_deser(data):
     return fm
 
 
+# ── audit_model: the same faults through the model path ──────────────────────
+
+@serify_model
+@dataclass
+class AuditModel:
+    payload: bytes = b""
+    tag: str = ""
+    value: int = 0
+    tags: list[str] = field(default_factory=list)
+
+
+def _marshal_model(m):
+    tag = m.tag.encode()
+    buf = struct.pack("<I", m.value)
+    buf += struct.pack("<B", len(tag)) + tag
+    buf += struct.pack("<I", len(m.payload)) + bytes(m.payload)
+    buf += struct.pack("<B", len(m.tags))
+    for t in m.tags:
+        b = t.encode()
+        buf += struct.pack("<B", len(b)) + b
+    return buf
+
+
+def _unmarshal_model(data):
+    off = 0
+    value = struct.unpack_from("<I", data, off)[0]; off += 4
+    tlen = data[off]; off += 1
+    tag = data[off:off + tlen].decode(); off += tlen
+    plen = struct.unpack_from("<I", data, off)[0]; off += 4
+    payload = bytes(data[off:off + plen]); off += plen
+    tcount = data[off]; off += 1
+    tags = []
+    for _ in range(tcount):
+        tl = data[off]; off += 1
+        tags.append(data[off:off + tl].decode()); off += tl
+    return AuditModel(payload=payload, tag=tag, value=value, tags=tags)
+
+
+def model_clean_ser(m):
+    return _marshal_model(m)
+
+
+def model_mutating_ser(m):
+    buf = _marshal_model(m)
+    m.value = 0
+    return buf
+
+
+def model_unstable_ser(m):
+    """The positive control: this fault shows in the returned bytes, so it
+    reports whether or not the model survives the call."""
+    global _model_unstable_ctr
+    buf = _marshal_model(m) + struct.pack("<B", _model_unstable_ctr)
+    _model_unstable_ctr += 1
+    return buf
+
+
 if __name__ == '__main__':
-    run_suite({"audit": {
+    run_suite({"audit_model": Type(AuditModel, {
+        "clean": Format(model_clean_ser, _unmarshal_model),
+        "mutating": Format(model_mutating_ser, _unmarshal_model),
+        "unstable": Format(model_unstable_ser, _unmarshal_model),
+    }), "audit": {
         "clean": (clean_ser, clean_deser),
         "mutating": (mutating_ser, clean_deser),
         "unstable": (unstable_ser, clean_deser),

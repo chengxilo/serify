@@ -1,0 +1,84 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/audit_model.schema.json
+# `audit_model` is `audit`'s twin, and the difference is the whole point: the
+# same faults, the same byte layout, registered through each binding's **model**
+# path instead of at the FieldMap boundary.
+#
+# `audit` proves the detections work when a worker's codec takes and returns a
+# FieldMap. Almost no real worker does that — `Format::model` and its
+# equivalents are what every binding's documentation calls the canonical
+# pattern — and the detections did not all survive that path. Eight of nine
+# bindings wrapped a model format as a pure conversion (convert in, call,
+# discard the model) while the run loop's audit probes compared the outer
+# FieldMap, which the model never touched, so a serializer that scribbled on
+# the object it was handed was invisible in all but Go.
+#
+# That is why this type exists, and it is now a regression test rather than an
+# open defect: every binding retains the model instance a call used and
+# re-derives the FieldMap at each probe point, so one that drifts back to a pure
+# conversion goes silent here and its `warn` assertion fails. See "Audit on the
+# model path" in AGENTS.md, and the expectation grid in test/audit_meta_test.go.
+#
+# Fields mirror `audit` exactly so a worker can reuse its existing wire helpers.
+#
+# Binary layout — little-endian, identical to `audit`:
+#
+#   value    u32
+#   tag      u8 byte length + UTF-8 bytes
+#   payload  u32 byte length + the raw bytes
+#   tags     u8 count, then each tag as a u8-length-prefixed string
+fields:
+  - payload: bytes
+  - tag: string
+  - value: uint32
+  - tags: list<string>
+
+# Three formats, deliberately few. Each one is here to answer a question the
+# others cannot:
+#
+#   clean     the control. A model worker that does nothing wrong must stay
+#             silent, or every finding below is noise.
+#   mutating  the subject. The serializer zeroes `value` after marshaling —
+#             a real mutation of the caller's object. Go reports it; the other
+#             eight report nothing, and that silence is the defect.
+#   unstable  the positive control, and the reason `mutating`'s silence is
+#             damning rather than ambiguous. Its instability is visible in the
+#             returned bytes, so it does NOT depend on the model surviving the
+#             call — every language must report it. A run where `unstable`
+#             warns and `mutating` does not is a run where the model worker was
+#             built, bound and driven, and audit still could not see the model.
+#   zero-copy the other half of the defect, on the deserialize side: the model
+#             holds a view into the input buffer rather than a copy. Only Go and
+#             Rust can express it — a managed runtime's string is a copy by
+#             construction — so everyone else declines the format and is
+#             reported SKIPPED, exactly as they are for `audit`'s `zero-copy`.
+formats:
+  - name: clean
+    oracle: bytes
+  - name: mutating
+    oracle: bytes
+  - name: unstable
+    oracle: bytes
+  - name: zero-copy
+    oracle: bytes
+
+cases:
+  - name: basic
+    data:
+      payload: [0xde, 0xad, 0xbe, 0xef]
+      tag: "hello"
+      value: 42
+      tags: ["alpha", "beta"]

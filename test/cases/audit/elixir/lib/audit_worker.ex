@@ -12,8 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# audit_model: the same faults over the same layout, through the model path.
+# `mutating` stays silent here for a reason of its own: every BEAM term is
+# immutable, so a serializer cannot mutate the struct it was handed. It is
+# registered anyway so the grid has no holes.
+defmodule AuditModel do
+  @moduledoc false
+  use WorkerLib.Serify.Model
+
+  defstruct [:payload, :tag, :value, :tags]
+
+  serify_field(:payload, :bytes)
+  serify_field(:tag, :string)
+  serify_field(:value, :u32)
+  serify_field(:tags, {:list, :string})
+end
+
 defmodule AuditWorker do
   def main(_), do: WorkerLib.run_suite(%{
+    "audit_model" => %WorkerLib.Type{
+      model: AuditModel,
+      formats: %{
+        "clean" => {&model_ser/1, &model_deser/1},
+        "mutating" => {&model_mut_ser/1, &model_deser/1},
+        "unstable" => {&model_unstable_ser/1, &model_deser/1},
+      }
+    },
     "audit" => %{
       "clean" => {&clean_ser/1, &clean_deser/1},
       "mutating" => {&mut_ser/1, &clean_deser/1},
@@ -55,6 +79,40 @@ defmodule AuditWorker do
     Process.put(key, c + 1)
     c
   end
+
+  # --- audit_model codecs ---------------------------------------------------
+
+  defp marshal_model(%AuditModel{} = m) do
+    IO.iodata_to_binary([
+      <<m.value::little-32, byte_size(m.tag), m.tag::binary,
+        byte_size(m.payload)::little-32, m.payload::binary, length(m.tags)>>,
+      Enum.map(m.tags, fn s -> <<byte_size(s), s::binary>> end),
+    ])
+  end
+
+  defp model_ser(m), do: marshal_model(m)
+
+  defp model_deser(data) do
+    <<val::little-32, tlen, rest::binary>> = data
+    <<t::binary-size(tlen), rest::binary>> = rest
+    <<plen::little-32, rest::binary>> = rest
+    <<p::binary-size(plen), rest::binary>> = rest
+    <<tc, rest::binary>> = rest
+    {tags, _} = take_tags(rest, tc, [])
+    %AuditModel{value: val, tag: t, payload: p, tags: tags}
+  end
+
+  # "Mutation" on the BEAM rebinds a local name and nothing else: the caller's
+  # struct is untouched.
+  defp model_mut_ser(m) do
+    data = marshal_model(m)
+    _ = %{m | value: 0}
+    data
+  end
+
+  # The positive control: this fault shows in the returned bytes, so it reports
+  # whether or not the model survives the call.
+  defp model_unstable_ser(m), do: marshal_model(m) <> <<next_ctr(:model_unstable)>>
 
   defp clean_ser(fm), do: marshal(fm)
   defp clean_deser(d), do: unmarshal(d, true)

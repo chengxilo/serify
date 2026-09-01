@@ -1079,7 +1079,21 @@ inline std::vector<std::string> detect_zero_copy_cpp(FieldMap& fm, std::vector<u
 // One (serialize, deserialize) pair for a single format.
 using SerFn   = std::function<std::vector<uint8_t>(const FieldMap&)>;
 using DeserFn = std::function<FieldMap(const std::vector<uint8_t>&)>;
-struct FormatPair { SerFn serialize; DeserFn deserialize; };
+// Lets --audit read the model a call actually used, rather than the caller's
+// FieldMap the worker never touched. No deserialize counterpart: FieldValue
+// only holds owning containers, so a model can never alias the input buffer.
+struct ModelAuditHook {
+    // The model's state on entry — the mutation check's baseline.
+    std::shared_ptr<FieldMap> before;
+    // The model's current state; empty before the first call.
+    std::function<FieldMap()> probe;
+};
+
+struct FormatPair {
+    SerFn serialize;
+    DeserFn deserialize;
+    std::shared_ptr<ModelAuditHook> model_audit;
+};
 // type name -> format name -> pair
 using SuiteMap = std::map<std::string, std::map<std::string, FormatPair>>;
 
@@ -1099,13 +1113,19 @@ using SuiteMap = std::map<std::string, std::map<std::string, FormatPair>>;
 // (type, format) that silently reports SKIPPED.
 template <typename M, typename Ser, typename Deser>
 FormatPair model_format(Ser serialize, Deser deserialize) {
+    auto hook = std::make_shared<ModelAuditHook>();
     return FormatPair{
-        [serialize](const FieldMap& fm) {
-            return serialize(from_field_map_of(fm, static_cast<const M*>(nullptr)));
+        [serialize, hook](const FieldMap& fm) {
+            auto m = std::make_shared<M>(from_field_map_of(fm, static_cast<const M*>(nullptr)));
+            hook->before = std::make_shared<FieldMap>(to_field_map(*m));
+            auto out = serialize(*m);
+            hook->probe = [m]() { return to_field_map(*m); };
+            return out;
         },
         [deserialize](const std::vector<uint8_t>& data) {
             return to_field_map(deserialize(data));
         },
+        hook,
     };
 }
 
@@ -1113,11 +1133,17 @@ FormatPair model_format(Ser serialize, Deser deserialize) {
 // unsupported rather than skipping the type.
 template <typename M, typename Ser>
 FormatPair model_format(Ser serialize) {
+    auto hook = std::make_shared<ModelAuditHook>();
     return FormatPair{
-        [serialize](const FieldMap& fm) {
-            return serialize(from_field_map_of(fm, static_cast<const M*>(nullptr)));
+        [serialize, hook](const FieldMap& fm) {
+            auto m = std::make_shared<M>(from_field_map_of(fm, static_cast<const M*>(nullptr)));
+            hook->before = std::make_shared<FieldMap>(to_field_map(*m));
+            auto out = serialize(*m);
+            hook->probe = [m]() { return to_field_map(*m); };
+            return out;
         },
         nullptr,
+        hook,
     };
 }
 
@@ -1136,6 +1162,7 @@ void run(Ser serialize, Deser deserialize) {
 inline void run_suite(const SuiteMap& suite) {
     SerFn serialize;
     DeserFn deserialize;
+    std::shared_ptr<ModelAuditHook> model_audit;
     std::vector<SchemaField> schema;
     bool audit_enabled = false;
     std::string line;
@@ -1196,10 +1223,12 @@ inline void run_suite(const SuiteMap& suite) {
             if (pair == nullptr) {
                 serialize = nullptr;
                 deserialize = nullptr;
+                model_audit = nullptr;
                 r.set("status", Json::str_("SKIPPED"));
             } else {
                 serialize = pair->serialize;
                 deserialize = pair->deserialize;
+                model_audit = pair->model_audit;
             }
             emit(r);
         }
@@ -1221,9 +1250,19 @@ inline void run_suite(const SuiteMap& suite) {
                 if (audit_enabled) {
                     auto audit = Json::obj_();
 
-                    // Mutation
+                    // Mutation. On a model format the live state is the model,
+                    // not the caller's FieldMap.
+                    auto baseline = before;
                     auto after = encode_field_map(fm, schema);
-                    auto diffs = dict_diffs(before, after);
+                    if (model_audit) {
+                        if (model_audit->before) {
+                            baseline = encode_field_map(*model_audit->before, schema);
+                        }
+                        if (model_audit->probe) {
+                            after = encode_field_map(model_audit->probe(), schema);
+                        }
+                    }
+                    auto diffs = dict_diffs(baseline, after);
                     if (!diffs.empty()) {
                         auto arr = Json::arr_();
                         for (auto& d : diffs) arr.push(Json::str_(d));

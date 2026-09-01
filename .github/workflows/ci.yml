@@ -257,4 +257,7 @@ jobs:
       # TestMain skips absent languages by default. ./test's requireWorkers
       # already fails on a missing toolchain, so the guarantee is unconditional.
       - name: Integration tests
-        run: go test -v ./test/...
+        # -timeout 20m: this package drives all nine languages through several
+        # meta-fixtures in one process and runs past Go's 10m default. A timeout
+        # kill reads as a plain FAIL with no failing assertion.
+        run: go test -v -timeout 20m ./test/...

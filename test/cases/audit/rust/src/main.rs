@@ -24,7 +24,7 @@
 //!   input-mutating   – deserializer modifies input buffer after parsing
 //!   output-zero-copy – serializer returns sub-slice aliasing payload
 
-use serify::{FieldMap, Format, Suite, Type, run_suite};
+use serify::{FieldMap, Format, SerifyModel, Suite, Type, run_suite};
 use std::sync::atomic::{AtomicU8, Ordering};
 
 // --- common binary helpers -------------------------------------------------
@@ -244,8 +244,114 @@ fn marshal_output_zero_copy(fm: &FieldMap) -> Result<Vec<u8>, String> {
     Ok(buf) // return FULL buffer for cross-language comparison
 }
 
+// --- audit_model: the same faults through the model path --------------------
+
+#[derive(SerifyModel)]
+pub struct AuditModel {
+    payload: Vec<u8>,
+    tag: String,
+    value: u32,
+    tags: Vec<String>,
+}
+
+fn marshal_model(m: &AuditModel) -> Result<Vec<u8>, String> {
+    let mut buf = Vec::new();
+    buf.extend_from_slice(&m.value.to_le_bytes());
+    buf.push(m.tag.len() as u8);
+    buf.extend_from_slice(m.tag.as_bytes());
+    buf.extend_from_slice(&(m.payload.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&m.payload);
+    buf.push(m.tags.len() as u8);
+    for t in &m.tags {
+        buf.push(t.len() as u8);
+        buf.extend_from_slice(t.as_bytes());
+    }
+    Ok(buf)
+}
+
+fn unmarshal_model_inner(data: &[u8], copy_payload: bool) -> Result<AuditModel, String> {
+    if data.len() < 5 { return Err("truncated".into()); }
+    let mut pos = 0usize;
+    let value = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap());
+    pos += 4;
+
+    let tag_len = data[pos] as usize;
+    pos += 1;
+    if pos + tag_len > data.len() { return Err("truncated".into()); }
+    let tag = String::from_utf8(data[pos..pos+tag_len].to_vec()).map_err(|e| e.to_string())?;
+    pos += tag_len;
+
+    if pos + 4 > data.len() { return Err("truncated".into()); }
+    let payload_len = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap()) as usize;
+    pos += 4;
+    if pos + payload_len > data.len() { return Err("truncated".into()); }
+    let payload: Vec<u8> = if copy_payload {
+        data[pos..pos+payload_len].to_vec()
+    } else {
+        // Alias the input buffer, capacity 0 so dropping frees nothing — the
+        // same trick unmarshal_zero_copy uses at the FieldMap level.
+        unsafe { Vec::from_raw_parts(data.as_ptr().add(pos) as *mut u8, payload_len, 0) }
+    };
+    pos += payload_len;
+
+    if pos >= data.len() { return Err("truncated".into()); }
+    let tags_count = data[pos] as usize;
+    pos += 1;
+    let mut tags: Vec<String> = Vec::with_capacity(tags_count);
+    for _ in 0..tags_count {
+        if pos >= data.len() { return Err("truncated".into()); }
+        let tl = data[pos] as usize;
+        pos += 1;
+        if pos + tl > data.len() { return Err("truncated".into()); }
+        tags.push(String::from_utf8(data[pos..pos+tl].to_vec()).map_err(|e| e.to_string())?);
+        pos += tl;
+    }
+    Ok(AuditModel { payload, tag, value, tags })
+}
+
+fn unmarshal_model(data: &[u8]) -> Result<AuditModel, String> {
+    unmarshal_model_inner(data, true)
+}
+
+/// The model holds a view into the input buffer rather than a copy.
+fn unmarshal_model_zero_copy(data: &[u8]) -> Result<AuditModel, String> {
+    unmarshal_model_inner(data, false)
+}
+
+// `mutating` is deliberately NOT registered for audit_model. A serify
+// serializer receives `&M`; mutating through it is UB, and a release build
+// discards the write outright — the model still reads 42. It is not a fault an
+// honest Rust worker can commit through a model, the same reason it declines
+// `value-mutating` above and `handoff` in examples/audit. Interior mutability
+// would be the legitimate way to express it, and serify has no such field kind.
+
+/// The positive control: this fault shows in the returned bytes, so it reports
+/// whether or not the model survives the call.
+static MODEL_UNSTABLE_CTR: AtomicU8 = AtomicU8::new(0);
+
+fn marshal_model_unstable(m: &AuditModel) -> Result<Vec<u8>, String> {
+    let mut data = marshal_model(m)?;
+    data.push(MODEL_UNSTABLE_CTR.fetch_add(1, Ordering::SeqCst));
+    Ok(data)
+}
+
 fn main() {
-    run_suite(Suite::new().with_type("audit",
+    run_suite(Suite::new().with_type("audit_model",
+        Type::new()
+            .with_format("clean", Format::model::<AuditModel>()
+                .serializer(marshal_model)
+                .deserializer(unmarshal_model),
+            )
+            // `mutating` deliberately absent — see the note above.
+            .with_format("unstable", Format::model::<AuditModel>()
+                .serializer(marshal_model_unstable)
+                .deserializer(unmarshal_model),
+            )
+            .with_format("zero-copy", Format::model::<AuditModel>()
+                .serializer(marshal_model)
+                .deserializer(unmarshal_model_zero_copy),
+            ),
+    ).with_type("audit",
         Type::new()
             .with_format("clean", Format::new()
                 .serializer(marshal_clean)

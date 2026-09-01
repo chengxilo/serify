@@ -15,13 +15,18 @@
  */
 
 /*
- * Node audit worker: 5 cross-language audit formats.
+ * Node audit worker: 5 FieldMap-level audit formats, plus 3 model-level ones.
+ * The `audit_model` type at the bottom injects the same faults over the same
+ * layout through the *model* path — what real workers use.
  */
 
-import { FieldMap, runSuite } from '@chengxilo/serify';
+import { FieldMap, Serify, runSuite, type } from '@chengxilo/serify';
 
 let unstableCounter = 0;
 let deserUnstableCounter = 0;
+// audit_model keeps its own counter: sharing one would leave this type
+// starting wherever `audit` left off, desyncing it across languages.
+let modelUnstableCounter = 0;
 
 function marshalAudit(fm: FieldMap): Buffer {
   const val = fm.getU32('value');
@@ -93,7 +98,73 @@ function inputMutatingDeser(data: Buffer): FieldMap {
   return fm;
 }
 
+// --- audit_model: the same faults through the model path --------------------
+
+@Serify.Model()
+class AuditModel {
+  @Serify.field() payload: Buffer = Buffer.alloc(0);
+  @Serify.field() tag = '';
+  @Serify.field() value = 0;
+  @Serify.field() tags: string[] = [];
+}
+
+function marshalModel(m: AuditModel): Buffer {
+  const tag = Buffer.from(m.tag, 'utf8');
+  let size = 4 + 1 + tag.length + 4 + m.payload.length + 1;
+  for (const t of m.tags) size += 1 + Buffer.byteLength(t);
+  const buf = Buffer.alloc(size);
+  let off = 0;
+  buf.writeUInt32LE(m.value, off); off += 4;
+  buf.writeUInt8(tag.length, off++); tag.copy(buf, off); off += tag.length;
+  buf.writeUInt32LE(m.payload.length, off); off += 4;
+  m.payload.copy(buf, off); off += m.payload.length;
+  buf.writeUInt8(m.tags.length, off++);
+  for (const t of m.tags) {
+    const b = Buffer.from(t, 'utf8');
+    buf.writeUInt8(b.length, off++); b.copy(buf, off); off += b.length;
+  }
+  return buf;
+}
+
+function unmarshalModel(data: Buffer): AuditModel {
+  const m = new AuditModel();
+  let off = 0;
+  m.value = data.readUInt32LE(off); off += 4;
+  const tlen = data.readUInt8(off++);
+  m.tag = data.toString('utf8', off, off + tlen); off += tlen;
+  const plen = data.readUInt32LE(off); off += 4;
+  m.payload = Buffer.from(data.subarray(off, off + plen)); off += plen;
+  const tcount = data.readUInt8(off++);
+  m.tags = [];
+  for (let i = 0; i < tcount; i++) {
+    const tl = data.readUInt8(off++);
+    m.tags.push(data.toString('utf8', off, off + tl)); off += tl;
+  }
+  return m;
+}
+
+function modelMutatingSer(m: AuditModel): Buffer {
+  const buf = marshalModel(m);
+  m.value = 0;
+  return buf;
+}
+
+/** The positive control: this fault shows in the returned bytes, so it reports
+ *  whether or not the model survives the call. */
+function modelUnstableSer(m: AuditModel): Buffer {
+  const buf = marshalModel(m);
+  const out = Buffer.alloc(buf.length + 1);
+  buf.copy(out);
+  out.writeUInt8(modelUnstableCounter++, buf.length);
+  return out;
+}
+
 runSuite({
+  audit_model: type(AuditModel, {
+    clean: { serialize: marshalModel, deserialize: unmarshalModel },
+    mutating: { serialize: modelMutatingSer, deserialize: unmarshalModel },
+    unstable: { serialize: modelUnstableSer, deserialize: unmarshalModel },
+  }),
   audit: {
     clean: { serialize: cleanSer, deserialize: cleanDeser },
     mutating: { serialize: mutatingSer, deserialize: cleanDeser },

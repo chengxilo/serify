@@ -324,9 +324,36 @@ public final class WorkerLib {
 
     /** One (serialize, deserialize) pair for a single format, at FieldMap level. */
     public record FormatPair(Function<FieldMap, byte[]> serialize,
-                             Function<byte[], FieldMap> deserialize) {
+                             Function<byte[], FieldMap> deserialize,
+                             ModelAuditHook modelAudit) {
         public FormatPair(Function<FieldMap, byte[]> serialize) {
-            this(serialize, null);
+            this(serialize, null, null);
+        }
+
+        public FormatPair(Function<FieldMap, byte[]> serialize,
+                          Function<byte[], FieldMap> deserialize) {
+            this(serialize, deserialize, null);
+        }
+    }
+
+    /**
+     * Lets {@code --audit} read the model a call actually used, rather than the
+     * caller's FieldMap the worker never touched.
+     *
+     * <p>No deserialize counterpart: a Java String or array cannot view part of
+     * another buffer, so a model can never alias the input.
+     */
+    public static final class ModelAuditHook {
+        /** The model's state on entry — the mutation check's baseline. */
+        volatile FieldMap before;
+        volatile Object live;
+
+        public FieldMap auditBefore() { return before; }
+
+        /** The model's current state, or null before the first call. */
+        public FieldMap auditProbe() {
+            var m = live;
+            return m == null ? null : SerifyModelHelper.toFieldMap(m);
         }
     }
 
@@ -379,11 +406,21 @@ public final class WorkerLib {
                 if (pair == null) return null;
                 var ser   = pair.serialize();
                 var deser = pair.deserialize();
+
+                var hook = new ModelAuditHook();
+
                 return new FormatPair(
                         ser == null ? null
-                                : fm -> ser.apply(SerifyModelHelper.fromFieldMap(fm, model)),
+                                : fm -> {
+                                    var m = SerifyModelHelper.fromFieldMap(fm, model);
+                                    hook.before = SerifyModelHelper.toFieldMap(m);
+                                    var out = ser.apply(m);
+                                    hook.live = m;
+                                    return out;
+                                },
                         deser == null ? null
-                                : data -> SerifyModelHelper.toFieldMap(deser.apply(data)));
+                                : data -> SerifyModelHelper.toFieldMap(deser.apply(data)),
+                        hook);
             };
         }
     }
@@ -420,6 +457,7 @@ public final class WorkerLib {
 
         Function<FieldMap, byte[]> serialize = null;
         Function<byte[], FieldMap> deserialize = null;
+        ModelAuditHook modelAudit = null;
 
         var mapper = new ObjectMapper();
         var schema = new ArrayList<SchemaField>();
@@ -457,10 +495,12 @@ public final class WorkerLib {
                         if (pair == null) {
                             serialize = null;
                             deserialize = null;
+                            modelAudit = null;
                             resp.put("status", "SKIPPED");
                         } else {
                             serialize = pair.serialize();
                             deserialize = pair.deserialize();
+                            modelAudit = pair.modelAudit();
                         }
                         out.println(mapper.writeValueAsString(resp));
                         out.flush();
@@ -496,9 +536,21 @@ public final class WorkerLib {
                             if (auditEnabled && before != null) {
                                 var audit = mapper.createObjectNode();
 
-                                // Mutation
-                                var after = encodeFieldMap(fm, schema, mapper);
-                                var diffs = dictDiffs(before, after);
+                                // Mutation. On a model format the live state is
+                                // the model, not the caller's FieldMap.
+                                var baseline = before;
+                                ObjectNode after;
+                                if (modelAudit != null) {
+                                    var mb = modelAudit.auditBefore();
+                                    if (mb != null) baseline = encodeFieldMap(mb, schema, mapper);
+                                    var mp = modelAudit.auditProbe();
+                                    after = mp != null
+                                            ? encodeFieldMap(mp, schema, mapper)
+                                            : encodeFieldMap(fm, schema, mapper);
+                                } else {
+                                    after = encodeFieldMap(fm, schema, mapper);
+                                }
+                                var diffs = dictDiffs(baseline, after);
                                 if (!diffs.isEmpty()) audit.set("mutations", mapper.valueToTree(diffs));
 
                                 // Output zero-copy: does returned buffer alias model fields?

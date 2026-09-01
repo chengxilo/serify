@@ -74,12 +74,57 @@ class Type
         $deser = $pair[1] ?? null;
 
         return [
-            $ser === null
-                ? null
-                : fn(FieldMap $fm): string => $ser(SerifyModelHelper::fromFieldMap($fm, $model)),
+            $ser === null ? null : new ModelSerializer($ser, $model),
             $deser === null
                 ? null
                 : fn(string $data): FieldMap => SerifyModelHelper::toFieldMap($deser($data)),
         ];
+    }
+}
+
+/**
+ * A model-path serializer that audit can see through: it retains the instance
+ * each call used, so Worker's mutation check reads the model live rather than
+ * the caller's FieldMap the worker never touched. An invokable object rather
+ * than a closure only because a PHP closure cannot carry the state.
+ *
+ * No deserialize counterpart: PHP strings are copy-on-write values, so a model
+ * can never view the input buffer and the zero-copy probe has nothing to find.
+ */
+final class ModelSerializer
+{
+    /** @var callable */
+    private $ser;
+    /** @var class-string */
+    private string $model;
+    private ?FieldMap $before = null;
+    private ?object $live = null;
+
+    /** @param callable $ser @param class-string $model */
+    public function __construct(callable $ser, string $model)
+    {
+        $this->ser = $ser;
+        $this->model = $model;
+    }
+
+    public function __invoke(FieldMap $fm): string
+    {
+        $m = SerifyModelHelper::fromFieldMap($fm, $this->model);
+        $this->before = SerifyModelHelper::toFieldMap($m);
+        $out = ($this->ser)($m);
+        $this->live = $m;
+        return $out;
+    }
+
+    /** The model's state on entry — the mutation check's baseline. */
+    public function auditBefore(): ?FieldMap
+    {
+        return $this->before;
+    }
+
+    /** The model's current state. */
+    public function auditProbe(): ?FieldMap
+    {
+        return $this->live === null ? null : SerifyModelHelper::toFieldMap($this->live);
     }
 }

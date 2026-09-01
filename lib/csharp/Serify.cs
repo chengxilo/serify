@@ -213,7 +213,24 @@ public sealed record SchemaVariant(string Name, SchemaField? Payload);
 /// </summary>
 public readonly record struct FormatPair(
     Func<FieldMap, byte[]>? Serialize,
-    Func<byte[], FieldMap>? Deserialize);
+    Func<byte[], FieldMap>? Deserialize,
+    ModelAuditHook? ModelAudit = null);
+
+/// <summary>
+/// Lets <c>--audit</c> read the model a call actually used, rather than the
+/// caller's FieldMap the worker never touched.
+///
+/// No deserialize counterpart: a C# string or array cannot view part of another
+/// buffer, so a model can never alias the input.
+/// </summary>
+public sealed class ModelAuditHook
+{
+    /// <summary>The model's state on entry — the mutation check's baseline.</summary>
+    public FieldMap? Before { get; internal set; }
+
+    /// <summary>The model's current state, or null before the first call.</summary>
+    public Func<FieldMap?> Probe { get; internal set; } = () => null;
+}
 
 /// <summary>
 /// One registered type, in one of two spellings.
@@ -284,9 +301,22 @@ internal sealed class ModelTypeEntry<M> : TypeEntry where M : class, new()
     {
         if (!_formats.TryGetValue(format, out var pair)) return null;
         var (ser, deser) = pair;
+
+        var hook = new ModelAuditHook();
+        M? live = null;
+        hook.Probe = () => live is null ? null : SerifyModel.ToFieldMap(live);
+
         return new FormatPair(
-            ser is null ? null : fm => ser(SerifyModel.FromFieldMap<M>(fm)),
-            deser is null ? null : data => SerifyModel.ToFieldMap(deser(data)));
+            ser is null ? null : fm =>
+            {
+                var m = SerifyModel.FromFieldMap<M>(fm);
+                hook.Before = SerifyModel.ToFieldMap(m);
+                var outBytes = ser(m);
+                live = m;
+                return outBytes;
+            },
+            deser is null ? null : data => SerifyModel.ToFieldMap(deser(data)),
+            hook);
     }
 }
 
@@ -479,6 +509,7 @@ public static class Worker
         resolve ??= (t, f) => ResolveRegistered(suite, t, f);
         Func<FieldMap, byte[]>? serialize = null;
         Func<byte[], FieldMap>? deserialize = null;
+        ModelAuditHook? modelAudit = null;
         Console.InputEncoding  = Encoding.UTF8;
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -518,10 +549,11 @@ public static class Worker
                     {
                         serialize = null;
                         deserialize = null;
+                        modelAudit = null;
                         Emit(new { op = "bind", status = "SKIPPED" });
                         break;
                     }
-                    (serialize, deserialize) = pair.Value;
+                    (serialize, deserialize, modelAudit) = pair.Value;
                     Emit(new { op = "bind" });
                     break;
                 }
@@ -547,9 +579,22 @@ public static class Worker
                         var audit = new Dictionary<string, object>();
                         if (auditEnabled && before != null)
                         {
-                            // Mutation
-                            var after = EncodeFieldMap(fm, schema);
-                            var diffs = DictDiffs(before, after);
+                            // Mutation. On a model format the live state is the
+                            // model, not the caller's FieldMap.
+                            var baseline = before;
+                            Dictionary<string, object?> after;
+                            if (modelAudit is not null)
+                            {
+                                if (modelAudit.Before is { } mb) baseline = EncodeFieldMap(mb, schema);
+                                after = modelAudit.Probe() is { } mp
+                                    ? EncodeFieldMap(mp, schema)
+                                    : EncodeFieldMap(fm, schema);
+                            }
+                            else
+                            {
+                                after = EncodeFieldMap(fm, schema);
+                            }
+                            var diffs = DictDiffs(baseline, after);
                             if (diffs.Length > 0) audit["mutations"] = diffs;
 
                             // Output zero-copy
