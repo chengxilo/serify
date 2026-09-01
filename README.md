@@ -49,6 +49,7 @@ agreement by hand.
   - [Reusing types with `import`](#reusing-types-with-import)
   - [Sum types: `variants:`](#sum-types-variants)
 - [Audit mode](#audit-mode)
+  - [A worked example](#a-worked-example)
 - [Model binding](#model-binding)
 - [`serify validate`](#serify-validate)
 - [Protocol](#protocol)
@@ -695,6 +696,29 @@ Six unsafe behaviours are detected:
 | **Deserialize instability** | Re-deserialize from a fresh clone of the input, diff FieldMaps |
 
 All 9 worker libraries (Go, Rust, Python, Node, C#, C++, Java, Elixir, PHP) implement these. Output zero-copy is the one exception: it only applies where the language's memory model lets a model field mutably alias the output buffer, so C++, Elixir and PHP omit it (their strings/binaries cannot alias).
+
+### A worked example
+
+[`examples/audit/`](examples/audit/) is what this looks like on plausible code
+rather than on a table. Three codecs share one byte layout, so a conformance run
+passes all three and cannot tell them apart:
+
+```bash
+serify run          --cases examples/audit/cases examples/audit/go examples/audit/rust
+#   → 40 PASS, WARN: 0
+
+serify run --audit  --cases examples/audit/cases examples/audit/go examples/audit/rust
+#   → 40 PASS, WARN: 10, still exit 0
+```
+
+The two findings are deliberately different in kind. One codec aliases the
+buffer it decodes from — a real optimization, and a lifetime constraint the
+format cannot express. The other scrubs the caller's payload while serializing
+it, which is simply a bug. Its README walks through both, plus why the same
+unsafe code is silent on some cases and not others.
+
+The Go worker there registers an ordinary struct with ordinary methods: audit
+does not require you to drop down to a `FieldMap` to be checked.
 
 ## Model binding
 

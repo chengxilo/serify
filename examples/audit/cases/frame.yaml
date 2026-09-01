@@ -1,0 +1,83 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/frame.schema.json
+# A log frame: a small header and a blob. Chosen so that every field except the
+# id is aliasing-capable, which is what the zero-copy detector walks — it
+# snapshots `string`, `list<string>` and `bytes` values and recurses into nested
+# structs (see collectFieldSnaps in lib/go/serify/auditcheck.go).
+#
+# Binary layout — little-endian, identical under all three formats:
+#
+#   stream_id  u32
+#   title      u32 byte length + UTF-8 bytes
+#   tags       u32 count, then each tag as a length-prefixed string
+#   payload    u32 byte length + the raw bytes
+fields:
+  - stream_id: uint32
+  - title: string
+  - tags: list<string>
+  - payload: bytes
+
+# Three formats, one layout. `oracle: bytes` for all of them: nothing here is a
+# map, so every worker must land on the same bytes under every format — and
+# they do, which is why only --audit separates them.
+formats:
+  - name: safe
+    oracle: bytes
+  - name: fast
+    oracle: bytes
+  - name: handoff
+    oracle: bytes
+
+# The cases form a gradient on purpose. An audit finding depends on the data as
+# much as on the code: there is nothing to alias in an empty string and nothing
+# to release in an empty buffer, so the quiet cases below are quiet for both
+# formats. That is the argument for running --audit over a real case list rather
+# than one hand-picked frame.
+cases:
+  # Everything populated. Both findings fire here.
+  - name: typical
+    data:
+      stream_id: 7
+      title: "ingest worker"
+      tags: ["prod", "eu-west-1"]
+      payload: [0xde, 0xad, 0xbe, 0xef]
+
+  # Non-ASCII, so the length prefixes are byte counts and not character counts.
+  # Aliasing does not care, which is worth seeing.
+  - name: unicode
+    data:
+      stream_id: 9
+      title: "日本語のタイトル ☕"
+      tags: ["ログ", "本番"]
+      payload: [0xf0, 0x9f, 0x8e, 0x89]
+
+  # Strings but no blob: `fast` still aliases the title and the tags, while
+  # `handoff` has no buffer to release and stays silent.
+  - name: no_payload
+    data:
+      stream_id: 11
+      title: "heartbeat"
+      tags: ["ops"]
+      payload: []
+
+  # Nothing to alias and nothing to release: both formats are clean here, and
+  # the codecs are byte-for-byte the ones that were unsafe a case ago.
+  - name: empty
+    data:
+      stream_id: 0
+      title: ""
+      tags: []
+      payload: []

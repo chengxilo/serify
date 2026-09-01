@@ -1,9 +1,22 @@
 # Serify Worker Examples
 
-This directory contains example workers for the Serify conformance test
-framework. [`appdata/`](appdata/) holds a `cases/` directory plus one worker
-directory per language (`appdata/go/`, `appdata/rust/`, …); between them the
-cases exercise every corner of the schema language.
+This directory holds two different kinds of example, and it is worth knowing
+which one you are reading.
+
+**Every type** — [`appdata/`](appdata/): a `cases/` directory plus one worker
+directory per language (`appdata/go/`, `appdata/rust/`, …). These are the data
+shapes an application already owns — orders, customers, money, telemetry — and
+it is the suite the libraries themselves are validated against: between them the
+cases exercise every corner of the schema language, every scalar width, `list`,
+`array`, `map`, `optional`, `enum`, `sum`, nested structs and the boundary
+values of each. Read it to find out how a feature is expressed in your language.
+The rest of this file describes it.
+
+**One idea** — [`audit/`](audit/). Three codecs over one byte layout, two of
+them unsafe in ways the bytes cannot show: one aliases the buffer it decodes
+from, one empties the caller's data while serializing it. A conformance run
+passes all three; `serify run --audit` finds both. Read it to see what the
+audit flag is actually for, or if you are about to make a codec faster.
 
 ## Layout
 

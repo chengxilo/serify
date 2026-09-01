@@ -228,6 +228,21 @@ jobs:
           SERIFY_REQUIRE: go,${{ matrix.language }}
         run: go test -count=1 -v ./examples/appdata/test/
 
+  # The audit example: three codecs over one byte layout, two of them unsafe in
+  # ways the bytes cannot show. The test runs the suite twice — without --audit
+  # to prove conformance is blind to both, and with it to pin each finding to
+  # the case and language it belongs to. Go and Rust only, so this is cheap.
+  audit-example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: audit example (conformance blind, --audit sighted)
+        run: go test -count=1 -v ./examples/audit/test/
+
   # Integration meta-tests (wrong-worker detection, audit mode, CLI tests).
   # happy, wrong and audit all run in every language now, and requireWorkers
   # treats a missing toolchain as a failure rather than a skip, so this job has
