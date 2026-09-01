@@ -192,6 +192,41 @@ func (f *FieldMap) SetOptionalStruct(key string, v *FieldMap) {
 	}
 }
 
+// SetOptional and GetOptional cover every scalar an optional<T> can hold. They
+// are free functions because a method cannot introduce a type parameter.
+//
+// An absent optional is an untyped nil in the map, which is what encodeOptional
+// looks for; a present one is the bare value.
+func SetOptional[T any](f *FieldMap, key string, v *T) {
+	if v == nil {
+		f.fields[key] = nil
+		return
+	}
+	f.fields[key] = *v
+}
+
+// GetOptional returns nil when the field is null and the value when it is
+// present. A missing key is an error; a null one is not — that is the
+// distinction the typed getters cannot express, since a null optional<int64>
+// has no int64 to hand back.
+func GetOptional[T any](f *FieldMap, key string) (*T, error) {
+	v, ok := f.fields[key]
+	if !ok {
+		return nil, fmt.Errorf(errFieldNotFound, key)
+	}
+	if v == nil {
+		return nil, nil //nolint:nilnil // sentinel error not appropriate: callers check err != nil
+	}
+	if x, ok := v.(T); ok {
+		return &x, nil
+	}
+	if x, ok := v.(*T); ok {
+		return x, nil
+	}
+	var zero T
+	return nil, fmt.Errorf("field %q: expected optional %T, got %T", key, zero, v)
+}
+
 func (f *FieldMap) SetMap(key string, v map[string]any) { f.fields[key] = v }
 func (f *FieldMap) GetMap(key string) (map[string]any, bool) {
 	v, ok := f.fields[key]

@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testRecord mirrors the full schema defined in examples/cases.
+// testRecord mirrors the full schema defined in examples/appdata/cases.
 type addrFields struct {
 	Street string
 	Zip    uint32
@@ -333,4 +333,36 @@ func TestFieldMap_ListStruct(t *testing.T) {
 	if v, _ := got[1].GetString("k"); v != "two" {
 		assert.Equal(t, "two", v, "items[1]: %q", v)
 	}
+}
+
+// TestFieldMap_OptionalScalar covers what the typed getters cannot express: a
+// null optional<int64> has no int64 to hand back, so GetI64 can only fail on it,
+// indistinguishably from a type error.
+func TestFieldMap_OptionalScalar(t *testing.T) {
+	fm := NewFieldMap()
+
+	due := int64(-9223372036854775808)
+	SetOptional(fm, "due_at", &due)
+	SetOptional[int64](fm, "started_at", nil)
+
+	got, err := GetOptional[int64](fm, "due_at")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, due, *got)
+
+	// Null is a value, not an error: nil result, nil error.
+	got, err = GetOptional[int64](fm, "started_at")
+	require.NoError(t, err)
+	assert.Nil(t, got)
+
+	// A missing key still is an error.
+	_, err = GetOptional[int64](fm, "absent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+
+	// So is a field holding something else.
+	fm.SetString("title", "x")
+	_, err = GetOptional[int64](fm, "title")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expected optional")
 }
