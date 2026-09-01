@@ -30,6 +30,7 @@ agreement by hand.
 - [How it works](#how-it-works)
 - [Install](#install-serify-cli)
 - [Quick start](#quick-start)
+  - [A worked project](#a-worked-project)
 - [Supported languages](#supported-languages)
   - [Go](#go-writing-a-worker)
   - [Rust](#rust)
@@ -108,6 +109,32 @@ serify run --ref go --cases examples/appdata/cases examples/appdata/go examples/
 > Results are reported per language, so only one worker per language can run at a
 > time; passing two of the same language is rejected. Compare across languages,
 > which is what the harness is for.
+
+### A worked project
+
+`examples/appdata/cases` is a type zoo — it exists to cover every corner of the schema
+language, which makes it a reference rather than a story.
+[`examples/taskstore/`](examples/taskstore/) is the story: a small CRUD server
+over TCP. Go writes the server; all eight other languages write a client against
+it, and serify checks that every client agrees with the server byte for byte.
+
+```bash
+# The server, and a client in whichever language you like
+(cd examples/taskstore/go && go run ./cmd/server &)
+(cd examples/taskstore/go && go run ./cmd/client create "Buy milk" normal errand,home)
+(cd examples/taskstore/python && python3 client.py list)
+(cd examples/taskstore/rust && target/release/client list)
+
+# The same codecs the server and clients use, compared case by case
+serify run --cases examples/taskstore/cases examples/taskstore/*/
+```
+
+The workers there are not test doubles: each registers the very function its
+client and the server call, so a green table means the bytes on the socket are
+the bytes that were checked. Its [README](examples/taskstore/README.md) walks
+the whole thing through — including what a real disagreement looks like when
+serify catches one, and which of the nine languages can keep the harness out of
+their codec entirely.
 
 ## Supported languages
 

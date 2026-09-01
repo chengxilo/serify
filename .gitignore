@@ -6,6 +6,10 @@ runner.exe
 **/worker
 **/worker.exe
 !/worker/
+# taskstore example: client and server binaries sit beside the worker and,
+# unlike it, are not named `worker`.
+examples/taskstore/*/client
+examples/taskstore/*/server
 # Elixir escript test workers (rebuilt by the harness)
 audit_worker
 is_worker

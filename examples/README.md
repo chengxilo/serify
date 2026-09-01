@@ -1,6 +1,6 @@
 # Serify Worker Examples
 
-This directory holds two different kinds of example, and it is worth knowing
+This directory holds three different kinds of example, and it is worth knowing
 which one you are reading.
 
 **Every type** — [`appdata/`](appdata/): a `cases/` directory plus one worker
@@ -11,6 +11,14 @@ cases exercise every corner of the schema language, every scalar width, `list`,
 `array`, `map`, `optional`, `enum`, `sum`, nested structs and the boundary
 values of each. Read it to find out how a feature is expressed in your language.
 The rest of this file describes it.
+
+**A project** — [`taskstore/`](taskstore/). A small CRUD server over TCP: Go
+writes the server, the other eight languages write clients, and serify checks
+that every client agrees with it byte for byte. One plausible feature, the
+smallest schema that expresses it, and a program you can run. Read it to find
+out what using serify on real work looks like — and for the cross-language
+notes this suite has no reason to make, such as which bindings can be kept out
+of your own codec and what a `sum` costs in each language.
 
 **One idea** — [`audit/`](audit/). Three codecs over one byte layout, two of
 them unsafe in ways the bytes cannot show: one aliases the buffer it decodes

@@ -32,6 +32,7 @@ cd "$(git rev-parse --show-toplevel)"
 # malformed on purpose, so `serify schema` (rightly) refuses to load it.
 CASE_DIRS=(
 	examples/audit/cases
+	examples/taskstore/cases
 	examples/appdata/cases
 	test/cases/audit/cases
 	test/cases/happy/cases

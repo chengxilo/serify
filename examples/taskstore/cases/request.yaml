@@ -1,0 +1,81 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/request.schema.json
+# One request frame, exactly as it appears on the socket after the length
+# prefix. This is a tested type: the cases below are the requests every client
+# must produce byte-identically, or the Go server will not understand them.
+#
+#   request_id  u32   echoed back on the response, so a client can pipeline
+#   op          the sum from op.yaml: u8 tag ordinal + payload
+#
+# `oracle: bytes` — nothing here is a map, so there is no wire freedom to grant.
+# Every worker must land on the same bytes.
+import:
+  - op.yaml
+
+formats:
+  - name: binary
+    oracle: bytes
+
+fields:
+  - request_id: uint32
+  - op: op
+
+cases:
+  # A unit variant: the tag alone, and the whole frame is five bytes.
+  - name: list_all
+    data:
+      request_id: 1
+      op: list_all
+
+  # Create. No id — a draft has none to send.
+  - name: create
+    data:
+      request_id: 2
+      op:
+        create:
+          title: "Buy milk"
+          priority: "normal"
+          tags: ["errand", "home"]
+          due_at: 1755820800
+
+  # Read: a scalar payload.
+  - name: read
+    data:
+      request_id: 3
+      op:
+        read: 1001
+
+  # Update carries the whole task back, id included. Non-ASCII title so the
+  # length prefix is bytes and not characters.
+  - name: update
+    data:
+      request_id: 4
+      op:
+        update:
+          id: 1001
+          title: "牛乳を買う ☕"
+          done: true
+          priority: "high"
+          tags: []
+          due_at: null
+
+  # Delete, at the top of the id range: a u64 past 2^53 has to survive as a
+  # decimal string on serify's own wire, not as a JSON number.
+  - name: delete_max_id
+    data:
+      request_id: 4294967295          # max uint32
+      op:
+        delete: 18446744073709551615  # max uint64

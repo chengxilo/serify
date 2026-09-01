@@ -1,0 +1,40 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/op.schema.json
+# The operation a request asks for — the C, R, U and D, plus a list.
+#
+# A sum is the right shape here and a `kind` enum beside a flat payload is not:
+# a delete carries an id and nothing else, a create carries a draft and no id at
+# all, and there is no way to write those as one flat record without inventing
+# defaults for every field the current operation does not use. Here each arm
+# carries exactly its own payload, and a request that names two is unwritable.
+#
+# The three payload arities all appear:
+#
+#   list_all        arity 0 — a unit variant, no payload
+#   read / delete   arity 1 — a scalar payload (the id)
+#   create / update arity N — a struct payload
+#
+# Wire: u8 tag ordinal (declaration order below), then the payload.
+import:
+  - draft.yaml
+  - task.yaml
+
+variants:
+  - list_all:            # no type -> a unit variant
+  - create: draft
+  - read: uint64
+  - update: task
+  - delete: uint64

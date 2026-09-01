@@ -1,0 +1,102 @@
+# Copyright 2026 Chengxi Luo
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# yaml-language-server: $schema=.schemas/response.schema.json
+# One response frame. The other half of the contract: these are the bytes the Go
+# server writes, and a follower's client has to decode them into the same values.
+#
+#   request_id  u32   the id from the request this answers
+#   result      the sum from result.yaml: u8 tag ordinal + payload
+import:
+  - result.yaml
+
+formats:
+  - name: binary
+    oracle: bytes
+
+fields:
+  - request_id: uint32
+  - result: result
+
+cases:
+  # A delete that worked. Nothing to send back but the acknowledgement.
+  - name: accepted
+    data:
+      request_id: 7
+      result: accepted
+
+  # The answer to a create, a read or an update: the task as it now stands.
+  - name: found
+    data:
+      request_id: 2
+      result:
+        found:
+          id: 1001
+          title: "Buy milk"
+          done: false
+          priority: "normal"
+          tags: ["errand", "home"]
+          due_at: 1755820800
+
+  # A list. `total` exceeds `items`, which is the whole point of sending it.
+  - name: listing
+    data:
+      request_id: 1
+      result:
+        listing:
+          items:
+            - id: 1001
+              title: "Buy milk"
+              done: false
+              priority: "normal"
+              tags: ["errand", "home"]
+              due_at: 1755820800
+            - id: 1002
+              title: "Renew passport"
+              done: false
+              priority: "high"
+              tags: ["admin"]
+              due_at: null
+          total: 17
+
+  # An empty store still answers with a page, not an error.
+  - name: empty_listing
+    data:
+      request_id: 1
+      result:
+        listing:
+          items: []
+          total: 0
+
+  # A read for an id that is not there.
+  - name: failed
+    data:
+      request_id: 3
+      result:
+        failed:
+          code: "not_found"
+          message: "no task with id 4242"
+
+  # The boundary case: the extremes a client has to survive receiving.
+  - name: boundary
+    data:
+      request_id: 0
+      result:
+        found:
+          id: 18446744073709551615        # max uint64
+          title: ""
+          done: true
+          priority: "low"
+          tags: ["", "a", ""]
+          due_at: -9223372036854775808    # min int64
