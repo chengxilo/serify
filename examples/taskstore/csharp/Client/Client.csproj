@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Client</AssemblyName>
+  </PropertyGroup>
+
+  <!-- The codec, shared with the worker rather than copied. -->
+  <ItemGroup>
+    <Compile Include="../Wire.cs" />
+    <Compile Include="../Model.cs" />
+    <Compile Include="../Message.cs" />
+    <Compile Include="../Frame.cs" />
+  </ItemGroup>
+
+  <!-- Needed for the [SerifyModel] / [SerifyField] attributes the codec
+       carries, not for anything the client calls. C# attributes are a real
+       compile-time reference, unlike Go's inert struct tags. -->
+  <ItemGroup>
+    <ProjectReference Include="../../../../lib/csharp/Serify.csproj" />
+  </ItemGroup>
+</Project>

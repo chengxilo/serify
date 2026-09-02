@@ -7,9 +7,14 @@ runner.exe
 **/worker.exe
 !/worker/
 # taskstore example: client and server binaries sit beside the worker and,
-# unlike it, are not named `worker`.
-examples/taskstore/*/client
-examples/taskstore/*/server
+# unlike it, are not named `worker`. Spelled out per language rather than
+# globbed: core.ignorecase is true on a case-insensitive checkout, where
+# `examples/taskstore/*/client` also swallows the C# client *project*
+# directory, examples/taskstore/csharp/Client/. Rust's go to target/.
+examples/taskstore/go/client
+examples/taskstore/go/server
+examples/taskstore/cpp/client
+examples/taskstore/cpp/server
 # Elixir escript test workers (rebuilt by the harness)
 audit_worker
 is_worker
@@ -40,6 +45,9 @@ bin/
 obj/
 **/bin/
 **/obj/
+# ...but Rust keeps real source in src/bin/, one file per binary target, and
+# the rules above are broad enough to swallow it.
+!**/src/bin/
 *.user
 *.suo
 
