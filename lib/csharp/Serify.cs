@@ -582,27 +582,25 @@ public static class Worker
                             // Mutation. On a model format the live state is the
                             // model, not the caller's FieldMap.
                             var baseline = before;
-                            Dictionary<string, object?> after;
-                            if (modelAudit is not null)
-                            {
-                                if (modelAudit.Before is { } mb) baseline = EncodeFieldMap(mb, schema);
-                                after = modelAudit.Probe() is { } mp
-                                    ? EncodeFieldMap(mp, schema)
+                            // The live state: the model on a model format, the
+                            // caller's FieldMap otherwise. Both probes below read
+                            // it, so neither can go blind on the model path.
+                            Dictionary<string, object?> Current() =>
+                                modelAudit?.Probe() is { } live
+                                    ? EncodeFieldMap(live, schema)
                                     : EncodeFieldMap(fm, schema);
-                            }
-                            else
-                            {
-                                after = EncodeFieldMap(fm, schema);
-                            }
+
+                            if (modelAudit?.Before is { } mb) baseline = EncodeFieldMap(mb, schema);
+                            var after = Current();
                             var diffs = DictDiffs(baseline, after);
                             if (diffs.Length > 0) audit["mutations"] = diffs;
 
-                            // Output zero-copy
-                            var zcBefore = EncodeFieldMap(fm, schema);
+                            // Output zero-copy: does the returned buffer alias
+                            // the model's memory?
                             for (int i = 0; i < rawBytes.Length; i++) rawBytes[i] ^= 0xFF;
-                            var zcAfter = EncodeFieldMap(fm, schema);
-                            var zcDiffs = DictDiffs(zcBefore, zcAfter);
+                            var zcAfter = Current();
                             for (int i = 0; i < rawBytes.Length; i++) rawBytes[i] ^= 0xFF;
+                            var zcDiffs = DictDiffs(after, zcAfter);
                             if (zcDiffs.Length > 0) audit["output_zero_copy_fields"] = zcDiffs;
 
                             // Stability

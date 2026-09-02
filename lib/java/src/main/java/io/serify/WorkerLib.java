@@ -27,6 +27,7 @@ import java.nio.ByteOrder;
 import java.lang.reflect.RecordComponent;
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.Objects;
 
 /**
@@ -539,27 +540,32 @@ public final class WorkerLib {
                                 // Mutation. On a model format the live state is
                                 // the model, not the caller's FieldMap.
                                 var baseline = before;
-                                ObjectNode after;
+                                // The live state: the model on a model format,
+                                // the caller's FieldMap otherwise. Both probes
+                                // below read it through this, so neither can go
+                                // blind on the model path.
+                                final var liveAudit = modelAudit;
+                                final var liveFm = fm;
+                                Supplier<ObjectNode> current = () -> {
+                                    var live = liveAudit == null ? null : liveAudit.auditProbe();
+                                    return encodeFieldMap(live != null ? live : liveFm, schema, mapper);
+                                };
+
                                 if (modelAudit != null) {
                                     var mb = modelAudit.auditBefore();
                                     if (mb != null) baseline = encodeFieldMap(mb, schema, mapper);
-                                    var mp = modelAudit.auditProbe();
-                                    after = mp != null
-                                            ? encodeFieldMap(mp, schema, mapper)
-                                            : encodeFieldMap(fm, schema, mapper);
-                                } else {
-                                    after = encodeFieldMap(fm, schema, mapper);
                                 }
+                                var after = current.get();
                                 var diffs = dictDiffs(baseline, after);
                                 if (!diffs.isEmpty()) audit.set("mutations", mapper.valueToTree(diffs));
 
-                                // Output zero-copy: does returned buffer alias model fields?
+                                // Output zero-copy: does the returned buffer
+                                // alias the model's memory?
                                 if (outputBytes.length > 0) {
-                                    var beforeClone = encodeFieldMap(fm, schema, mapper);
                                     for (int i = 0; i < outputBytes.length; i++) outputBytes[i] ^= 0xFF;
-                                    var afterFlip = encodeFieldMap(fm, schema, mapper);
+                                    var afterFlip = current.get();
                                     for (int i = 0; i < outputBytes.length; i++) outputBytes[i] ^= 0xFF; // restore
-                                    var ozc = dictDiffs(beforeClone, afterFlip);
+                                    var ozc = dictDiffs(after, afterFlip);
                                     if (!ozc.isEmpty()) audit.set("output_zero_copy_fields", mapper.valueToTree(ozc));
                                 }
 
