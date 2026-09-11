@@ -24,7 +24,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/testutil"
 )
 
@@ -39,8 +39,8 @@ func TestMain(m *testing.M) {
 
 	// Probe all example languages.
 	allLangs := []string{
-		language.Go, language.Rust, language.Python, language.Node, language.Java,
-		language.Cpp, language.CSharp, language.Elixir, language.PHP,
+		lang.Go, lang.Rust, lang.Python, lang.Node, lang.Java,
+		lang.Cpp, lang.CSharp, lang.Elixir, lang.PHP,
 	}
 	for _, lang := range allLangs {
 		workerDir := filepath.Join(path, lang)

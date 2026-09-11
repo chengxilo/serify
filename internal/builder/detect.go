@@ -20,7 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 )
 
 type marker struct {
@@ -30,17 +30,17 @@ type marker struct {
 }
 
 var markers = []marker{
-	{"go.mod", language.Go, false},
-	{"Cargo.toml", language.Rust, false},
-	{"pom.xml", language.Java, false},
-	{"mix.exs", language.Elixir, false},
-	{"*.csproj", language.CSharp, true},
-	{"package.json", language.Node, false},
-	{"composer.json", language.PHP, false},
-	{"*.py", language.Python, true},
-	{"*.cpp", language.Cpp, true},
-	{"*.php", language.PHP, true},
-	{"*.go", language.Go, true},
+	{"go.mod", lang.Go, false},
+	{"Cargo.toml", lang.Rust, false},
+	{"pom.xml", lang.Java, false},
+	{"mix.exs", lang.Elixir, false},
+	{"*.csproj", lang.CSharp, true},
+	{"package.json", lang.Node, false},
+	{"composer.json", lang.PHP, false},
+	{"*.py", lang.Python, true},
+	{"*.cpp", lang.Cpp, true},
+	{"*.php", lang.PHP, true},
+	{"*.go", lang.Go, true},
 }
 
 // DetectLanguage identifies the programming language of a worker directory

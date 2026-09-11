@@ -24,8 +24,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chengxilo/serify/internal/config"
-	"github.com/chengxilo/serify/internal/protocol"
+	"github.com/chengxilo/serify/internal/conf"
+	"github.com/chengxilo/serify/internal/proto"
 	"github.com/chengxilo/serify/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,7 +71,7 @@ var fullSchema string
 func TestMain(m *testing.M) {
 	// Verify examples/appdata/cases parse cleanly; fullSchema is a self-contained inline
 	// schema so the library tests below don't depend on the exact example suite layout.
-	if _, err := config.LoadSuite(filepath.Join(testutil.RepoRoot(), "examples", "appdata", "cases")); err != nil {
+	if _, err := conf.LoadSuite(filepath.Join(testutil.RepoRoot(), "examples", "appdata", "cases")); err != nil {
 		panic("load cases: " + err.Error())
 	}
 	fullSchema = `[{"name":"user_id","type":"uint64"},{"name":"username","type":"string"},{"name":"score","type":"float32"},{"name":"active","type":"bool"},{"name":"metadata","type":"bytes"},{"name":"tags","type":"list<string>"},{"name":"profile","type":"optional<string>"},{"name":"counts","type":"array<uint32,4>"},{"name":"address","type":"struct","fields":[{"name":"street","type":"string"},{"name":"zip","type":"uint32"}]},{"name":"scores","type":"map<string,uint32>","key_type":"string"},{"name":"labels","type":"map<string,struct>","key_type":"string","fields":[{"name":"value","type":"string"},{"name":"priority","type":"uint32"}]}]`
@@ -303,7 +303,7 @@ func TestRun_UnknownOp(t *testing.T) {
 		`{"op":"bogus","id":"x"}`,
 	)
 	require.Len(t, resps, 2, "expected 2 responses (bind + unknown-op error), got %d: %v", len(resps), resps)
-	assert.Equal(t, string(protocol.StatusError), resps[1]["status"], "status: %v, want ERROR", resps[1]["status"])
+	assert.Equal(t, string(proto.StatusError), resps[1]["status"], "status: %v, want ERROR", resps[1]["status"])
 	assert.Equal(t, "x", resps[1]["id"], "id: %v, want x", resps[1]["id"])
 }
 
@@ -435,7 +435,7 @@ func TestRun_PingReportsProtocolVersion(t *testing.T) {
 	assert.Equal(t, "ping", resps[0]["op"], "expected ping OK, got %v", resps[0])
 	assert.Equal(t, "OK", resps[0]["status"], "expected ping OK, got %v", resps[0])
 	// JSON numbers decode as float64.
-	assert.Equal(t, float64(protocol.ProtocolVersion), resps[0]["protocol_version"], "protocol_version = %v, want %v", resps[0]["protocol_version"], protocol.ProtocolVersion)
+	assert.Equal(t, float64(proto.ProtocolVersion), resps[0]["protocol_version"], "protocol_version = %v, want %v", resps[0]["protocol_version"], proto.ProtocolVersion)
 }
 
 // Ping binds nothing, so a serialize after only a ping must still fail.
@@ -445,7 +445,7 @@ func TestRun_PingDoesNotBind(t *testing.T) {
 		`{"id":"t1","op":"serialize","data":{}}`,
 	)
 	require.Len(t, resps, 2, "expected 2 responses, got %d", len(resps))
-	assert.Equal(t, string(protocol.StatusError), resps[1]["status"], "serialize after a bare ping should be an ERROR, got %v", resps[1])
+	assert.Equal(t, string(proto.StatusError), resps[1]["status"], "serialize after a bare ping should be an ERROR, got %v", resps[1])
 }
 
 func TestRun_UnknownType_Skipped(t *testing.T) {
@@ -503,7 +503,7 @@ func TestRun_MultipleTypes_RequiresTypeField(t *testing.T) {
 	resps := exchange(t, suite,
 		`{"op":"bind","schema":[{"name":"user_id","type":"uint64"}]}`,
 	)
-	assert.Equal(t, string(protocol.StatusError), resps[0]["status"], "expected ERROR for missing type, got %v", resps[0])
+	assert.Equal(t, string(proto.StatusError), resps[0]["status"], "expected ERROR for missing type, got %v", resps[0])
 
 	// Bind with explicit type and format works
 	resps2 := exchange(t, suite,

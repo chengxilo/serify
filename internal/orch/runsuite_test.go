@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orchestrate
+package orch
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chengxilo/serify/internal/config"
+	"github.com/chengxilo/serify/internal/conf"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/worker"
 	"github.com/stretchr/testify/assert"
@@ -104,7 +104,7 @@ done
 
 func startStubWorker(t *testing.T, lang, script string) *worker.Worker {
 	t.Helper()
-	f, err := os.CreateTemp(t.TempDir(), "orchestrate-stub-*.sh")
+	f, err := os.CreateTemp(t.TempDir(), "orch-stub-*.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,24 +130,24 @@ func startStubWorker(t *testing.T, lang, script string) *worker.Worker {
 	return w
 }
 
-func testSchema() []config.Field {
-	return []config.Field{{Name: "x", Type: config.FieldType{Base: "uint32"}}}
+func testSchema() []conf.Field {
+	return []conf.Field{{Name: "x", Type: conf.FieldType{Base: "uint32"}}}
 }
 
-func testCasesSet() *config.CasesSet {
-	return &config.CasesSet{
+func testCasesSet() *conf.CasesSet {
+	return &conf.CasesSet{
 		ReferenceLanguage: "ref",
-		Types: []*config.CasesFile{{
+		Types: []*conf.CasesFile{{
 			Name:    "thing",
 			Formats: []string{"binary"},
-			Oracles: map[string]string{"binary": config.OracleBytes},
+			Oracles: map[string]string{"binary": conf.OracleBytes},
 			Schema:  testSchema(),
-			Cases:   []config.TestCase{{Name: "basic", Data: map[string]any{"x": 1}}},
+			Cases:   []conf.TestCase{{Name: "basic", Data: map[string]any{"x": 1}}},
 		}},
 	}
 }
 
-func newTestReport(set *config.CasesSet, langs []string) *report.Report {
+func newTestReport(set *conf.CasesSet, langs []string) *report.Report {
 	return report.New(langs, set.TestIDs(), "table")
 }
 
@@ -164,7 +164,7 @@ func TestRunSuite_HappyPath(t *testing.T) {
 		t.Fatalf("RunSuite: %v", err)
 	}
 
-	id := config.TestIDFmt("thing", "binary", "basic")
+	id := conf.TestIDFmt("thing", "binary", "basic")
 	for _, lang := range []string{"ref", "other"} {
 		for _, op := range []string{report.OpSerialize, report.OpDeserialize} {
 			res, ok := rep.Results[id][lang][op]
@@ -191,7 +191,7 @@ func TestRunSuite_HungWorkerIsErrorOthersPass(t *testing.T) {
 		t.Fatalf("RunSuite: %v", err)
 	}
 
-	id := config.TestIDFmt("thing", "binary", "basic")
+	id := conf.TestIDFmt("thing", "binary", "basic")
 	if res := rep.Results[id]["ref"][report.OpSerialize]; res.Status != report.StatusPass {
 		t.Errorf("ref serialize: status %q (detail %q), want PASS", res.Status, res.Detail)
 	}
@@ -220,7 +220,7 @@ func TestRunSuite_DeclaredSkipIsNotAFailure(t *testing.T) {
 		t.Fatalf("RunSuite: %v", err)
 	}
 
-	id := config.TestIDFmt("thing", "binary", "basic")
+	id := conf.TestIDFmt("thing", "binary", "basic")
 	for _, op := range []string{report.OpSerialize, report.OpDeserialize} {
 		if res := rep.Results[id]["skip"][op]; res.Status != report.StatusSkip {
 			t.Errorf("skip %s: status %q (detail %q), want SKIP", op, res.Status, res.Detail)
@@ -243,7 +243,7 @@ func TestRunSuite_DeadWorkerIsErrorNotSkip(t *testing.T) {
 		t.Fatalf("RunSuite: %v", err)
 	}
 
-	id := config.TestIDFmt("thing", "binary", "basic")
+	id := conf.TestIDFmt("thing", "binary", "basic")
 	for _, op := range []string{report.OpSerialize, report.OpDeserialize} {
 		if res := rep.Results[id]["dead"][op]; res.Status != report.StatusError {
 			t.Errorf("dead %s: status %q (detail %q), want ERROR", op, res.Status, res.Detail)
@@ -280,7 +280,7 @@ func TestRunSuite_CancelledContextReturnsPromptly(t *testing.T) {
 // two workers that emit different bytes but decode to the same value must FAIL
 // under the bytes oracle and PASS under the semantic oracle.
 func TestRunSuite_SemanticOracle_ByteDivergence(t *testing.T) {
-	id := config.TestIDFmt("thing", "binary", "basic")
+	id := conf.TestIDFmt("thing", "binary", "basic")
 
 	run := func(t *testing.T, oracle string) report.Result {
 		workers := map[string]*worker.Worker{
@@ -296,11 +296,11 @@ func TestRunSuite_SemanticOracle_ByteDivergence(t *testing.T) {
 		return rep.Results[id]["other"][report.OpSerialize]
 	}
 
-	if got := run(t, config.OracleBytes); got.Status != report.StatusFail {
+	if got := run(t, conf.OracleBytes); got.Status != report.StatusFail {
 		t.Errorf("bytes oracle: other serialize = %q (%s), want FAIL on byte divergence",
 			got.Status, got.Detail)
 	}
-	if got := run(t, config.OracleSemantic); got.Status != report.StatusPass {
+	if got := run(t, conf.OracleSemantic); got.Status != report.StatusPass {
 		t.Errorf("semantic oracle: other serialize = %q (%s), want PASS (decodes to same value)",
 			got.Status, got.Detail)
 	}
@@ -314,12 +314,12 @@ func TestRunSuite_SemanticOracle_ValueMismatchFails(t *testing.T) {
 		"other": startStubWorker(t, "other", stubScript("bbbb", `{\"x\":1}`)),
 	}
 	set := testCasesSet()
-	set.Types[0].Oracles = map[string]string{"binary": config.OracleSemantic}
+	set.Types[0].Oracles = map[string]string{"binary": conf.OracleSemantic}
 	rep := newTestReport(set, []string{"ref", "other"})
 	if err := RunSuite(context.Background(), set, workers, rep, Options{TimeoutSec: 5}); err != nil {
 		t.Fatalf("RunSuite: %v", err)
 	}
-	id := config.TestIDFmt("thing", "binary", "basic")
+	id := conf.TestIDFmt("thing", "binary", "basic")
 	if got := rep.Results[id]["other"][report.OpSerialize]; got.Status != report.StatusFail {
 		t.Errorf("semantic oracle: other serialize = %q (%s), want FAIL on value mismatch",
 			got.Status, got.Detail)

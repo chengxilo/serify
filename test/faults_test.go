@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
@@ -50,7 +50,7 @@ func TestCLI_KnownFailures(t *testing.T) {
 
 	// Run 1: without --known-failures — must exit 1 with FAILs.
 	csv1 := filepath.Join(t.TempDir(), "out1.csv")
-	out, code := testutil.RunSerify(t, wrong.runArgs(language.Go, errCases, "--csv", csv1)...)
+	out, code := testutil.RunSerify(t, wrong.runArgs(lang.Go, errCases, "--csv", csv1)...)
 	require.Equal(t, 1, code, "serify exit = %d, want 1 (errors without known-failures must fail)\n%s", code, out)
 
 	grid1 := readResultGrid(t, csv1)
@@ -61,7 +61,7 @@ func TestCLI_KnownFailures(t *testing.T) {
 		testutil.AssertCell(t, grid1, "wrong/err_ser/boom", lang, report.OpDeserialize, report.StatusSkip, nil)
 	}
 	// Verify detail contains the injected error.
-	rec := grid1["wrong/err_ser/boom"][language.Go][report.OpSerialize]
+	rec := grid1["wrong/err_ser/boom"][lang.Go][report.OpSerialize]
 	assert.Contains(t, rec.Detail, "injected serialize error",
 		"err_ser detail = %q, want injected serialize error", rec.Detail)
 
@@ -74,7 +74,7 @@ func TestCLI_KnownFailures(t *testing.T) {
 	// Run 2: with --known-failures — must exit 0 with XFAILs.
 	kfDir := wrong.CasePathNamed("known_failures")
 	csv2 := filepath.Join(t.TempDir(), "out2.csv")
-	out2, code2 := testutil.RunSerify(t, wrong.runArgs(language.Go, errCases,
+	out2, code2 := testutil.RunSerify(t, wrong.runArgs(lang.Go, errCases,
 		"--csv", csv2, "--known-failures", kfDir)...)
 	require.Equal(t, 0, code2, "serify exit = %d, want 0 (all failures are known)\n%s", code2, out2)
 	assert.Contains(t, out2, "XFAIL:", "known-failures summary missing XFAIL:\n%s", out2)
@@ -90,7 +90,7 @@ func TestCLI_KnownFailures(t *testing.T) {
 	for _, lang := range wrong.langs {
 		testutil.AssertCell(t, grid2, "wrong/err_deser/boom", lang, report.OpSerialize, report.StatusXPass, nil)
 	}
-	rec2 := grid2["wrong/err_deser/boom"][language.Go][report.OpSerialize]
+	rec2 := grid2["wrong/err_deser/boom"][lang.Go][report.OpSerialize]
 	assert.Contains(t, rec2.Detail, "expected to fail",
 		"XPASS detail = %q, want mention of expected-to-fail reason", rec2.Detail)
 
@@ -110,14 +110,14 @@ func TestCLI_KnownFailures(t *testing.T) {
 // (--startup-timeout), so the other seven would survive. They are still left
 // out because they buy nothing: what is under test is the runner's timeout
 // handling, and one hung worker proves that in a fraction of the runtime.
-var hang = wrong.With(language.Go, language.Rust)
+var hang = wrong.With(lang.Go, lang.Rust)
 
 func TestCLI_Run_TimeoutOnHungWorker(t *testing.T) {
 	requireWorkers(t, hang.langs...)
 
 	hangCases := hang.CasePathNamed("cases_hang")
 	csv := filepath.Join(t.TempDir(), "out.csv")
-	out, code := testutil.RunSerify(t, hang.runArgs(language.Go, hangCases,
+	out, code := testutil.RunSerify(t, hang.runArgs(lang.Go, hangCases,
 		"--csv", csv, "--timeout", "1")...)
 	require.Equal(t, 1, code, "serify exit = %d, want 1 (timeout must fail)\n%s", code, out)
 
@@ -127,7 +127,7 @@ func TestCLI_Run_TimeoutOnHungWorker(t *testing.T) {
 	for _, lang := range hang.langs {
 		testutil.AssertCell(t, grid, "wrong/hang/sleeper", lang, report.OpSerialize, report.StatusError, nil)
 	}
-	rec := grid["wrong/hang/sleeper"][language.Go][report.OpSerialize]
+	rec := grid["wrong/hang/sleeper"][lang.Go][report.OpSerialize]
 	assert.Contains(t, rec.Detail, "timeout after 1s",
 		"hang detail = %q, want timeout after 1s", rec.Detail)
 	for _, lang := range hang.langs {
@@ -141,7 +141,7 @@ func TestCLI_Run_WorkerCrash(t *testing.T) {
 
 	crashCases := wrong.CasePathNamed("cases_crash")
 	csv := filepath.Join(t.TempDir(), "out.csv")
-	out, code := testutil.RunSerify(t, wrong.runArgs(language.Go, crashCases, "--csv", csv)...)
+	out, code := testutil.RunSerify(t, wrong.runArgs(lang.Go, crashCases, "--csv", csv)...)
 	require.Equal(t, 1, code, "serify exit = %d, want 1 (crash must fail)\n%s", code, out)
 
 	grid := readResultGrid(t, csv)
@@ -151,7 +151,7 @@ func TestCLI_Run_WorkerCrash(t *testing.T) {
 		testutil.AssertCell(t, grid, "wrong/crash/abort", lang, report.OpSerialize, report.StatusError, nil)
 	}
 	// Detail is platform-dependent (EOF/pipe/exit), just check non-empty.
-	rec := grid["wrong/crash/abort"][language.Go][report.OpSerialize]
+	rec := grid["wrong/crash/abort"][lang.Go][report.OpSerialize]
 	assert.NotEmpty(t, rec.Detail, "crash detail is empty, want non-empty transport error")
 	for _, lang := range wrong.langs {
 		testutil.AssertCell(t, grid, "wrong/crash/abort", lang, report.OpDeserialize, report.StatusSkip, nil)

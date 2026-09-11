@@ -27,8 +27,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/chengxilo/serify/internal/config"
-	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/chengxilo/serify/internal/conf"
+	"github.com/chengxilo/serify/internal/kind"
 )
 
 // Case-file section names, as they appear as YAML/JSON Schema keys.
@@ -65,7 +65,7 @@ type defRefs map[string]bool
 
 // defDeps are definitions that ref other definitions; adding one pulls in its
 // closure.
-var defDeps = map[string][]string{"bytes": {typekind.Uint8}}
+var defDeps = map[string][]string{"bytes": {kind.Uint8}}
 
 func (d defRefs) add(names ...string) {
 	for _, n := range names {
@@ -155,12 +155,12 @@ Examples:
 }
 
 func runSchemaGen(casesDir string) error {
-	set, err := config.LoadSuite(casesDir)
+	set, err := conf.LoadSuite(casesDir)
 	if err != nil {
-		if !errors.Is(err, config.ErrNoTypesFound) {
+		if !errors.Is(err, conf.ErrNoTypesFound) {
 			return fmt.Errorf("load cases: %w", err)
 		}
-		set = &config.CasesSet{}
+		set = &conf.CasesSet{}
 	}
 	reusable, err := loadReusable(casesDir)
 	if err != nil {
@@ -169,13 +169,13 @@ func runSchemaGen(casesDir string) error {
 	if len(set.Types) == 0 && len(reusable) == 0 {
 		return fmt.Errorf("%s: no .yaml files found", casesDir)
 	}
-	allTypes := map[string][]config.Field{}
+	allTypes := map[string][]conf.Field{}
 	for _, ty := range set.Types {
 		allTypes[ty.Name] = ty.Schema
 	}
 	maps.Copy(allTypes, reusable)
 
-	registry, err := config.LoadFormatsRegistry(casesDir)
+	registry, err := conf.LoadFormatsRegistry(casesDir)
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func runSchemaGen(casesDir string) error {
 			for _, f := range ty.Formats {
 				if !allowed[f] {
 					return fmt.Errorf("%s/%s.yaml: format %q is not declared in %s (has: %s)",
-						casesDir, ty.Name, f, config.SuiteConfigFile, strings.Join(registry, ", "))
+						casesDir, ty.Name, f, conf.SuiteConfigFile, strings.Join(registry, ", "))
 				}
 			}
 		}
@@ -224,10 +224,10 @@ func runSchemaGen(casesDir string) error {
 
 func writeTypeSchema(
 	casesDir, schemasDir, name string,
-	fields []config.Field,
+	fields []conf.Field,
 	formats []string,
 	registry []string,
-	allTypes map[string][]config.Field,
+	allTypes map[string][]conf.Field,
 ) error {
 	// A _config.yaml registry makes the format universe suite-level: every case
 	// file's enum is then the registry, not the formats the file itself uses.
@@ -279,7 +279,7 @@ func formatsSchema(formats []string) J {
 		"required", []any{"name", "oracle"},
 		"properties", obj(
 			"name", name,
-			"oracle", obj("enum", []any{config.OracleBytes, config.OracleSemantic}),
+			"oracle", obj("enum", []any{conf.OracleBytes, conf.OracleSemantic}),
 		),
 	)
 	return obj("type", "array", "minItems", 1, "items", entry)
@@ -314,7 +314,7 @@ func typeFileSchema(title string, used defRefs, extraProps ...any) J {
 	)
 }
 
-func fileSchema(allTypes map[string][]config.Field, fields []config.Field, formatsJ J) J {
+func fileSchema(allTypes map[string][]conf.Field, fields []conf.Field, formatsJ J) J {
 	used := defRefs{}
 	data := dataSchema(allTypes, used, fields)
 	s := typeFileSchema("serify case file", used,
@@ -337,7 +337,7 @@ func reusableFileSchema() J {
 	return s
 }
 
-func dataSchema(allTypes map[string][]config.Field, used defRefs, fields []config.Field) J {
+func dataSchema(allTypes map[string][]conf.Field, used defRefs, fields []conf.Field) J {
 	props := J{}
 	var req []string
 	for _, f := range fields {
@@ -347,28 +347,28 @@ func dataSchema(allTypes map[string][]config.Field, used defRefs, fields []confi
 	return object(props, req)
 }
 
-func fieldToSchema(allTypes map[string][]config.Field, used defRefs, ft config.FieldType) J {
+func fieldToSchema(allTypes map[string][]conf.Field, used defRefs, ft conf.FieldType) J {
 	switch ft.Base {
-	case typekind.Optional:
+	case kind.Optional:
 		return optional(fieldToSchema(allTypes, used, *ft.Elem))
-	case typekind.List:
+	case kind.List:
 		return array(fieldToSchema(allTypes, used, *ft.Elem))
-	case typekind.Array:
+	case kind.Array:
 		return fixedArray(ft.ArrayN, fieldToSchema(allTypes, used, *ft.Elem))
-	case typekind.Map:
+	case kind.Map:
 		return mapOf(fieldToSchema(allTypes, used, *ft.Elem))
-	case typekind.Struct:
+	case kind.Struct:
 		return dataSchema(allTypes, used, ft.Fields)
-	case typekind.Enum:
+	case kind.Enum:
 		vals := make([]any, len(ft.Values))
 		for i, v := range ft.Values {
 			vals[i] = v
 		}
 		return obj("enum", vals)
-	case typekind.Bytes:
-		used.add(typekind.Bytes)
-		return ref(defRef(typekind.Bytes))
-	case typekind.Sum:
+	case kind.Bytes:
+		used.add(kind.Bytes)
+		return ref(defRef(kind.Bytes))
+	case kind.Sum:
 		return sumSchema(allTypes, used, ft.Variants)
 	default:
 		j, name := scalarSchema(ft.Base)
@@ -387,7 +387,7 @@ func fieldToSchema(allTypes map[string][]config.Field, used defRefs, ft config.F
 // Without this case a sum fell through to scalarSchema, which does not know the
 // base and answers String — so every {tag: payload} in a case file failed
 // validation against its own generated schema while loading perfectly well.
-func sumSchema(allTypes map[string][]config.Field, used defRefs, variants []config.Variant) J {
+func sumSchema(allTypes map[string][]conf.Field, used defRefs, variants []conf.Variant) J {
 	var units []any
 	tagged := J{}
 	for _, v := range variants {
@@ -412,20 +412,20 @@ func sumSchema(allTypes map[string][]config.Field, used defRefs, variants []conf
 // scalarSchema maps a serify scalar type name to its JSON Schema form, and
 // names the definition that form refs (empty when it is written inline, so the
 // caller can record it without a special case).
-// The mapping derives from typekind.Scalars — every integer scalar gets a $ref,
+// The mapping derives from kind.Scalars — every integer scalar gets a $ref,
 // floats get a number with description, string/bool get their canonical forms.
 var scalarSchema = func() func(string) (J, string) {
-	m := make(map[string]J, len(typekind.Scalars))
-	refs := make(map[string]string, len(typekind.Scalars))
-	for _, s := range typekind.Scalars {
+	m := make(map[string]J, len(kind.Scalars))
+	refs := make(map[string]string, len(kind.Scalars))
+	for _, s := range kind.Scalars {
 		switch s {
-		case typekind.Bytes:
+		case kind.Bytes:
 			// handled before scalarSchema is called
-		case typekind.Bool:
+		case kind.Bool:
 			m[s] = Boolean
-		case typekind.String:
+		case kind.String:
 			m[s] = String
-		case typekind.Float32, typekind.Float64:
+		case kind.Float32, kind.Float64:
 			m[s] = obj("type", "number",
 				"description", "YAML float; .nan/.inf/-.inf are accepted for binary-only types.")
 		default:
@@ -441,19 +441,19 @@ var scalarSchema = func() func(string) (J, string) {
 	}
 }()
 
-func loadReusable(dir string) (map[string][]config.Field, error) {
+func loadReusable(dir string) (map[string][]conf.Field, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	out := map[string][]config.Field{}
+	out := map[string][]conf.Field{}
 	for _, e := range entries {
 		n := e.Name()
 		if e.IsDir() || !strings.HasSuffix(n, ".yaml") || strings.HasPrefix(n, "_") {
 			continue
 		}
 		name := strings.TrimSuffix(n, ".yaml")
-		cf, err := config.LoadCases(filepath.Join(dir, n))
+		cf, err := conf.LoadCases(filepath.Join(dir, n))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", n, err)
 		}
@@ -595,7 +595,7 @@ var allDefinitions = func() J {
 	))
 	defs.set("bytes", obj("anyOf", []any{
 		obj("type", "string", "pattern", "^([0-9a-fA-F]{2})*$", "description", "hex string"),
-		obj("type", "array", "items", ref(defRef(typekind.Uint8)), "description", "byte array, e.g. [0xde, 0xad]"),
+		obj("type", "array", "items", ref(defRef(kind.Uint8)), "description", "byte array, e.g. [0xde, 0xad]"),
 	}))
 
 	return defs

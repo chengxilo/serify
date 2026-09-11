@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/chengxilo/serify/internal/protocol"
+	"github.com/chengxilo/serify/internal/proto"
 )
 
 const (
@@ -168,7 +168,7 @@ func Run(suite Suite) {
 		_ = writer.WriteByte('\n')
 		_ = writer.Flush()
 	}
-	emitErr := func(id *string, op protocol.Op, status protocol.Status, msg string) {
+	emitErr := func(id *string, op proto.Op, status proto.Status, msg string) {
 		m := map[string]any{"op": op, wireStatus: status, "error": msg}
 		if id != nil {
 			m["id"] = *id
@@ -184,8 +184,8 @@ func Run(suite Suite) {
 		currentDeserialize = nil
 		currentSerHolder = nil
 		emit(map[string]any{
-			"op":     protocol.OpBind,
-			"status": protocol.StatusSkipped,
+			"op":     proto.OpBind,
+			"status": proto.StatusSkipped,
 		})
 	}
 
@@ -204,16 +204,16 @@ func Run(suite Suite) {
 		}
 
 		switch base.Op {
-		case string(protocol.OpPing):
+		case string(proto.OpPing):
 			// Health check: report liveness and the protocol revision this
 			// library speaks. Binds nothing.
 			emit(map[string]any{
-				"op":                protocol.OpPing,
-				wireStatus:          protocol.StatusOK,
-				wireProtocolVersion: protocol.ProtocolVersion,
+				"op":                proto.OpPing,
+				wireStatus:          proto.StatusOK,
+				wireProtocolVersion: proto.ProtocolVersion,
 			})
 
-		case string(protocol.OpBind):
+		case string(proto.OpBind):
 			var msg struct {
 				Schema []SchemaField `json:"schema"`
 				Type   string        `json:"type"`
@@ -221,14 +221,14 @@ func Run(suite Suite) {
 				Audit  bool          `json:"audit"`
 			}
 			if err := json.Unmarshal(line, &msg); err != nil {
-				emitErr(nil, protocol.OpBind, protocol.StatusError, err.Error())
+				emitErr(nil, proto.OpBind, proto.StatusError, err.Error())
 				continue
 			}
 			schema = msg.Schema
 
 			// Both type and format are required; the runner always sends them.
 			if msg.Type == "" {
-				emitErr(nil, protocol.OpBind, protocol.StatusError, `bind requires a "type" field`)
+				emitErr(nil, proto.OpBind, proto.StatusError, `bind requires a "type" field`)
 				continue
 			}
 			bt, ok := types[msg.Type]
@@ -237,7 +237,7 @@ func Run(suite Suite) {
 				continue
 			}
 			if msg.Format == "" {
-				emitErr(nil, protocol.OpBind, protocol.StatusError, `bind requires a "format" field`)
+				emitErr(nil, proto.OpBind, proto.StatusError, `bind requires a "format" field`)
 				continue
 			}
 			bf, found := bt.formats[msg.Format]
@@ -255,21 +255,21 @@ func Run(suite Suite) {
 			}
 
 			emit(map[string]any{
-				"op": protocol.OpBind,
+				"op": proto.OpBind,
 			})
 
-		case string(protocol.OpSerialize):
+		case string(proto.OpSerialize):
 			id := base.ID
 			if currentSerialize == nil {
 				if currentDeserialize != nil {
 					emit(map[string]any{
 						"id":     id,
-						"op":     protocol.OpSerialize,
-						"status": protocol.StatusSkipped,
+						"op":     proto.OpSerialize,
+						"status": proto.StatusSkipped,
 						"reason": "direction not registered",
 					})
 				} else {
-					emitErr(&id, protocol.OpSerialize, protocol.StatusError, "no serializer configured (call bind first)")
+					emitErr(&id, proto.OpSerialize, proto.StatusError, "no serializer configured (call bind first)")
 				}
 				continue
 			}
@@ -277,17 +277,17 @@ func Run(suite Suite) {
 				Data map[string]json.RawMessage `json:"data"`
 			}
 			if err := json.Unmarshal(line, &msg); err != nil {
-				emitErr(&id, protocol.OpSerialize, protocol.StatusError, err.Error())
+				emitErr(&id, proto.OpSerialize, proto.StatusError, err.Error())
 				continue
 			}
 			fm, err := DecodeFieldMap(msg.Data, schema)
 			if err != nil {
-				emitErr(&id, protocol.OpSerialize, protocol.StatusError, err.Error())
+				emitErr(&id, proto.OpSerialize, proto.StatusError, err.Error())
 				continue
 			}
 			b, err := currentSerialize(fm)
 			if err != nil {
-				emitErr(&id, protocol.OpSerialize, protocol.StatusError, err.Error())
+				emitErr(&id, proto.OpSerialize, proto.StatusError, err.Error())
 				continue
 			}
 
@@ -298,8 +298,8 @@ func Run(suite Suite) {
 
 			resp := map[string]any{
 				"id":       id,
-				"op":       protocol.OpSerialize,
-				wireStatus: protocol.StatusOK,
+				"op":       proto.OpSerialize,
+				wireStatus: proto.StatusOK,
 				"hex":      hex.EncodeToString(b),
 			}
 			if len(audit) > 0 {
@@ -307,18 +307,18 @@ func Run(suite Suite) {
 			}
 			emit(resp)
 
-		case string(protocol.OpDeserialize):
+		case string(proto.OpDeserialize):
 			id := base.ID
 			if currentDeserialize == nil {
 				if currentSerialize != nil {
 					emit(map[string]any{
 						"id":     id,
-						"op":     protocol.OpDeserialize,
-						"status": protocol.StatusSkipped,
+						"op":     proto.OpDeserialize,
+						"status": proto.StatusSkipped,
 						"reason": "direction not registered",
 					})
 				} else {
-					emitErr(&id, protocol.OpDeserialize, protocol.StatusError, "no deserializer configured (call bind first)")
+					emitErr(&id, proto.OpDeserialize, proto.StatusError, "no deserializer configured (call bind first)")
 				}
 				continue
 			}
@@ -326,12 +326,12 @@ func Run(suite Suite) {
 				Hex string `json:"hex"`
 			}
 			if err := json.Unmarshal(line, &msg); err != nil {
-				emitErr(&id, protocol.OpDeserialize, protocol.StatusError, err.Error())
+				emitErr(&id, proto.OpDeserialize, proto.StatusError, err.Error())
 				continue
 			}
 			b, err := hex.DecodeString(msg.Hex)
 			if err != nil {
-				emitErr(&id, protocol.OpDeserialize, protocol.StatusError, err.Error())
+				emitErr(&id, proto.OpDeserialize, proto.StatusError, err.Error())
 				continue
 			}
 
@@ -342,7 +342,7 @@ func Run(suite Suite) {
 
 			fm, err := currentDeserialize(b)
 			if err != nil {
-				emitErr(&id, protocol.OpDeserialize, protocol.StatusError, err.Error())
+				emitErr(&id, proto.OpDeserialize, proto.StatusError, err.Error())
 				continue
 			}
 
@@ -353,14 +353,14 @@ func Run(suite Suite) {
 
 			data, err := EncodeFieldMap(fm, schema)
 			if err != nil {
-				emitErr(&id, protocol.OpDeserialize, protocol.StatusError, err.Error())
+				emitErr(&id, proto.OpDeserialize, proto.StatusError, err.Error())
 				continue
 			}
 
 			resp := map[string]any{
 				"id":       id,
-				"op":       protocol.OpDeserialize,
-				wireStatus: protocol.StatusOK,
+				"op":       proto.OpDeserialize,
+				wireStatus: proto.StatusOK,
 				"data":     data,
 			}
 			if len(audit) > 0 {
@@ -368,14 +368,14 @@ func Run(suite Suite) {
 			}
 			emit(resp)
 
-		case string(protocol.OpExit):
+		case string(proto.OpExit):
 			os.Exit(0)
 
 		default:
 			// Always answer: a silently dropped request would leave the runner
 			// waiting for a response until its timeout.
 			id := base.ID
-			emitErr(&id, protocol.Op(base.Op), protocol.StatusError,
+			emitErr(&id, proto.Op(base.Op), proto.StatusError,
 				fmt.Sprintf("unknown op %q", base.Op))
 		}
 	}

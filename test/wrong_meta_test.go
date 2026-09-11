@@ -31,16 +31,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/testutil"
 
-	"github.com/chengxilo/serify/internal/config"
+	"github.com/chengxilo/serify/internal/conf"
 	"github.com/chengxilo/serify/internal/report"
 )
 
-func loadWrongType(t *testing.T) *config.CasesFile {
+func loadWrongType(t *testing.T) *conf.CasesFile {
 	t.Helper()
-	cf, err := config.LoadCases(
+	cf, err := conf.LoadCases(
 		filepath.Join(
 			testutil.RepoRoot(), "test", "cases", "wrong", "cases", "wrong.yaml"))
 	require.NoError(t, err, "load wrong.yaml")
@@ -90,7 +90,7 @@ func TestWrongWorkerErrorsAreReported(t *testing.T) {
 	cf := loadWrongType(t)
 
 	csv := filepath.Join(t.TempDir(), "out.csv")
-	out, code := testutil.RunSerify(t, wrong.runArgs(language.Go, wrong.CasePath(), "--csv", csv)...)
+	out, code := testutil.RunSerify(t, wrong.runArgs(lang.Go, wrong.CasePath(), "--csv", csv)...)
 	// Injected faults must surface as a non-zero CLI exit.
 	require.Equal(t, 1, code, "serify exit = %d, want 1 (injected faults must fail the run)\n%s", code, out)
 
@@ -100,10 +100,10 @@ func TestWrongWorkerErrorsAreReported(t *testing.T) {
 	for _, tc := range cf.Cases {
 		for _, format := range cf.Formats {
 			fs, fd := formatFlags(t, tc.Data, format)
-			id := config.TestIDFmt(cf.Name, format, tc.Name)
-			for _, lang := range wrong.langs {
+			id := conf.TestIDFmt(cf.Name, format, tc.Name)
+			for _, l := range wrong.langs {
 				wantSer := report.StatusPass
-				if lang != language.Go && !fs {
+				if l != lang.Go && !fs {
 					wantSer = report.StatusFail
 				}
 				wantDeser := report.StatusPass
@@ -116,8 +116,8 @@ func TestWrongWorkerErrorsAreReported(t *testing.T) {
 				if wantDeser == report.StatusFail {
 					expectedFails++
 				}
-				testutil.AssertCell(t, grid, id, lang, report.OpSerialize, wantSer, nil)
-				testutil.AssertCell(t, grid, id, lang, report.OpDeserialize, wantDeser, nil)
+				testutil.AssertCell(t, grid, id, l, report.OpSerialize, wantSer, nil)
+				testutil.AssertCell(t, grid, id, l, report.OpDeserialize, wantDeser, nil)
 			}
 		}
 	}

@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package conf
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/chengxilo/serify/internal/kind"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -110,7 +110,7 @@ func TestSchemaResolver_Transparent(t *testing.T) {
 
 	ft, err := r.typeOf("wire_name")
 	require.NoError(t, err, "typeOf(wire_name): %v", err)
-	assert.Equal(t, typekind.String, ft.Base, "transparent field ref = %q, want a bare string", ft.String())
+	assert.Equal(t, kind.String, ft.Base, "transparent field ref = %q, want a bare string", ft.String())
 }
 
 // A `variants:` type's entries are variants, and an entry with no type is a unit
@@ -132,10 +132,10 @@ func TestSchemaResolver_Sum(t *testing.T) {
 	// Referenced as a field: the sum itself, no wrapping struct.
 	ft, err := r.typeOf("identifier")
 	require.NoError(t, err, "typeOf(identifier): %v", err)
-	require.Equal(t, typekind.Sum, ft.Base, "sum field ref = %q, want a bare sum", ft.String())
+	require.Equal(t, kind.Sum, ft.Base, "sum field ref = %q, want a bare sum", ft.String())
 	require.Len(t, ft.Variants, 3, "variants = %d, want 3", len(ft.Variants))
 	assert.Equal(t, "numeric", ft.Variants[0].Name, "variant[0] = %+v, want numeric: uint32", ft.Variants[0])
-	assert.Equal(t, typekind.Uint32, ft.Variants[0].Type.Base, "variant[0] = %+v, want numeric: uint32", ft.Variants[0])
+	assert.Equal(t, kind.Uint32, ft.Variants[0].Type.Base, "variant[0] = %+v, want numeric: uint32", ft.Variants[0])
 	assert.Equal(t, "unset", ft.Variants[2].Name, "variant[2] = %+v, want the unit variant `unset`", ft.Variants[2])
 	assert.Nil(t, ft.Variants[2].Type, "variant[2] = %+v, want the unit variant `unset`", ft.Variants[2])
 
@@ -144,7 +144,7 @@ func TestSchemaResolver_Sum(t *testing.T) {
 	require.NoError(t, err, "sumSchema: %v", err)
 	if assert.Len(t, standalone, 1, "sum standalone = %+v, want a {value: sum} record", standalone) {
 		assert.Equal(t, "value", standalone[0].Name, "sum standalone = %+v, want a {value: sum} record", standalone)
-		assert.Equal(t, typekind.Sum, standalone[0].Type.Base, "sum standalone = %+v, want a {value: sum} record", standalone)
+		assert.Equal(t, kind.Sum, standalone[0].Type.Base, "sum standalone = %+v, want a {value: sum} record", standalone)
 	}
 }
 

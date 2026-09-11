@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 )
 
 func TestDetectLanguage(t *testing.T) {
@@ -31,17 +31,17 @@ func TestDetectLanguage(t *testing.T) {
 		files    []string
 		wantLang string
 	}{
-		{"*.go", []string{"main.go"}, language.Go},
-		{"go", []string{"go.mod"}, language.Go},
-		{"rust", []string{"Cargo.toml"}, language.Rust},
-		{"java", []string{"pom.xml"}, language.Java},
-		{"elixir", []string{"mix.exs"}, language.Elixir},
-		{"csharp", []string{"Worker.csproj"}, language.CSharp},
-		{"node", []string{"package.json"}, language.Node},
-		{"python", []string{"worker.py"}, language.Python},
-		{"python_any", []string{"app.py"}, language.Python},
-		{"*.cpp", []string{"worker.cpp"}, language.Cpp},
-		{"cpp_any", []string{"main.cpp"}, language.Cpp},
+		{"*.go", []string{"main.go"}, lang.Go},
+		{"go", []string{"go.mod"}, lang.Go},
+		{"rust", []string{"Cargo.toml"}, lang.Rust},
+		{"java", []string{"pom.xml"}, lang.Java},
+		{"elixir", []string{"mix.exs"}, lang.Elixir},
+		{"csharp", []string{"Worker.csproj"}, lang.CSharp},
+		{"node", []string{"package.json"}, lang.Node},
+		{"python", []string{"worker.py"}, lang.Python},
+		{"python_any", []string{"app.py"}, lang.Python},
+		{"*.cpp", []string{"worker.cpp"}, lang.Cpp},
+		{"cpp_any", []string{"main.cpp"}, lang.Cpp},
 	}
 
 	for _, tt := range tests {
@@ -83,11 +83,11 @@ func TestDetect_NoYAML(t *testing.T) {
 
 	info, err := Detect(dir)
 	require.NoError(t, err, "unexpected error: %v", err)
-	assert.Equal(t, language.Go, info.Language, "language = %q, want %q", info.Language, language.Go)
-	if assert.NotNil(t, info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults[language.Go].Build) {
-		assert.Equal(t, Defaults[language.Go].Build, *info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults[language.Go].Build)
+	assert.Equal(t, lang.Go, info.Language, "language = %q, want %q", info.Language, lang.Go)
+	if assert.NotNil(t, info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults[lang.Go].Build) {
+		assert.Equal(t, Defaults[lang.Go].Build, *info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults[lang.Go].Build)
 	}
-	assert.Equal(t, Defaults[language.Go].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults[language.Go].Run)
+	assert.Equal(t, Defaults[lang.Go].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults[lang.Go].Run)
 }
 
 func TestDetect_YAMLOverride(t *testing.T) {
@@ -99,7 +99,7 @@ func TestDetect_YAMLOverride(t *testing.T) {
 
 	info, err := Detect(dir)
 	require.NoError(t, err, "unexpected error: %v", err)
-	assert.Equal(t, language.Go, info.Language, "language = %q, want %q", info.Language, language.Go)
+	assert.Equal(t, lang.Go, info.Language, "language = %q, want %q", info.Language, lang.Go)
 	if assert.NotNil(t, info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom build") {
 		assert.Equal(t, "custom build", *info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom build")
 	}
@@ -115,9 +115,9 @@ func TestDetect_PartialYAML(t *testing.T) {
 
 	info, err := Detect(dir)
 	require.NoError(t, err, "unexpected error: %v", err)
-	assert.Equal(t, language.Rust, info.Language, "language = %q, want %q", info.Language, language.Rust)
+	assert.Equal(t, lang.Rust, info.Language, "language = %q, want %q", info.Language, lang.Rust)
 	if assert.NotNil(t, info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom cargo build") {
 		assert.Equal(t, "custom cargo build", *info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom cargo build")
 	}
-	assert.Equal(t, Defaults[language.Rust].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults[language.Rust].Run)
+	assert.Equal(t, Defaults[lang.Rust].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults[lang.Rust].Run)
 }

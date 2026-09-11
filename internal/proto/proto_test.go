@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package protocol
+package proto
 
 import (
 	"bytes"
@@ -21,21 +21,21 @@ import (
 	"math"
 	"testing"
 
-	"github.com/chengxilo/serify/internal/config"
-	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/chengxilo/serify/internal/conf"
+	"github.com/chengxilo/serify/internal/kind"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func field(name, base string) config.Field {
-	return config.Field{Name: name, Type: config.FieldType{Base: base}}
+func field(name, base string) conf.Field {
+	return conf.Field{Name: name, Type: conf.FieldType{Base: base}}
 }
 
 func TestEncodeData_Scalars(t *testing.T) {
-	schema := []config.Field{
-		field("name", typekind.String),
-		field("age", typekind.Uint32),
-		field("active", typekind.Bool),
+	schema := []conf.Field{
+		field("name", kind.String),
+		field("age", kind.Uint32),
+		field("active", kind.Bool),
 	}
 	data := map[string]any{"name": "alice", "age": 30, "active": true}
 
@@ -47,7 +47,7 @@ func TestEncodeData_Scalars(t *testing.T) {
 }
 
 func TestEncodeData_Float32(t *testing.T) {
-	schema := []config.Field{field("val", typekind.Float32)}
+	schema := []conf.Field{field("val", kind.Float32)}
 	data := map[string]any{"val": 1.5}
 
 	out, err := EncodeData(data, schema)
@@ -61,7 +61,7 @@ func TestEncodeData_Float32(t *testing.T) {
 }
 
 func TestEncodeData_Float64(t *testing.T) {
-	schema := []config.Field{field("val", typekind.Float64)}
+	schema := []conf.Field{field("val", kind.Float64)}
 	data := map[string]any{"val": 3.14}
 
 	out, err := EncodeData(data, schema)
@@ -75,9 +75,9 @@ func TestEncodeData_Float64(t *testing.T) {
 }
 
 func TestEncodeData_BigInts(t *testing.T) {
-	for _, base := range []string{typekind.Uint64, typekind.Int64, typekind.Uint128, typekind.Int128} {
+	for _, base := range []string{kind.Uint64, kind.Int64, kind.Uint128, kind.Int128} {
 		t.Run(base, func(t *testing.T) {
-			schema := []config.Field{field("n", base)}
+			schema := []conf.Field{field("n", base)}
 			data := map[string]any{"n": 12345}
 
 			out, err := EncodeData(data, schema)
@@ -88,7 +88,7 @@ func TestEncodeData_BigInts(t *testing.T) {
 }
 
 func TestEncodeData_Bytes(t *testing.T) {
-	schema := []config.Field{field("data", typekind.Bytes)}
+	schema := []conf.Field{field("data", kind.Bytes)}
 
 	t.Run("array", func(t *testing.T) {
 		data := map[string]any{"data": []any{0xde, 0xad}}
@@ -106,9 +106,9 @@ func TestEncodeData_Bytes(t *testing.T) {
 }
 
 func TestEncodeData_Optional(t *testing.T) {
-	schema := []config.Field{{
+	schema := []conf.Field{{
 		Name: "opt",
-		Type: config.FieldType{Base: typekind.Optional, Elem: &config.FieldType{Base: typekind.String}},
+		Type: conf.FieldType{Base: kind.Optional, Elem: &conf.FieldType{Base: kind.String}},
 	}}
 
 	t.Run("nil", func(t *testing.T) {
@@ -125,9 +125,9 @@ func TestEncodeData_Optional(t *testing.T) {
 }
 
 func TestEncodeData_List(t *testing.T) {
-	schema := []config.Field{{
+	schema := []conf.Field{{
 		Name: "nums",
-		Type: config.FieldType{Base: typekind.List, Elem: &config.FieldType{Base: typekind.Uint64}},
+		Type: conf.FieldType{Base: kind.List, Elem: &conf.FieldType{Base: kind.Uint64}},
 	}}
 	data := map[string]any{"nums": []any{1, 2, 3}}
 
@@ -138,9 +138,9 @@ func TestEncodeData_List(t *testing.T) {
 }
 
 func TestEncodeData_Array(t *testing.T) {
-	schema := []config.Field{{
+	schema := []conf.Field{{
 		Name: "pair",
-		Type: config.FieldType{Base: typekind.Array, Elem: &config.FieldType{Base: typekind.String}, ArrayN: 2},
+		Type: conf.FieldType{Base: kind.Array, Elem: &conf.FieldType{Base: kind.String}, ArrayN: 2},
 	}}
 	data := map[string]any{"pair": []any{"a", "b"}}
 
@@ -151,9 +151,9 @@ func TestEncodeData_Array(t *testing.T) {
 }
 
 func TestEncodeData_ArrayLengthMismatch(t *testing.T) {
-	schema := []config.Field{{
+	schema := []conf.Field{{
 		Name: "pair",
-		Type: config.FieldType{Base: typekind.Array, Elem: &config.FieldType{Base: typekind.String}, ArrayN: 2},
+		Type: conf.FieldType{Base: kind.Array, Elem: &conf.FieldType{Base: kind.String}, ArrayN: 2},
 	}}
 	data := map[string]any{"pair": []any{"a"}}
 
@@ -162,12 +162,12 @@ func TestEncodeData_ArrayLengthMismatch(t *testing.T) {
 }
 
 func TestEncodeData_Map(t *testing.T) {
-	schema := []config.Field{{
+	schema := []conf.Field{{
 		Name: "kv",
-		Type: config.FieldType{
-			Base: typekind.Map,
-			Key:  &config.FieldType{Base: typekind.String},
-			Elem: &config.FieldType{Base: typekind.Uint64},
+		Type: conf.FieldType{
+			Base: kind.Map,
+			Key:  &conf.FieldType{Base: kind.String},
+			Elem: &conf.FieldType{Base: kind.Uint64},
 		},
 	}}
 	data := map[string]any{"kv": map[string]any{"x": 42}}
@@ -179,13 +179,13 @@ func TestEncodeData_Map(t *testing.T) {
 }
 
 func TestEncodeData_Struct(t *testing.T) {
-	schema := []config.Field{{
+	schema := []conf.Field{{
 		Name: "addr",
-		Type: config.FieldType{
-			Base: typekind.Struct,
-			Fields: []config.Field{
-				field("city", typekind.String),
-				field("zip", typekind.Uint32),
+		Type: conf.FieldType{
+			Base: kind.Struct,
+			Fields: []conf.Field{
+				field("city", kind.String),
+				field("zip", kind.Uint32),
 			},
 		},
 	}}
@@ -199,7 +199,7 @@ func TestEncodeData_Struct(t *testing.T) {
 }
 
 func TestEncodeData_UnknownField(t *testing.T) {
-	schema := []config.Field{field("name", typekind.String)}
+	schema := []conf.Field{field("name", kind.String)}
 	data := map[string]any{"unknown": "val"}
 
 	_, err := EncodeData(data, schema)

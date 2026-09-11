@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orchestrate
+package orch
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/chengxilo/serify/internal/config"
+	"github.com/chengxilo/serify/internal/conf"
 	"github.com/chengxilo/serify/internal/report"
 )
 
@@ -47,7 +47,7 @@ func isCascadeSkip(detail string) bool {
 // Declared but nothing skipped -> WARN (stale entry, delete it)
 //
 // A language with no expected-skips file is expected to cover everything.
-func CheckExpectedSkips(rep *report.Report, expected map[string]config.ExpectedSkips) {
+func CheckExpectedSkips(rep *report.Report, expected map[string]conf.ExpectedSkips) {
 	var undeclared []report.Result
 	// lang -> declared entry -> actually used
 	used := map[string]map[string]bool{}

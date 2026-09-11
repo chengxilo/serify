@@ -23,7 +23,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
@@ -47,7 +47,7 @@ func TestExamples_Customer(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, language.Go)
+	requireLang(t, lang.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -90,7 +90,7 @@ func allWorkersGrid(t *testing.T) testutil.ResultGrid {
 		// other skip now fails the run. Only languages actually in the run have
 		// their file read, so a partial local run raises no stale warnings.
 		args := []string{
-			"run", "--ref", language.Go, "--cases", casesDir, "--csv", csv,
+			"run", "--ref", lang.Go, "--cases", casesDir, "--csv", csv,
 			"--expect-skips", filepath.Join(casesDir, "expected_skips"),
 		}
 		for _, lang := range availableLangs {
@@ -119,7 +119,7 @@ func TestExamples_Ledger(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, language.Go)
+	requireLang(t, lang.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -143,7 +143,7 @@ func TestExamples_Notification(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, language.Go)
+	requireLang(t, lang.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -187,7 +187,7 @@ func TestExamples_Signals(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, language.Go)
+	requireLang(t, lang.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -217,22 +217,22 @@ func TestExamples_Telemetry(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, language.Go)
+	requireLang(t, lang.Go)
 
 	grid := allWorkersGrid(t)
-	for _, lang := range availableLangs {
-		if lang == language.Elixir {
+	for _, l := range availableLangs {
+		if l == lang.Elixir {
 			continue
 		}
 		for _, op := range []string{"serialize", "deserialize"} {
 			// humidity_pct is present in nominal and null in zero, so both
 			// sides of the optional are compared byte-for-byte.
-			testutil.AssertCell(t, grid, "telemetry/binary/nominal", lang, op, report.StatusPass, nil)
-			testutil.AssertCell(t, grid, "telemetry/binary/zero", lang, op, report.StatusPass, nil)
-			testutil.AssertCell(t, grid, "telemetry/binary/float_nan", lang, op, report.StatusPass, nil)
-			testutil.AssertCell(t, grid, "telemetry/binary/float_inf", lang, op, report.StatusPass, nil)
-			testutil.AssertCell(t, grid, "telemetry/binary/float_neg_zero", lang, op, report.StatusPass, nil)
-			testutil.AssertCell(t, grid, "telemetry/binary/int_boundaries", lang, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/nominal", l, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/zero", l, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/float_nan", l, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/float_inf", l, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/float_neg_zero", l, op, report.StatusPass, nil)
+			testutil.AssertCell(t, grid, "telemetry/binary/int_boundaries", l, op, report.StatusPass, nil)
 		}
 	}
 }
@@ -255,7 +255,7 @@ func TestExamples_Order(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, language.Go)
+	requireLang(t, lang.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -274,7 +274,7 @@ func TestExamples_Audit(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, language.Go)
+	requireLang(t, lang.Go)
 
 	repoRoot := testutil.RepoRoot()
 	var workerDirs []string
@@ -287,7 +287,7 @@ func TestExamples_Audit(t *testing.T) {
 	casesDir := filepath.Join(repoRoot, "examples", "appdata", "cases")
 	csv := filepath.Join(t.TempDir(), "out.csv")
 
-	args := []string{"run", "--ref", language.Go, "--cases", casesDir, "--csv", csv, "--audit"}
+	args := []string{"run", "--ref", lang.Go, "--cases", casesDir, "--csv", csv, "--audit"}
 	args = append(args, workerDirs...)
 
 	out, code := testutil.RunSerify(t, args...)

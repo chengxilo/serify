@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package orchestrate drives the test rounds across all workers concurrently.
-package orchestrate
+// Package orch drives the test rounds across all workers concurrently.
+package orch
 
 import (
 	"context"
@@ -27,11 +27,11 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/chengxilo/serify/internal/compare"
-	"github.com/chengxilo/serify/internal/config"
-	"github.com/chengxilo/serify/internal/protocol"
+	"github.com/chengxilo/serify/internal/cmp"
+	"github.com/chengxilo/serify/internal/conf"
+	"github.com/chengxilo/serify/internal/kind"
+	"github.com/chengxilo/serify/internal/proto"
 	"github.com/chengxilo/serify/internal/report"
-	"github.com/chengxilo/serify/internal/typekind"
 	"github.com/chengxilo/serify/internal/worker"
 )
 
@@ -42,7 +42,7 @@ type Options struct {
 	KnownFails map[string]map[string]string // lang → testID → reason
 	Audit      bool
 	// Oracle is the comparison strategy for the format currently under test
-	// (config.OracleBytes or config.OracleSemantic). RunSuite sets it per format
+	// (conf.OracleBytes or conf.OracleSemantic). RunSuite sets it per format
 	// before calling Run; empty is treated as OracleBytes.
 	Oracle string
 }
@@ -55,7 +55,7 @@ type Options struct {
 // explicitly (enforced at load time).
 func RunSuite(
 	ctx context.Context,
-	set *config.CasesSet,
+	set *conf.CasesSet,
 	workers map[string]*worker.Worker,
 	rep *report.Report,
 	opts Options,
@@ -82,8 +82,8 @@ func RunSuite(
 // runTypeFormat binds all workers to one (type, format) and runs its cases.
 func runTypeFormat(
 	ctx context.Context,
-	set *config.CasesSet,
-	ty *config.CasesFile,
+	set *conf.CasesSet,
+	ty *conf.CasesFile,
 	format string,
 	workers map[string]*worker.Worker,
 	rep *report.Report,
@@ -116,7 +116,7 @@ func runTypeFormat(
 		return nil
 	}
 
-	cf := &config.CasesFile{
+	cf := &conf.CasesFile{
 		ReferenceLanguage: set.ReferenceLanguage,
 		Schema:            ty.Schema,
 		Cases:             namespacedCases(ty, format),
@@ -129,31 +129,31 @@ func runTypeFormat(
 
 // namespacedCases prefixes each case id with the type and format for global
 // uniqueness.
-func namespacedCases(ty *config.CasesFile, format string) []config.TestCase {
-	out := make([]config.TestCase, len(ty.Cases))
+func namespacedCases(ty *conf.CasesFile, format string) []conf.TestCase {
+	out := make([]conf.TestCase, len(ty.Cases))
 	for i, tc := range ty.Cases {
-		tc.Name = config.TestIDFmt(ty.Name, format, tc.Name)
+		tc.Name = conf.TestIDFmt(ty.Name, format, tc.Name)
 		out[i] = tc
 	}
 	return out
 }
 
 // markTypeSkipped records SKIP for every case+round of a (type, format) for one language.
-func markTypeSkipped(rep *report.Report, lang string, ty *config.CasesFile, format, reason string) {
+func markTypeSkipped(rep *report.Report, lang string, ty *conf.CasesFile, format, reason string) {
 	markType(rep, lang, ty, format, report.StatusSkip, reason)
 }
 
 // markTypeErrored records ERROR for every case+round of a (type, format) for one
 // language. Unlike SKIP this counts as a failure and drives a non-zero exit.
-func markTypeErrored(rep *report.Report, lang string, ty *config.CasesFile, format, reason string) {
+func markTypeErrored(rep *report.Report, lang string, ty *conf.CasesFile, format, reason string) {
 	markType(rep, lang, ty, format, report.StatusError, reason)
 }
 
 func markType(
-	rep *report.Report, lang string, ty *config.CasesFile, format string, status report.Status, reason string,
+	rep *report.Report, lang string, ty *conf.CasesFile, format string, status report.Status, reason string,
 ) {
 	for _, tc := range ty.Cases {
-		id := config.TestIDFmt(ty.Name, format, tc.Name)
+		id := conf.TestIDFmt(ty.Name, format, tc.Name)
 		for _, round := range []string{report.OpSerialize, report.OpDeserialize} {
 			rep.Add(
 				report.Result{TestID: id, Language: lang, Operation: round, Status: status, Detail: reason},
@@ -168,7 +168,7 @@ func markType(
 //nolint:gocognit,gocyclo,cyclop,funlen // matrix driver: cases x languages x ops, each with its own
 func Run(
 	ctx context.Context,
-	cases *config.CasesFile,
+	cases *conf.CasesFile,
 	workers map[string]*worker.Worker,
 	rep *report.Report,
 	opts Options,
@@ -179,11 +179,11 @@ func Run(
 
 	fieldNames := make([]string, len(cases.Schema))
 	// floatFields carry their value as IEEE-754 hex on the wire; DataDiff treats
-	// two NaN encodings as equal for them (see compare.DataDiff).
+	// two NaN encodings as equal for them (see cmp.DataDiff).
 	floatFields := make(map[string]bool)
 	for i, f := range cases.Schema {
 		fieldNames[i] = f.Name
-		if f.Type.Base == typekind.Float32 || f.Type.Base == typekind.Float64 {
+		if f.Type.Base == kind.Float32 || f.Type.Base == kind.Float64 {
 			floatFields[f.Name] = true
 		}
 	}
@@ -219,7 +219,7 @@ func Run(
 		for _, lang := range langs {
 			w := workers[lang]
 			g.Go(func() error {
-				resp, err := w.Send(gctx, protocol.NewSerializeRequest(tc.Name, encoded), opts.TimeoutSec)
+				resp, err := w.Send(gctx, proto.NewSerializeRequest(tc.Name, encoded), opts.TimeoutSec)
 
 				// Check context cancellation during the send.
 				select {
@@ -231,7 +231,7 @@ func Run(
 				status, detail := resolveResult(lang, tc.Name, resp, err, opts.KnownFails)
 
 				hexMu.Lock()
-				okNow := resp != nil && resp.Status == protocol.StatusOK
+				okNow := resp != nil && resp.Status == proto.StatusOK
 				if okNow {
 					hexResults[lang] = resp.Hex
 					serializedOK[lang] = true
@@ -309,7 +309,7 @@ func Run(
 
 			var diff string
 			switch opts.Oracle {
-			case config.OracleSemantic:
+			case conf.OracleSemantic:
 				// Semantic oracle: the reference deserializes the candidate's
 				// bytes and we compare the decoded value, not the bytes — so map
 				// entry order and other non-canonical wire freedom do not fail.
@@ -318,7 +318,7 @@ func Run(
 				diff = semanticSerializeDiff(ctx, workers[refLang], tc.Name, lang,
 					hexResults[lang], encoded, fieldNames, floatFields, opts.TimeoutSec)
 			default: // OracleBytes (also the empty default)
-				diff = compare.HexDiff(refHex, hexResults[lang])
+				diff = cmp.HexDiff(refHex, hexResults[lang])
 			}
 			status, detail := verdict(diff, reason, known)
 			rep.Add(report.Result{
@@ -346,7 +346,7 @@ func Run(
 		for _, lang := range langs {
 			w := workers[lang]
 			g2.Go(func() error {
-				resp, err := w.Send(gctx2, protocol.NewDeserializeRequest(tc.Name, refHex), opts.TimeoutSec)
+				resp, err := w.Send(gctx2, proto.NewDeserializeRequest(tc.Name, refHex), opts.TimeoutSec)
 
 				select {
 				case <-gctx2.Done():
@@ -361,10 +361,10 @@ func Run(
 				// returned XPASS, which failed the `status == Pass` guard and so
 				// skipped the comparison entirely — reporting "expected to fail
 				// but passed" for data that had never been compared.
-				if resp != nil && resp.Status == protocol.StatusOK {
+				if resp != nil && resp.Status == proto.StatusOK {
 					reason, known := opts.KnownFails[lang][tc.Name]
 					status, detail = verdict(
-						compare.DataDiff(encoded, resp.Data, fieldNames, floatFields), reason, known)
+						cmp.DataDiff(encoded, resp.Data, fieldNames, floatFields), reason, known)
 				}
 
 				rep.Add(report.Result{
@@ -411,7 +411,7 @@ func Run(
 
 func runMatrix(
 	ctx context.Context,
-	tc config.TestCase,
+	tc conf.TestCase,
 	encoded map[string]any,
 	fieldNames []string,
 	floatFields map[string]bool,
@@ -438,10 +438,10 @@ func runMatrix(
 			}
 			w := workers[dstLang]
 			g.Go(func() error {
-				resp, err := w.Send(gctx, protocol.NewDeserializeRequest(fmt.Sprintf("%s/matrix-%s→%s", tc.Name, srcLang, dstLang), srcHex), opts.TimeoutSec)
+				resp, err := w.Send(gctx, proto.NewDeserializeRequest(fmt.Sprintf("%s/matrix-%s→%s", tc.Name, srcLang, dstLang), srcHex), opts.TimeoutSec)
 				status, detail := resolveResult(dstLang, tc.Name, resp, err, opts.KnownFails)
 				if status == report.StatusPass && resp != nil {
-					diff := compare.DataDiff(encoded, resp.Data, fieldNames, floatFields)
+					diff := cmp.DataDiff(encoded, resp.Data, fieldNames, floatFields)
 					if diff != "" {
 						status = report.StatusFail
 						detail = diff
@@ -475,18 +475,18 @@ func semanticSerializeDiff(
 	floatFields map[string]bool,
 	timeoutSec int,
 ) string {
-	resp, err := ref.Send(ctx, protocol.NewDeserializeRequest(fmt.Sprintf("%s/semantic-%s", testID, srcLang), srcHex), timeoutSec)
+	resp, err := ref.Send(ctx, proto.NewDeserializeRequest(fmt.Sprintf("%s/semantic-%s", testID, srcLang), srcHex), timeoutSec)
 	if err != nil {
 		return fmt.Sprintf("reference could not deserialize %s output: %v", srcLang, err)
 	}
-	if resp == nil || resp.Status != protocol.StatusOK {
+	if resp == nil || resp.Status != proto.StatusOK {
 		detail := "reference could not deserialize " + srcLang + " output"
 		if resp != nil && resp.Error != "" {
 			detail += ": " + resp.Error
 		}
 		return detail
 	}
-	return compare.DataDiff(encoded, resp.Data, fieldNames, floatFields)
+	return cmp.DataDiff(encoded, resp.Data, fieldNames, floatFields)
 }
 
 // verdict turns one comparison outcome into a status, honouring known failures.
@@ -514,7 +514,7 @@ func xpassDetail(reason string) string {
 
 func resolveResult(
 	lang, testID string,
-	resp *protocol.Response,
+	resp *proto.Response,
 	err error,
 	knownFails map[string]map[string]string,
 ) (report.Status, string) {
@@ -526,7 +526,7 @@ func resolveResult(
 	}
 
 	switch resp.Status {
-	case protocol.StatusOK:
+	case proto.StatusOK:
 		// Check known failures — if expected to fail but passed, return XPASS.
 		// The reference worker has nothing to compare against, so its verdict is
 		// settled here; every other worker is judged by verdict() after the
@@ -535,9 +535,9 @@ func resolveResult(
 			return report.StatusXPass, xpassDetail(reason)
 		}
 		return report.StatusPass, ""
-	case protocol.StatusSkipped:
+	case proto.StatusSkipped:
 		return report.StatusSkip, resp.Reason
-	case protocol.StatusError:
+	case proto.StatusError:
 		// Check known failures
 		if reason, ok := knownFails[lang][testID]; ok {
 			return report.StatusXFail, reason
@@ -561,8 +561,8 @@ func warn(rep *report.Report, testID, lang, op, detail string) {
 // encodeCase encodes a case's data to wire form, then normalizes it through a
 // JSON round-trip so comparisons against worker responses (which arrive via
 // json.Unmarshal → map[string]any) use identical Go types on both sides.
-func encodeCase(tc config.TestCase, schema []config.Field) (map[string]any, error) {
-	encoded, err := protocol.EncodeData(tc.Data, schema)
+func encodeCase(tc conf.TestCase, schema []conf.Field) (map[string]any, error) {
+	encoded, err := proto.EncodeData(tc.Data, schema)
 	if err != nil {
 		return nil, fmt.Errorf("encode: %w", err)
 	}

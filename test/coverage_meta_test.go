@@ -22,13 +22,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
 
 // The decision logic behind --expect-skips is unit-tested in
-// internal/orchestrate/coverage_test.go. What that cannot reach is the half
+// internal/orch/coverage_test.go. What that cannot reach is the half
 // that lives in the CLI: finding the directory, loading <lang>.yaml, and
 // deciding whether to enforce at all. Every one of those steps fails *open* —
 // a missing directory, an unreadable file and an empty declaration all leave
@@ -50,7 +50,7 @@ const (
 	// reason it declines the four below. A declaration has to name both types or
 	// the run is not actually green.
 	coverageModelType = "audit_model"
-	coverageSkipper   = language.Python
+	coverageSkipper   = lang.Python
 )
 
 // coverageSkipIDs are the ten rows python skips, as test ids.
@@ -83,14 +83,14 @@ func writeExpectSkips(t *testing.T, decls map[string][]string) string {
 // baseline it departs from: a skip is exit-code-neutral until a directory says
 // otherwise.
 func TestCLI_ExpectSkips(t *testing.T) {
-	c := audit.With(language.Go, coverageSkipper)
+	c := audit.With(lang.Go, coverageSkipper)
 	requireWorkers(t, c.langs...)
 
 	run := func(t *testing.T, extra ...string) (string, int, resultGrid) {
 		t.Helper()
 		csv := filepath.Join(t.TempDir(), "out.csv")
 		args := append([]string{"--csv", csv, "--audit"}, extra...)
-		out, code := testutil.RunSerify(t, c.runArgs(language.Go, c.CasePath(), args...)...)
+		out, code := testutil.RunSerify(t, c.runArgs(lang.Go, c.CasePath(), args...)...)
 		return out, code, readResultGrid(t, csv)
 	}
 
@@ -125,7 +125,7 @@ func TestCLI_ExpectSkips(t *testing.T) {
 
 		// go covers everything and must be untouched: enforcement is per
 		// language, not a switch that reclassifies every skip in the run.
-		testutil.AssertCell(t, grid, "audit/clean/basic", language.Go, report.OpSerialize, report.StatusPass, nil)
+		testutil.AssertCell(t, grid, "audit/clean/basic", lang.Go, report.OpSerialize, report.StatusPass, nil)
 	})
 
 	// A declared gap is the honest case and stays green.
@@ -150,7 +150,7 @@ func TestCLI_ExpectSkips(t *testing.T) {
 			// python's real gaps, so the only thing left for the run to
 			// complain about is go's entry.
 			coverageSkipper: {coverageType, coverageModelType},
-			language.Go:     {coverageType},
+			lang.Go:     {coverageType},
 		})
 		out, code, _ := run(t, "--expect-skips", dir)
 		require.Equal(t, 0, code, "serify exit = %d, want 0 (a stale entry is advisory)\n%s", code, out)

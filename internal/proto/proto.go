@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package protocol defines the NDJSON wire format between runner and workers.
-package protocol
+// Package proto defines the NDJSON wire format between runner and workers.
+package proto
 
 import (
 	"bufio"
@@ -27,8 +27,8 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/chengxilo/serify/internal/config"
-	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/chengxilo/serify/internal/conf"
+	"github.com/chengxilo/serify/internal/kind"
 )
 
 // scannerBufSize is the initial and max token buffer for the NDJSON scanner (4 MB).
@@ -210,7 +210,7 @@ func (r *Reader) Read() (*Response, error) {
 	return &resp, nil
 }
 
-func findVariant(vs []config.Variant, tag string) *config.Variant {
+func findVariant(vs []conf.Variant, tag string) *conf.Variant {
 	for i := range vs {
 		if vs[i].Name == tag {
 			return &vs[i]
@@ -221,9 +221,9 @@ func findVariant(vs []config.Variant, tag string) *config.Variant {
 
 // EncodeData converts raw test-case data values into wire-safe representations
 // (u64/u128 → decimal string, f32/f64 → IEEE 754 LE hex, struct → nested map).
-func EncodeData(data map[string]any, schema []config.Field) (map[string]any, error) {
+func EncodeData(data map[string]any, schema []conf.Field) (map[string]any, error) {
 	out := make(map[string]any, len(data))
-	fieldTypes := make(map[string]config.Field, len(schema))
+	fieldTypes := make(map[string]conf.Field, len(schema))
 	for _, f := range schema {
 		fieldTypes[f.Name] = f
 	}
@@ -242,9 +242,9 @@ func EncodeData(data map[string]any, schema []config.Field) (map[string]any, err
 }
 
 //nolint:gocognit,funlen // one encode branch per schema type
-func encodeValue(v any, ft config.FieldType) (any, error) {
+func encodeValue(v any, ft conf.FieldType) (any, error) {
 	switch ft.Base {
-	case typekind.Float32:
+	case kind.Float32:
 		f, err := toFloat64(v)
 		if err != nil {
 			return nil, err
@@ -254,7 +254,7 @@ func encodeValue(v any, ft config.FieldType) (any, error) {
 		binary.LittleEndian.PutUint32(b[:], bits)
 		return hex.EncodeToString(b[:]), nil
 
-	case typekind.Float64:
+	case kind.Float64:
 		f, err := toFloat64(v)
 		if err != nil {
 			return nil, err
@@ -264,16 +264,16 @@ func encodeValue(v any, ft config.FieldType) (any, error) {
 		binary.LittleEndian.PutUint64(b[:], bits)
 		return hex.EncodeToString(b[:]), nil
 
-	case typekind.Uint64, typekind.Int64, typekind.Uint128, typekind.Int128:
+	case kind.Uint64, kind.Int64, kind.Uint128, kind.Int128:
 		// 64/128-bit integers travel as decimal strings to survive JSON.
 		return fmt.Sprintf("%v", v), nil
 
-	case typekind.Bytes:
+	case kind.Bytes:
 		// Authored as a byte array ([0xde, 0xad, ...] or [222, 173, ...]); a hex
 		// string is also accepted. Travels to workers as hex either way.
 		return encodeBytes(v)
 
-	case typekind.Struct:
+	case kind.Struct:
 		obj, ok := toStringMap(v)
 		if !ok {
 			return nil, fmt.Errorf("expected object for struct, got %T", v)
@@ -292,18 +292,18 @@ func encodeValue(v any, ft config.FieldType) (any, error) {
 		}
 		return out, nil
 
-	case typekind.Optional:
+	case kind.Optional:
 		if v == nil {
 			return nil, nil //nolint:nilnil // sentinel error not appropriate: EncodeData callers check err != nil
 		}
 		return encodeValue(v, *ft.Elem)
 
-	case typekind.List, typekind.Array:
+	case kind.List, kind.Array:
 		arr, ok := toSlice(v)
 		if !ok {
 			return nil, fmt.Errorf("expected %s, got %T", ft.Base, v)
 		}
-		if ft.Base == typekind.Array && len(arr) != ft.ArrayN {
+		if ft.Base == kind.Array && len(arr) != ft.ArrayN {
 			return nil, fmt.Errorf("array length mismatch: expected %d, got %d", ft.ArrayN, len(arr))
 		}
 		out := make([]any, len(arr))
@@ -316,7 +316,7 @@ func encodeValue(v any, ft config.FieldType) (any, error) {
 		}
 		return out, nil
 
-	case typekind.Map:
+	case kind.Map:
 		obj, ok := toStringMap(v)
 		if !ok {
 			return nil, fmt.Errorf("expected object for map, got %T", v)
@@ -331,17 +331,17 @@ func encodeValue(v any, ft config.FieldType) (any, error) {
 		}
 		return out, nil
 
-	case typekind.Enum:
+	case kind.Enum:
 		// The variant name travels as a string; the schema carries the variant list
 		// so the worker can map it onto whatever its byte layout uses (typically an
-		// ordinal). config.validate has already checked the name is a declared one.
+		// ordinal). conf.validate has already checked the name is a declared one.
 		s, ok := v.(string)
 		if !ok {
 			return nil, fmt.Errorf("expected a string enum variant, got %T", v)
 		}
 		return s, nil
 
-	case typekind.Sum:
+	case kind.Sum:
 		// A variant travels as a single-key map {tag: encoded_payload}; the
 		// payload is encoded per that variant's type (nil for a unit variant).
 		obj, ok := toStringMap(v)
@@ -437,9 +437,9 @@ func toStringMap(v any) (map[string]any, bool) {
 	return x, ok
 }
 
-// SchemaFields converts a config.Field slice to wire SchemaFields, recursing
+// SchemaFields converts a conf.Field slice to wire SchemaFields, recursing
 // into struct/sum types.
-func SchemaFields(fields []config.Field) []SchemaField {
+func SchemaFields(fields []conf.Field) []SchemaField {
 	out := make([]SchemaField, len(fields))
 	for i, f := range fields {
 		sf := schemaFieldOfType(f.Name, f.Type)
@@ -451,21 +451,21 @@ func SchemaFields(fields []config.Field) []SchemaField {
 
 // schemaFieldOfType builds a SchemaField for a named field of the given type,
 // carrying the structured shape (nested struct fields, map key, variants).
-func schemaFieldOfType(name string, ft config.FieldType) SchemaField {
+func schemaFieldOfType(name string, ft conf.FieldType) SchemaField {
 	sf := SchemaField{Name: name, Type: ft.String()}
 	switch ft.Base {
-	case typekind.Struct:
+	case kind.Struct:
 		sf.Fields = SchemaFields(ft.Fields)
-	case typekind.List, typekind.Optional:
-		if ft.Elem != nil && ft.Elem.Base == typekind.Struct {
+	case kind.List, kind.Optional:
+		if ft.Elem != nil && ft.Elem.Base == kind.Struct {
 			sf.Fields = SchemaFields(ft.Elem.Fields)
 		}
-	case typekind.Map:
+	case kind.Map:
 		sf.KeyType = ft.Key.String()
-		if ft.Elem != nil && ft.Elem.Base == typekind.Struct {
+		if ft.Elem != nil && ft.Elem.Base == kind.Struct {
 			sf.Fields = SchemaFields(ft.Elem.Fields)
 		}
-	case typekind.Sum:
+	case kind.Sum:
 		sf.Variants = make([]SchemaVariant, len(ft.Variants))
 		for j, v := range ft.Variants {
 			sv := SchemaVariant{Name: v.Name}

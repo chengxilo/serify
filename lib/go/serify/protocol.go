@@ -26,7 +26,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/chengxilo/serify/internal/kind"
 )
 
 // float32ByteLen is the wire size of a float32 in bytes (IEEE 754 single).
@@ -145,49 +145,49 @@ func decodeSum(fm *FieldMap, sf SchemaField, r json.RawMessage) error {
 // paths all route element decoding through here.
 func decodeScalar(typ string, fields []SchemaField, r json.RawMessage) (any, error) {
 	switch typ {
-	case typekind.Uint8:
+	case kind.Uint8:
 		return numFromJSON[uint8](r)
-	case typekind.Uint16:
+	case kind.Uint16:
 		return numFromJSON[uint16](r)
-	case typekind.Uint32:
+	case kind.Uint32:
 		return numFromJSON[uint32](r)
-	case typekind.Int8:
+	case kind.Int8:
 		return numFromJSON[int8](r)
-	case typekind.Int16:
+	case kind.Int16:
 		return numFromJSON[int16](r)
-	case typekind.Int32:
+	case kind.Int32:
 		return numFromJSON[int32](r)
-	case typekind.Uint64:
+	case kind.Uint64:
 		return uintFromString(r)
-	case typekind.Int64:
+	case kind.Int64:
 		return intFromString(r)
-	case typekind.Uint128:
+	case kind.Uint128:
 		return bigFromString(r, false)
-	case typekind.Int128:
+	case kind.Int128:
 		return bigFromString(r, true)
-	case typekind.Float32:
+	case kind.Float32:
 		b, err := hexBytes(r, float32ByteLen)
 		if err != nil {
 			return nil, err
 		}
 		return math.Float32frombits(binary.LittleEndian.Uint32(b)), nil
-	case typekind.Float64:
+	case kind.Float64:
 		b, err := hexBytes(r, float64ByteLen)
 		if err != nil {
 			return nil, err
 		}
 		return math.Float64frombits(binary.LittleEndian.Uint64(b)), nil
-	case typekind.Bool:
+	case kind.Bool:
 		return jsonValue[bool](r)
-	case typekind.String:
+	case kind.String:
 		return jsonValue[string](r)
-	case typekind.Bytes:
+	case kind.Bytes:
 		var s string
 		if err := json.Unmarshal(r, &s); err != nil {
 			return nil, err
 		}
 		return hex.DecodeString(s)
-	case typekind.Struct:
+	case kind.Struct:
 		var obj map[string]json.RawMessage
 		if err := json.Unmarshal(r, &obj); err != nil {
 			return nil, err
@@ -212,35 +212,35 @@ func decodeList(fm *FieldMap, sf SchemaField, elemType string, r json.RawMessage
 		err error
 	)
 	switch elemType {
-	case typekind.Uint8:
+	case kind.Uint8:
 		out, err = collectList[uint8](sf, elemType, arr)
-	case typekind.Uint16:
+	case kind.Uint16:
 		out, err = collectList[uint16](sf, elemType, arr)
-	case typekind.Uint32:
+	case kind.Uint32:
 		out, err = collectList[uint32](sf, elemType, arr)
-	case typekind.Uint64:
+	case kind.Uint64:
 		out, err = collectList[uint64](sf, elemType, arr)
-	case typekind.Int8:
+	case kind.Int8:
 		out, err = collectList[int8](sf, elemType, arr)
-	case typekind.Int16:
+	case kind.Int16:
 		out, err = collectList[int16](sf, elemType, arr)
-	case typekind.Int32:
+	case kind.Int32:
 		out, err = collectList[int32](sf, elemType, arr)
-	case typekind.Int64:
+	case kind.Int64:
 		out, err = collectList[int64](sf, elemType, arr)
-	case typekind.Uint128, typekind.Int128:
+	case kind.Uint128, kind.Int128:
 		out, err = collectList[*big.Int](sf, elemType, arr)
-	case typekind.Float32:
+	case kind.Float32:
 		out, err = collectList[float32](sf, elemType, arr)
-	case typekind.Float64:
+	case kind.Float64:
 		out, err = collectList[float64](sf, elemType, arr)
-	case typekind.Bool:
+	case kind.Bool:
 		out, err = collectList[bool](sf, elemType, arr)
-	case typekind.String:
+	case kind.String:
 		out, err = collectList[string](sf, elemType, arr)
-	case typekind.Bytes:
+	case kind.Bytes:
 		out, err = collectList[[]byte](sf, elemType, arr)
-	case typekind.Struct:
+	case kind.Struct:
 		out, err = collectList[*FieldMap](sf, elemType, arr)
 	default:
 		return fmt.Errorf("unsupported list element type %q", elemType)
@@ -255,9 +255,9 @@ func decodeList(fm *FieldMap, sf SchemaField, elemType string, r json.RawMessage
 func decodeOptional(fm *FieldMap, sf SchemaField, elemType string, r json.RawMessage) error {
 	if string(r) == "null" {
 		switch elemType {
-		case typekind.String:
+		case kind.String:
 			fm.SetOptionalString(sf.Name, nil)
-		case typekind.Struct:
+		case kind.Struct:
 			fm.SetOptionalStruct(sf.Name, nil)
 		default:
 			fm.fields[sf.Name] = nil
@@ -265,7 +265,7 @@ func decodeOptional(fm *FieldMap, sf SchemaField, elemType string, r json.RawMes
 		return nil
 	}
 	switch elemType {
-	case typekind.String:
+	case kind.String:
 		s, err := jsonValue[string](r)
 		if err != nil {
 			return err
@@ -331,7 +331,7 @@ func arrayLen(typ string) (int, bool) {
 // e.g. "map<string,uint32>" -> "uint32", "map<string,struct>" -> "struct".
 func mapValueType(typ string) string {
 	inner := typ[4 : len(typ)-1] // strip "map<" and ">"
-	kv := typekind.SplitTopLevel(inner)
+	kv := kind.SplitTopLevel(inner)
 	if len(kv) != 2 {
 		return ""
 	}
@@ -437,48 +437,48 @@ func encodeSum(sf SchemaField, v any) (any, error) {
 // into its wire JSON representation.
 func encodeScalar(typ string, fields []SchemaField, v any) (any, error) {
 	switch typ {
-	case typekind.Uint8,
-		typekind.Uint16,
-		typekind.Uint32,
-		typekind.Int8,
-		typekind.Int16,
-		typekind.Int32,
-		typekind.Bool,
-		typekind.String:
+	case kind.Uint8,
+		kind.Uint16,
+		kind.Uint32,
+		kind.Int8,
+		kind.Int16,
+		kind.Int32,
+		kind.Bool,
+		kind.String:
 		return v, nil
-	case typekind.Uint128, typekind.Int128:
+	case kind.Uint128, kind.Int128:
 		return bigToString(v)
-	case typekind.Uint64:
+	case kind.Uint64:
 		n, ok := v.(uint64)
 		if !ok {
 			return nil, fmt.Errorf("expected uint64, got %T", v)
 		}
 		return strconv.FormatUint(n, 10), nil
-	case typekind.Int64:
+	case kind.Int64:
 		n, ok := v.(int64)
 		if !ok {
 			return nil, fmt.Errorf("expected int64, got %T", v)
 		}
 		return strconv.FormatInt(n, 10), nil
-	case typekind.Float32:
+	case kind.Float32:
 		f, ok := v.(float32)
 		if !ok {
 			return nil, fmt.Errorf("expected float32, got %T", v)
 		}
 		return floatHex(uint64(math.Float32bits(f)), float32ByteLen), nil
-	case typekind.Float64:
+	case kind.Float64:
 		f, ok := v.(float64)
 		if !ok {
 			return nil, fmt.Errorf("expected float64, got %T", v)
 		}
 		return floatHex(math.Float64bits(f), float64ByteLen), nil
-	case typekind.Bytes:
+	case kind.Bytes:
 		b, ok := v.([]byte)
 		if !ok {
 			return nil, fmt.Errorf("expected []byte, got %T", v)
 		}
 		return hex.EncodeToString(b), nil
-	case typekind.Struct:
+	case kind.Struct:
 		nested, ok := v.(*FieldMap)
 		if !ok {
 			return nil, fmt.Errorf("expected *FieldMap for struct, got %T", v)
@@ -494,35 +494,35 @@ func encodeScalar(typ string, fields []SchemaField, v any) (any, error) {
 // value is expected to be stored as.
 func encodeList(sf SchemaField, elemType string, v any) (any, error) {
 	switch elemType {
-	case typekind.Uint8:
+	case kind.Uint8:
 		return encodeEachList[uint8](sf, elemType, v)
-	case typekind.Uint16:
+	case kind.Uint16:
 		return encodeEachList[uint16](sf, elemType, v)
-	case typekind.Uint32:
+	case kind.Uint32:
 		return encodeEachList[uint32](sf, elemType, v)
-	case typekind.Uint64:
+	case kind.Uint64:
 		return encodeEachList[uint64](sf, elemType, v)
-	case typekind.Int8:
+	case kind.Int8:
 		return encodeEachList[int8](sf, elemType, v)
-	case typekind.Int16:
+	case kind.Int16:
 		return encodeEachList[int16](sf, elemType, v)
-	case typekind.Int32:
+	case kind.Int32:
 		return encodeEachList[int32](sf, elemType, v)
-	case typekind.Int64:
+	case kind.Int64:
 		return encodeEachList[int64](sf, elemType, v)
-	case typekind.Uint128, typekind.Int128:
+	case kind.Uint128, kind.Int128:
 		return encodeEachList[*big.Int](sf, elemType, v)
-	case typekind.Float32:
+	case kind.Float32:
 		return encodeEachList[float32](sf, elemType, v)
-	case typekind.Float64:
+	case kind.Float64:
 		return encodeEachList[float64](sf, elemType, v)
-	case typekind.Bool:
+	case kind.Bool:
 		return encodeEachList[bool](sf, elemType, v)
-	case typekind.String:
+	case kind.String:
 		return encodeEachList[string](sf, elemType, v)
-	case typekind.Bytes:
+	case kind.Bytes:
 		return encodeEachList[[]byte](sf, elemType, v)
-	case typekind.Struct:
+	case kind.Struct:
 		return encodeEachList[*FieldMap](sf, elemType, v)
 	default:
 		return nil, fmt.Errorf("unsupported list element type %q", elemType)
@@ -534,7 +534,7 @@ func encodeOptional(sf SchemaField, elemType string, v any) (any, error) {
 		return nil, nil //nolint:nilnil // sentinel error not appropriate: EncodeFieldMap callers check err != nil
 	}
 	switch elemType {
-	case typekind.String:
+	case kind.String:
 		switch x := v.(type) {
 		case string:
 			return x, nil

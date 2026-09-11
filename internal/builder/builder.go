@@ -23,14 +23,14 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/chengxilo/serify/internal/config"
+	"github.com/chengxilo/serify/internal/conf"
 )
 
 // WorkerInfo describes a resolved worker after detection and (optional) build.
 type WorkerInfo struct {
 	Dir      string
 	Language string
-	Manifest config.WorkerManifest
+	Manifest conf.WorkerManifest
 }
 
 // Detect auto-detects the language of a worker directory and resolves its
@@ -52,12 +52,12 @@ func Detect(dir string) (*WorkerInfo, error) {
 		return nil, fmt.Errorf("no default build/run commands for language %q", lang)
 	}
 	defaultBuild := defaults.Build
-	manifest := config.WorkerManifest{
+	manifest := conf.WorkerManifest{
 		Build: &defaultBuild,
 		Run:   defaults.Run,
 	}
 
-	yamlManifest, err := config.LoadWorkerManifest(abs)
+	yamlManifest, err := conf.LoadWorkerManifest(abs)
 	if err != nil {
 		return nil, fmt.Errorf("read worker.yaml in %s: %w", abs, err)
 	}

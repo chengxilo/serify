@@ -14,7 +14,7 @@
 
 package builder
 
-import "github.com/chengxilo/serify/internal/language"
+import "github.com/chengxilo/serify/internal/lang"
 
 // LangDefault holds the default build and run commands for a language.
 type LangDefault struct {
@@ -29,39 +29,39 @@ type LangDefault struct {
 // under lib/ by relative path — that is a property of living in the repo, not a
 // sign the defaults are wrong.
 var Defaults = map[string]LangDefault{
-	language.Go: {
+	lang.Go: {
 		Build: "go build -o worker .",
 		Run:   "./worker",
 	},
-	language.Rust: {
+	lang.Rust: {
 		Build: "cargo build --release",
 		Run:   "./target/release/worker",
 	},
-	language.Python: {
+	lang.Python: {
 		Build: "",
 		Run:   "python worker.py",
 	},
-	language.Node: {
+	lang.Node: {
 		Build: "npm install && npx tsc",
 		Run:   "node dist/worker.js",
 	},
-	language.Java: {
+	lang.Java: {
 		Build: "mvn -q package -DskipTests",
 		Run:   "java -jar target/worker.jar",
 	},
-	language.Cpp: {
+	lang.Cpp: {
 		Build: "g++ -O2 -std=c++17 -o worker worker.cpp",
 		Run:   "./worker",
 	},
-	language.CSharp: {
+	lang.CSharp: {
 		Build: "dotnet build -c Release -o bin",
 		Run:   "dotnet bin/worker.dll",
 	},
-	language.Elixir: {
+	lang.Elixir: {
 		Build: "mix deps.get && mix compile",
 		Run:   "mix run lib/worker.ex",
 	},
-	language.PHP: {
+	lang.PHP: {
 		Build: "composer install --no-dev",
 		Run:   "php worker.php",
 	},

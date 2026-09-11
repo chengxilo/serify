@@ -481,7 +481,7 @@ func TestProtocol_NestedStruct_MultiLevel(t *testing.T) {
 // element type a bare field does. Before decodeList routed through decodeScalar
 // it carried its own switch, and uint16/int8/int16/float64/bytes were missing
 // from it -- declarable in a case file, accepted by `serify validate`, and only
-// failing once a worker actually ran. Adding a scalar to typekind without
+// failing once a worker actually ran. Adding a scalar to kind without
 // teaching decodeList about it used to be silently possible; now it cannot be.
 func TestProtocol_ListEveryScalarElem(t *testing.T) {
 	cases := []struct {

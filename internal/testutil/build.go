@@ -20,7 +20,7 @@ import (
 	"os/exec"
 
 	"github.com/chengxilo/serify/internal/builder"
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 )
 
 // ErrToolchainMissing is returned by Worker.Build when the required toolchain
@@ -33,15 +33,15 @@ var ErrToolchainMissing = errors.New("toolchain not available")
 // covers what the *examples* need: a fixture whose manifest builds nothing still
 // needs its interpreter to run.
 var buildProbes = map[string]string{
-	language.Go:     "go",
-	language.Rust:   "cargo",
-	language.Python: "python3",
-	language.Node:   "npm",
-	language.Java:   "mvn",
-	language.Cpp:    "g++",
-	language.CSharp: "dotnet",
-	language.Elixir: "mix",
-	language.PHP:    "php",
+	lang.Go:     "go",
+	lang.Rust:   "cargo",
+	lang.Python: "python3",
+	lang.Node:   "npm",
+	lang.Java:   "mvn",
+	lang.Cpp:    "g++",
+	lang.CSharp: "dotnet",
+	lang.Elixir: "mix",
+	lang.PHP:    "php",
 }
 
 // Worker is the definition of worker we want to build.

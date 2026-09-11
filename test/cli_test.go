@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
@@ -35,7 +35,7 @@ import (
 // report, exit 0.
 func TestCLI_Run(t *testing.T) {
 	requireWorkers(t, happy.langs...)
-	out, code := testutil.RunSerify(t, happy.runArgs(language.Go, happy.CasePath())...)
+	out, code := testutil.RunSerify(t, happy.runArgs(lang.Go, happy.CasePath())...)
 	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 	t.Log(out)
 	assert.Contains(t, out, "Suite:", "run")
@@ -49,7 +49,7 @@ func TestCLI_Run(t *testing.T) {
 // formats, both operations, byte-parity with the go reference. Languages with
 // missing toolchains are left out of the run (CI has all of them).
 func TestCLI_Run_AllLanguages(t *testing.T) {
-	requireWorkers(t, language.Go)
+	requireWorkers(t, lang.Go)
 
 	var paths, langs []string
 	for _, w := range happy.Workers() {
@@ -62,7 +62,7 @@ func TestCLI_Run_AllLanguages(t *testing.T) {
 	}
 
 	csv := filepath.Join(t.TempDir(), "out.csv")
-	args := []string{"run", "--ref", language.Go, "--cases", happy.CasePath(), "--csv", csv, "--no-build"}
+	args := []string{"run", "--ref", lang.Go, "--cases", happy.CasePath(), "--csv", csv, "--no-build"}
 	args = append(args, paths...)
 	out, code := testutil.RunSerify(t, args...)
 	require.Equal(t, 0, code, "exit code = %d, want 0 (langs: %s)\n%s", code, strings.Join(langs, ", "), out)
@@ -89,14 +89,14 @@ func TestCLI_RunCSVAndTable(t *testing.T) {
 	requireWorkers(t, happy.langs...)
 
 	csv := filepath.Join(t.TempDir(), "out.csv")
-	out, code := testutil.RunSerify(t, happy.runArgs(language.Rust, happy.CasePath(), "--csv", csv)...)
+	out, code := testutil.RunSerify(t, happy.runArgs(lang.Rust, happy.CasePath(), "--csv", csv)...)
 	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 	assert.Contains(t, out, "Wrote results to", "run --csv")
 
 	// Verify CSV via the grid helpers (structured, not raw substring checks).
 	grid := readResultGrid(t, csv)
-	testutil.AssertCell(t, grid, "all_types/json/basic", language.Go, "serialize", report.StatusPass, nil)
-	testutil.AssertCell(t, grid, "all_types/json/basic", language.Rust, "serialize", report.StatusPass, nil)
+	testutil.AssertCell(t, grid, "all_types/json/basic", lang.Go, "serialize", report.StatusPass, nil)
+	testutil.AssertCell(t, grid, "all_types/json/basic", lang.Rust, "serialize", report.StatusPass, nil)
 
 	tableOut, code := testutil.RunSerify(t, "table", csv)
 	require.Equal(t, 0, code, "serify table exit = %d, want 0\n%s", code, tableOut)
@@ -126,7 +126,7 @@ func TestCLI_CasesMustDeclareFormats(t *testing.T) {
 	out, code := testutil.RunSerify(t, slices.Concat(
 		[]string{
 			"run",
-			"--ref", language.Go,
+			"--ref", lang.Go,
 			"--cases", invalidSchema.CasePath(),
 			"--no-build",
 		},
@@ -146,7 +146,7 @@ func TestCLI_TableMissingFile(t *testing.T) {
 // TestCLI_Run_JUnit checks the `--output junit` path emits JUnit XML.
 func TestCLI_Run_JUnit(t *testing.T) {
 	requireWorkers(t, happy.langs...)
-	out, code := testutil.RunSerify(t, happy.runArgs(language.Go, happy.CasePath(), "--output", "junit")...)
+	out, code := testutil.RunSerify(t, happy.runArgs(lang.Go, happy.CasePath(), "--output", "junit")...)
 	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 	assert.Contains(t, out, "<testsuites>", "junit")
 	assert.Contains(t, out, "<testcase", "junit")

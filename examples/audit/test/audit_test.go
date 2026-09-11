@@ -28,7 +28,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
@@ -53,7 +53,7 @@ func exampleDir() string {
 func runSuite(t *testing.T, audit bool) testutil.ResultGrid {
 	t.Helper()
 
-	if reason := testutil.MissingToolchain(language.Rust); reason != "" {
+	if reason := testutil.MissingToolchain(lang.Rust); reason != "" {
 		t.Skip("rust toolchain unavailable: " + reason)
 	}
 
@@ -69,7 +69,7 @@ func runSuite(t *testing.T, audit bool) testutil.ResultGrid {
 	if audit {
 		args = append(args, "--audit")
 	}
-	args = append(args, filepath.Join(dir, language.Go), filepath.Join(dir, language.Rust))
+	args = append(args, filepath.Join(dir, lang.Go), filepath.Join(dir, lang.Rust))
 
 	out, code := testutil.RunSerify(t, args...)
 	// Warnings are warnings: --audit must not change the exit code.
@@ -89,7 +89,7 @@ func TestAudit_ConformanceIsBlindToBoth(t *testing.T) {
 		for _, c := range append(append([]string{}, loudCases...), quietCases...) {
 			id := "frame/" + format + "/" + c
 			for _, op := range []string{"serialize", "deserialize"} {
-				testutil.AssertCell(t, grid, id, language.Go, op, report.StatusPass, nil)
+				testutil.AssertCell(t, grid, id, lang.Go, op, report.StatusPass, nil)
 
 				// Rust declines `handoff`: its serializer takes &FieldMap, so
 				// the mutation that format is built around cannot be written
@@ -98,7 +98,7 @@ func TestAudit_ConformanceIsBlindToBoth(t *testing.T) {
 				if format == "handoff" {
 					want = report.StatusSkip
 				}
-				testutil.AssertCell(t, grid, id, language.Rust, op, want, nil)
+				testutil.AssertCell(t, grid, id, lang.Rust, op, want, nil)
 			}
 		}
 	}
@@ -106,8 +106,8 @@ func TestAudit_ConformanceIsBlindToBoth(t *testing.T) {
 	// And nothing was reported. Every audit operation is absent from the grid,
 	// because the checks did not run.
 	for _, op := range auditOps {
-		requireNoCell(t, grid, "frame/fast/typical", language.Go, op)
-		requireNoCell(t, grid, "frame/handoff/typical", language.Go, op)
+		requireNoCell(t, grid, "frame/fast/typical", lang.Go, op)
+		requireNoCell(t, grid, "frame/handoff/typical", lang.Go, op)
 	}
 }
 
@@ -128,34 +128,34 @@ func TestAudit_FindsWhatConformanceCannot(t *testing.T) {
 	// `fast` aliases the input buffer. Both languages do it, and both are
 	// caught — this is the finding that is not a bug.
 	for _, c := range loudCases {
-		for _, lang := range []string{language.Go, language.Rust} {
+		for _, lang := range []string{lang.Go, lang.Rust} {
 			testutil.AssertCell(t, grid,
 				"frame/fast/"+c, lang, report.OpAuditZeroCopy, report.StatusWarn, nil)
 		}
 	}
 	// Strings but no blob: still aliasing, so still caught.
 	testutil.AssertCell(t, grid,
-		"frame/fast/"+partialCase, language.Go, report.OpAuditZeroCopy, report.StatusWarn, nil)
+		"frame/fast/"+partialCase, lang.Go, report.OpAuditZeroCopy, report.StatusWarn, nil)
 
 	// `handoff` empties the caller's FieldMap. Go only — Rust does not
 	// implement the format at all.
 	for _, c := range loudCases {
 		testutil.AssertCell(t, grid,
-			"frame/handoff/"+c, language.Go, report.OpAuditMutation, report.StatusWarn, nil)
+			"frame/handoff/"+c, lang.Go, report.OpAuditMutation, report.StatusWarn, nil)
 
 		// The second finding is the same bug seen from the other end: serify
 		// serializes twice to check stability, and the second call reads a
 		// payload the first one already emptied. A serializer that mutates its
 		// input cannot be a stable one.
 		testutil.AssertCell(t, grid,
-			"frame/handoff/"+c, language.Go, report.OpAuditStability, report.StatusWarn, nil)
+			"frame/handoff/"+c, lang.Go, report.OpAuditStability, report.StatusWarn, nil)
 	}
 
 	// `safe` is the control group: audited, and silent.
 	for _, c := range append(append([]string{}, loudCases...), quietCases...) {
 		for _, op := range auditOps {
-			requireNoCell(t, grid, "frame/safe/"+c, language.Go, op)
-			requireNoCell(t, grid, "frame/safe/"+c, language.Rust, op)
+			requireNoCell(t, grid, "frame/safe/"+c, lang.Go, op)
+			requireNoCell(t, grid, "frame/safe/"+c, lang.Rust, op)
 		}
 	}
 
@@ -164,13 +164,13 @@ func TestAudit_FindsWhatConformanceCannot(t *testing.T) {
 	// "audit flags this format", when what it flags is this format on this data.
 	for _, c := range quietCases {
 		for _, op := range auditOps {
-			requireNoCell(t, grid, "frame/fast/"+c, language.Go, op)
-			requireNoCell(t, grid, "frame/handoff/"+c, language.Go, op)
+			requireNoCell(t, grid, "frame/fast/"+c, lang.Go, op)
+			requireNoCell(t, grid, "frame/handoff/"+c, lang.Go, op)
 		}
 	}
 	// no_payload has no buffer to release, so handoff is clean there too, even
 	// though the same code warns on `typical`.
-	requireNoCell(t, grid, "frame/handoff/"+partialCase, language.Go, report.OpAuditMutation)
+	requireNoCell(t, grid, "frame/handoff/"+partialCase, lang.Go, report.OpAuditMutation)
 }
 
 // requireNoCell fails if the grid holds a result for this (id, lang, op).

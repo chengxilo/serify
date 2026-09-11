@@ -26,8 +26,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/chengxilo/serify/internal/builder"
-	"github.com/chengxilo/serify/internal/config"
-	"github.com/chengxilo/serify/internal/orchestrate"
+	"github.com/chengxilo/serify/internal/conf"
+	"github.com/chengxilo/serify/internal/orch"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/worker"
 )
@@ -126,7 +126,7 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 		return err
 	}
 
-	set, err := config.LoadSuite(opts.casesFile)
+	set, err := conf.LoadSuite(opts.casesFile)
 	if err != nil {
 		return fmt.Errorf("load cases: %w", err)
 	}
@@ -138,7 +138,7 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 	}
 	if set.ReferenceLanguage == "" && !opts.buildOnly {
 		return fmt.Errorf("no reference language: pass --ref, or declare reference_language in %s/%s",
-			opts.casesFile, config.SuiteConfigFile)
+			opts.casesFile, conf.SuiteConfigFile)
 	}
 
 	workerInfos, err := detectAndBuild(workerDirs, opts.noBuild)
@@ -169,7 +169,7 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 
 	knownFails := loadKnownFailures(opts.knowFDir, workers)
 
-	langs := orchestrate.OrderedLangs(workers, set.ReferenceLanguage)
+	langs := orch.OrderedLangs(workers, set.ReferenceLanguage)
 	testIDs := set.TestIDs()
 	rep := report.New(langs, testIDs, opts.outputFmt)
 
@@ -181,7 +181,7 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 	fmt.Printf("\nRunning %d checks (type × format × case) across %d languages: %s\n\n",
 		len(testIDs), len(workers), strings.Join(langs, ", "))
 
-	if err := orchestrate.RunSuite(ctx, set, workers, rep, orchestrate.Options{
+	if err := orch.RunSuite(ctx, set, workers, rep, orch.Options{
 		FullMatrix: opts.fullMatrix,
 		TimeoutSec: opts.timeoutSec,
 		KnownFails: knownFails,
@@ -195,7 +195,7 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 	// exists, so a suite that has not declared its gaps keeps its old behaviour
 	// instead of every existing skip suddenly failing.
 	if expected, ok := loadExpectedSkips(opts.expectSkipDir, workers); ok {
-		orchestrate.CheckExpectedSkips(rep, expected)
+		orch.CheckExpectedSkips(rep, expected)
 	}
 
 	rep.Print()
@@ -290,7 +290,7 @@ func startWorkers(
 func loadKnownFailures(dir string, workers map[string]*worker.Worker) map[string]map[string]string {
 	knownFails := make(map[string]map[string]string)
 	for lang := range workers {
-		kf, err := config.LoadKnownFailures(dir, lang)
+		kf, err := conf.LoadKnownFailures(dir, lang)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to load known failures for %s: %v\n", lang, err)
 			continue
@@ -310,13 +310,13 @@ func loadKnownFailures(dir string, workers map[string]*worker.Worker) map[string
 // gaps. It reports ok=false when the directory does not exist, which means the
 // suite has not opted in and enforcement must stay off. Once opted in, a
 // language with no file is expected to cover everything.
-func loadExpectedSkips(dir string, workers map[string]*worker.Worker) (map[string]config.ExpectedSkips, bool) {
+func loadExpectedSkips(dir string, workers map[string]*worker.Worker) (map[string]conf.ExpectedSkips, bool) {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return nil, false
 	}
-	out := make(map[string]config.ExpectedSkips, len(workers))
+	out := make(map[string]conf.ExpectedSkips, len(workers))
 	for lang := range workers {
-		es, err := config.LoadExpectedSkips(dir, lang)
+		es, err := conf.LoadExpectedSkips(dir, lang)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to load expected skips for %s: %v\n", lang, err)
 			continue

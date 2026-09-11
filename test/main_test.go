@@ -22,7 +22,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/testutil"
 )
 
@@ -86,10 +86,10 @@ func (c Case) runArgs(ref, casesDir string, extra ...string) []string {
 }
 
 var (
-	happy         = NewCase("happy", language.All...)
-	wrong         = NewCase("wrong", language.All...)
-	audit         = NewCase("audit", language.All...)
-	invalidSchema = NewCase("invalid_schema", language.Go, language.Rust)
+	happy         = NewCase("happy", lang.All...)
+	wrong         = NewCase("wrong", lang.All...)
+	audit         = NewCase("audit", lang.All...)
+	invalidSchema = NewCase("invalid_schema", lang.Go, lang.Rust)
 )
 
 // missingLang records languages whose toolchain is unavailable (lang → reason).

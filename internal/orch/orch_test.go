@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orchestrate
+package orch
 
 import (
 	"errors"
 	"testing"
 
-	"github.com/chengxilo/serify/internal/language"
-	"github.com/chengxilo/serify/internal/protocol"
+	"github.com/chengxilo/serify/internal/lang"
+	"github.com/chengxilo/serify/internal/proto"
 	"github.com/chengxilo/serify/internal/report"
 )
 
 func TestResolveResult_OK(t *testing.T) {
-	resp := &protocol.Response{Status: protocol.StatusOK}
-	status, detail := resolveResult(language.Go, "test/binary/basic", resp, nil, nil)
+	resp := &proto.Response{Status: proto.StatusOK}
+	status, detail := resolveResult(lang.Go, "test/binary/basic", resp, nil, nil)
 	if status != report.StatusPass {
 		t.Errorf("status = %q, want %q", status, report.StatusPass)
 	}
@@ -35,7 +35,7 @@ func TestResolveResult_OK(t *testing.T) {
 }
 
 func TestResolveResult_Error(t *testing.T) {
-	status, detail := resolveResult(language.Go, "test/binary/basic", nil, errors.New("timeout"), nil)
+	status, detail := resolveResult(lang.Go, "test/binary/basic", nil, errors.New("timeout"), nil)
 	if status != report.StatusError {
 		t.Errorf("status = %q, want %q", status, report.StatusError)
 	}
@@ -45,15 +45,15 @@ func TestResolveResult_Error(t *testing.T) {
 }
 
 func TestResolveResult_NilResponse(t *testing.T) {
-	status, _ := resolveResult(language.Go, "test/binary/basic", nil, nil, nil)
+	status, _ := resolveResult(lang.Go, "test/binary/basic", nil, nil, nil)
 	if status != report.StatusError {
 		t.Errorf("status = %q, want %q", status, report.StatusError)
 	}
 }
 
 func TestResolveResult_Skipped(t *testing.T) {
-	resp := &protocol.Response{Status: protocol.StatusSkipped, Reason: "not supported"}
-	status, detail := resolveResult(language.Go, "test/binary/basic", resp, nil, nil)
+	resp := &proto.Response{Status: proto.StatusSkipped, Reason: "not supported"}
+	status, detail := resolveResult(lang.Go, "test/binary/basic", resp, nil, nil)
 	if status != report.StatusSkip {
 		t.Errorf("status = %q, want %q", status, report.StatusSkip)
 	}
@@ -63,19 +63,19 @@ func TestResolveResult_Skipped(t *testing.T) {
 }
 
 func TestResolveResult_WorkerError(t *testing.T) {
-	resp := &protocol.Response{Status: protocol.StatusError, Error: "bad data"}
-	status, _ := resolveResult(language.Go, "test/binary/basic", resp, nil, nil)
+	resp := &proto.Response{Status: proto.StatusError, Error: "bad data"}
+	status, _ := resolveResult(lang.Go, "test/binary/basic", resp, nil, nil)
 	if status != report.StatusFail {
 		t.Errorf("status = %q, want %q", status, report.StatusFail)
 	}
 }
 
 func TestResolveResult_KnownFailure(t *testing.T) {
-	resp := &protocol.Response{Status: protocol.StatusError, Error: "bad data"}
+	resp := &proto.Response{Status: proto.StatusError, Error: "bad data"}
 	kf := map[string]map[string]string{
-		language.Go: {"test/binary/basic": "known issue #42"},
+		lang.Go: {"test/binary/basic": "known issue #42"},
 	}
-	status, detail := resolveResult(language.Go, "test/binary/basic", resp, nil, kf)
+	status, detail := resolveResult(lang.Go, "test/binary/basic", resp, nil, kf)
 	if status != report.StatusXFail {
 		t.Errorf("status = %q, want %q", status, report.StatusXFail)
 	}
@@ -85,8 +85,8 @@ func TestResolveResult_KnownFailure(t *testing.T) {
 }
 
 func TestResolveResult_UnknownStatus(t *testing.T) {
-	resp := &protocol.Response{Status: "WEIRD"}
-	status, _ := resolveResult(language.Go, "test/binary/basic", resp, nil, nil)
+	resp := &proto.Response{Status: "WEIRD"}
+	status, _ := resolveResult(lang.Go, "test/binary/basic", resp, nil, nil)
 	if status != report.StatusError {
 		t.Errorf("status = %q, want %q", status, report.StatusError)
 	}

@@ -20,8 +20,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/chengxilo/serify/internal/config"
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/conf"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,8 +33,8 @@ func TestBuild_NoBuildCommand(t *testing.T) {
 	// An explicit `build: ""` means this worker needs no build step.
 	info := &WorkerInfo{
 		Dir:      t.TempDir(),
-		Language: language.Python,
-		Manifest: config.WorkerManifest{
+		Language: lang.Python,
+		Manifest: conf.WorkerManifest{
 			Build: strPtr(""),
 			Run:   "python3 worker.py",
 		},
@@ -47,8 +47,8 @@ func TestBuild_RunsCommand(t *testing.T) {
 	dir := t.TempDir()
 	info := &WorkerInfo{
 		Dir:      dir,
-		Language: language.Go,
-		Manifest: config.WorkerManifest{
+		Language: lang.Go,
+		Manifest: conf.WorkerManifest{
 			Build: strPtr("echo built > out.txt"),
 			Run:   "./worker",
 		},
@@ -69,8 +69,8 @@ func TestBuild_AlwaysRuns(t *testing.T) {
 	dir := t.TempDir()
 	info := &WorkerInfo{
 		Dir:      dir,
-		Language: language.Go,
-		Manifest: config.WorkerManifest{
+		Language: lang.Go,
+		Manifest: conf.WorkerManifest{
 			// Append a line per invocation so the count is observable.
 			Build: strPtr("echo run >> count.txt"),
 			Run:   "./worker",
@@ -97,8 +97,8 @@ func TestBuild_AlwaysRuns(t *testing.T) {
 func TestBuild_CommandFails(t *testing.T) {
 	info := &WorkerInfo{
 		Dir:      t.TempDir(),
-		Language: language.Go,
-		Manifest: config.WorkerManifest{
+		Language: lang.Go,
+		Manifest: conf.WorkerManifest{
 			Build: strPtr("exit 1"),
 			Run:   "./worker",
 		},

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package compare provides hex-level and field-level diff utilities.
+// Package cmp provides hex-level and field-level diff utilities.
 // All diffs are plain text (no ANSI escape codes); colorization is the
 // caller's responsibility at render time.
-package compare
+package cmp
 
 import (
 	"encoding/binary"

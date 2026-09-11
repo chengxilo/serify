@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package language defines the canonical worker-language names used across
+// Package lang defines the canonical worker-language names used across
 // the runner and its tests.
-package language
+package lang
 
 const (
 	Go     = "go"

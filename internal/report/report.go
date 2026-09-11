@@ -28,7 +28,7 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/chengxilo/serify/internal/compare"
+	"github.com/chengxilo/serify/internal/cmp"
 )
 
 type Status string
@@ -174,7 +174,7 @@ func (r *Report) printTable() {
 		for _, f := range r.Failures {
 			fmt.Printf("[%s / %s / %s]\n", f.TestID, f.Language, f.Operation)
 			if f.Detail != "" {
-				fmt.Print(compare.ColorizeDiff("  "+f.Detail,
+				fmt.Print(cmp.ColorizeDiff("  "+f.Detail,
 					failColor.Sprint("-"), failColor.Sprint("+")))
 			}
 			fmt.Println()
@@ -188,7 +188,7 @@ func (r *Report) printTable() {
 		for _, w := range r.Warnings {
 			fmt.Printf("[%s / %s / %s]\n", w.TestID, w.Language, w.Operation)
 			if w.Detail != "" {
-				fmt.Print(compare.ColorizeDiff("  "+w.Detail,
+				fmt.Print(cmp.ColorizeDiff("  "+w.Detail,
 					warnColor.Sprint("-"), warnColor.Sprint("+")))
 			}
 			fmt.Println()

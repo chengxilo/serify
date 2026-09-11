@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package typekind defines the canonical wire type-kind names — the strings that
+// Package kind defines the canonical wire type-kind names — the strings that
 // appear in a schema field's "type". It is the single source of truth shared by
 // the runner (internal/*) and the worker library (lib/go/serify), so the spelling never
 // drifts. Names are the long form (uint8, int64, float32, …); there are no short
 // aliases (u8, i64, f32).
-package typekind
+package kind
 
 import "slices"
 
@@ -52,7 +52,7 @@ const (
 	// Sum is a native sum type (a.k.a. tagged union / coproduct): sum<name: T, …>.
 	// A value is exactly one variant (its tag + typed payload), so there are no
 	// inactive fields to default — unlike an enum tag plus separate flat fields.
-	// "sum" is the whole type; each of its arms is a variant (see config.Variant).
+	// "sum" is the whole type; each of its arms is a variant (see conf.Variant).
 	Sum = "sum"
 )
 

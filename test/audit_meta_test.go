@@ -46,7 +46,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
@@ -56,10 +56,10 @@ import (
 // out, or a value receiver. A managed language has nothing to inject, so the
 // format is reported SKIPPED.
 var auditSkipped = map[string][]string{
-	"value-mutating":   {language.Cpp, language.CSharp, language.Elixir, language.Java, language.Node, language.PHP, language.Python, language.Rust},
-	"zero-copy":        {language.Cpp, language.CSharp, language.Elixir, language.Java, language.Node, language.PHP, language.Python},
-	"list-zero-copy":   {language.Cpp, language.CSharp, language.Elixir, language.Java, language.Node, language.PHP, language.Python},
-	"output-zero-copy": {language.Cpp, language.CSharp, language.Elixir, language.Java, language.Node, language.PHP, language.Python},
+	"value-mutating":   {lang.Cpp, lang.CSharp, lang.Elixir, lang.Java, lang.Node, lang.PHP, lang.Python, lang.Rust},
+	"zero-copy":        {lang.Cpp, lang.CSharp, lang.Elixir, lang.Java, lang.Node, lang.PHP, lang.Python},
+	"list-zero-copy":   {lang.Cpp, lang.CSharp, lang.Elixir, lang.Java, lang.Node, lang.PHP, lang.Python},
+	"output-zero-copy": {lang.Cpp, lang.CSharp, lang.Elixir, lang.Java, lang.Node, lang.PHP, lang.Python},
 }
 
 // auditWarnings is the expected warning grid: per (format, audit op), the
@@ -79,7 +79,7 @@ var auditWarnings = []struct {
 		format: "mutating",
 		op:     report.OpAuditMutation,
 		detail: "mutated fields: value",
-		warn:   []string{language.Go, language.Cpp, language.CSharp, language.Java, language.Node, language.PHP, language.Python, language.Rust},
+		warn:   []string{lang.Go, lang.Cpp, lang.CSharp, lang.Java, lang.Node, lang.PHP, lang.Python, lang.Rust},
 		why:    "elixir: every BEAM term is immutable, so a serializer cannot mutate the model it was handed",
 	},
 	{
@@ -88,44 +88,44 @@ var auditWarnings = []struct {
 		format: "mutating",
 		op:     report.OpAuditStability,
 		detail: "serializer produced different output on repeat call",
-		warn:   []string{language.Cpp, language.CSharp, language.Java, language.Node, language.PHP, language.Python, language.Rust},
+		warn:   []string{lang.Cpp, lang.CSharp, lang.Java, lang.Node, lang.PHP, lang.Python, lang.Rust},
 		why:    "go: marshals before mutating; elixir: cannot mutate at all",
 	},
 	{
 		format: "value-mutating",
 		op:     report.OpAuditMutation,
 		detail: "mutated fields: payload",
-		warn:   []string{language.Go},
+		warn:   []string{lang.Go},
 	},
 	{
 		format: "value-mutating",
 		op:     report.OpAuditStability,
 		detail: "serializer produced different output on repeat call",
-		warn:   []string{language.Go},
+		warn:   []string{lang.Go},
 	},
 	{
 		format: "zero-copy",
 		op:     report.OpAuditZeroCopy,
 		detail: "zero-copy fields: payload",
-		warn:   []string{language.Go, language.Rust},
+		warn:   []string{lang.Go, lang.Rust},
 	},
 	{
 		format: "list-zero-copy",
 		op:     report.OpAuditZeroCopy,
 		detail: "zero-copy fields: tags",
-		warn:   []string{language.Go, language.Rust},
+		warn:   []string{lang.Go, lang.Rust},
 	},
 	{
 		format: "unstable",
 		op:     report.OpAuditStability,
 		detail: "serializer produced different output on repeat call",
-		warn:   language.All,
+		warn:   lang.All,
 	},
 	{
 		format: "input-mutating",
 		op:     report.OpAuditInputMut,
 		detail: "deserializer modified input buffer",
-		warn:   []string{language.Go, language.Rust, language.Cpp, language.CSharp, language.Java, language.Node},
+		warn:   []string{lang.Go, lang.Rust, lang.Cpp, lang.CSharp, lang.Java, lang.Node},
 		why: "elixir (immutable binaries), php (copy-on-write strings) and python (immutable bytes) " +
 			"hand the deserializer a value it cannot write through, so it mutates a private copy",
 	},
@@ -133,13 +133,13 @@ var auditWarnings = []struct {
 		format: "output-zero-copy",
 		op:     report.OpAuditOutputZeroCopy,
 		detail: "output aliases model fields: payload",
-		warn:   []string{language.Go, language.Rust},
+		warn:   []string{lang.Go, lang.Rust},
 	},
 	{
 		format: "deser-unstable",
 		op:     report.OpAuditDeserStability,
 		detail: "deserializer produced different result on repeat call",
-		warn:   language.All,
+		warn:   lang.All,
 	},
 }
 
@@ -147,12 +147,12 @@ var auditWarnings = []struct {
 // and Rust can hand back a model that views the input buffer instead of copying
 // it, so everyone else declines `zero-copy`.
 var auditModelSkipped = map[string][]string{
-	"zero-copy": {language.Cpp, language.CSharp, language.Elixir, language.Java, language.Node, language.PHP, language.Python},
+	"zero-copy": {lang.Cpp, lang.CSharp, lang.Elixir, lang.Java, lang.Node, lang.PHP, lang.Python},
 	// Rust declines `mutating`: a serify serializer there receives `&M`, so
 	// mutating it is UB and a release build discards the write outright. Not a
 	// fault an honest Rust worker can commit through a model — the same reason
 	// it declines `value-mutating` above and `handoff` in examples/audit.
-	"mutating": {language.Rust},
+	"mutating": {lang.Rust},
 }
 
 // auditModelWarnings is the expected grid for the model path. Every binding
@@ -173,8 +173,8 @@ var auditModelWarnings = []struct {
 		op:     report.OpAuditMutation,
 		detail: "mutated fields: value",
 		warn: []string{
-			language.Cpp, language.CSharp, language.Go, language.Java,
-			language.Node, language.PHP, language.Python,
+			lang.Cpp, lang.CSharp, lang.Go, lang.Java,
+			lang.Node, lang.PHP, lang.Python,
 		},
 		why: "elixir: every BEAM term is immutable, so a serializer cannot mutate the struct it was handed — its silence is about the runtime, not about audit",
 	},
@@ -186,7 +186,7 @@ var auditModelWarnings = []struct {
 		format: "unstable",
 		op:     report.OpAuditStability,
 		detail: "serializer produced different output on repeat call",
-		warn:   language.All,
+		warn:   lang.All,
 	},
 	{
 		// The deserialize half: a model that views the input buffer rather than
@@ -195,7 +195,7 @@ var auditModelWarnings = []struct {
 		format: "zero-copy",
 		op:     report.OpAuditZeroCopy,
 		detail: "zero-copy fields: payload",
-		warn:   []string{language.Go, language.Rust},
+		warn:   []string{lang.Go, lang.Rust},
 	},
 }
 
@@ -203,7 +203,7 @@ func TestAuditWarningsAreReported(t *testing.T) {
 	requireWorkers(t, audit.langs...)
 
 	csv := filepath.Join(t.TempDir(), "out.csv")
-	out, code := testutil.RunSerify(t, audit.runArgs(language.Go, audit.CasePath(), "--csv", csv, "--audit")...)
+	out, code := testutil.RunSerify(t, audit.runArgs(lang.Go, audit.CasePath(), "--csv", csv, "--audit")...)
 
 	require.Equal(t, 0, code, "serify exit = %d, want 0 (audit warnings are advisory)\n%s", code, out)
 

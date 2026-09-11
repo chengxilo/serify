@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/chengxilo/serify/internal/builder"
-	"github.com/chengxilo/serify/internal/config"
+	"github.com/chengxilo/serify/internal/conf"
 )
 
 func newValidateCmd() *cobra.Command {
@@ -71,7 +71,7 @@ func runValidate(casesDir string, workerDirs []string) error {
 	}
 
 	// Validate case files.
-	set, err := config.LoadSuite(casesDir)
+	set, err := conf.LoadSuite(casesDir)
 	if err != nil {
 		return fmt.Errorf("load cases: %w", err)
 	}

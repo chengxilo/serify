@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package conf
 
 import (
 	"cmp"
@@ -27,7 +27,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/chengxilo/serify/internal/kind"
 )
 
 // ErrNoTypesFound is returned by LoadSuite when a directory has no tested types.
@@ -63,20 +63,20 @@ type Variant struct {
 
 func (ft FieldType) String() string {
 	switch ft.Base {
-	case typekind.Optional:
-		return fmt.Sprintf("%s<%s>", typekind.Optional, ft.Elem)
-	case typekind.List:
-		return fmt.Sprintf("%s<%s>", typekind.List, ft.Elem)
-	case typekind.Array:
-		return fmt.Sprintf("%s<%s,%d>", typekind.Array, ft.Elem, ft.ArrayN)
-	case typekind.Map:
-		return fmt.Sprintf("%s<%s,%s>", typekind.Map, ft.Key, ft.Elem)
-	case typekind.Enum:
+	case kind.Optional:
+		return fmt.Sprintf("%s<%s>", kind.Optional, ft.Elem)
+	case kind.List:
+		return fmt.Sprintf("%s<%s>", kind.List, ft.Elem)
+	case kind.Array:
+		return fmt.Sprintf("%s<%s,%d>", kind.Array, ft.Elem, ft.ArrayN)
+	case kind.Map:
+		return fmt.Sprintf("%s<%s,%s>", kind.Map, ft.Key, ft.Elem)
+	case kind.Enum:
 		// Self-describing, like list<T> and map<K,V>: the worker gets the variants
 		// so it can derive an ordinal for its byte layout. The *value* still travels
 		// as the variant name.
-		return fmt.Sprintf("%s<%s>", typekind.Enum, strings.Join(ft.Values, ","))
-	case typekind.Sum:
+		return fmt.Sprintf("%s<%s>", kind.Enum, strings.Join(ft.Values, ","))
+	case kind.Sum:
 		parts := make([]string, len(ft.Variants))
 		for i, v := range ft.Variants {
 			if v.Type == nil {
@@ -85,7 +85,7 @@ func (ft FieldType) String() string {
 				parts[i] = fmt.Sprintf("%s: %s", v.Name, v.Type.String())
 			}
 		}
-		return fmt.Sprintf("%s<%s>", typekind.Sum, strings.Join(parts, ", "))
+		return fmt.Sprintf("%s<%s>", kind.Sum, strings.Join(parts, ", "))
 	default:
 		return ft.Base
 	}
@@ -347,9 +347,9 @@ func LoadSuite(dir string) (*CasesSet, error) {
 // normalized at parse time so everything downstream (workers, the wire format,
 // comparison) only ever sees the canonical form.
 var scalarAliases = map[string]string{
-	"float":   typekind.Float32,
-	"double":  typekind.Float64,
-	"boolean": typekind.Bool,
+	"float":   kind.Float32,
+	"double":  kind.Float64,
+	"boolean": kind.Bool,
 }
 
 var typeParamRe = regexp.MustCompile(`^(\w+)<(.+)>$`)
@@ -404,7 +404,7 @@ func (cf *CasesFile) validate() error {
 // Enums travel as plain strings, so without this a typo'd variant reaches the
 // workers and is only caught (if at all) as a byte mismatch far downstream.
 func validateEnum(ft FieldType, v any) error {
-	if ft.Base != typekind.Enum {
+	if ft.Base != kind.Enum {
 		return nil
 	}
 	s, ok := v.(string)

@@ -35,7 +35,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/chengxilo/serify/internal/language"
+	"github.com/chengxilo/serify/internal/lang"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
@@ -60,8 +60,8 @@ var caseIDs = []string{
 // allLangs is every language with a worker directory here. Go leads; the rest
 // follow.
 var allLangs = []string{
-	language.Go, language.Python, language.Rust, language.Node, language.Cpp,
-	language.CSharp, language.Java, language.PHP, language.Elixir,
+	lang.Go, lang.Python, lang.Rust, lang.Node, lang.Cpp,
+	lang.CSharp, lang.Java, lang.PHP, lang.Elixir,
 }
 
 func exampleDir() string {
@@ -95,7 +95,7 @@ func availableLangs(t *testing.T) []string {
 
 	// Go is the leader: it owns the layout every follower is compared against,
 	// so a run without it compares nothing to nothing.
-	require.Contains(t, present, language.Go, "the go toolchain is required")
+	require.Contains(t, present, lang.Go, "the go toolchain is required")
 	return present
 }
 
@@ -174,21 +174,21 @@ type clientCmd struct {
 }
 
 var clients = map[string]clientCmd{
-	language.Go:     {build: []string{"go", "build", "-o", "client", "./cmd/client"}, argv: []string{"./client"}},
-	language.Python: {argv: []string{"python3", "client.py"}},
-	language.Rust:   {argv: []string{"target/release/client"}},
-	language.Node:   {argv: []string{"node", "dist/client.js"}},
-	language.Cpp: {
+	lang.Go:     {build: []string{"go", "build", "-o", "client", "./cmd/client"}, argv: []string{"./client"}},
+	lang.Python: {argv: []string{"python3", "client.py"}},
+	lang.Rust:   {argv: []string{"target/release/client"}},
+	lang.Node:   {argv: []string{"node", "dist/client.js"}},
+	lang.Cpp: {
 		build: []string{"g++", "-O2", "-std=c++17", "-I../../../lib/cpp", "-o", "client", "client.cpp"},
 		argv:  []string{"./client"},
 	},
-	language.CSharp: {
+	lang.CSharp: {
 		build: []string{"dotnet", "build", "-c", "Release", "Client/Client.csproj"},
 		argv:  []string{"dotnet", "run", "-c", "Release", "--project", "Client/Client.csproj", "--"},
 	},
-	language.Java:   {argv: []string{"java", "-cp", "target/taskstore-0.1.0.jar", "Client"}},
-	language.PHP:    {argv: []string{"php", "client.php"}},
-	language.Elixir: {argv: []string{"mix", "run", "-e", "Client.main(System.argv())", "--"}},
+	lang.Java:   {argv: []string{"java", "-cp", "target/taskstore-0.1.0.jar", "Client"}},
+	lang.PHP:    {argv: []string{"php", "client.php"}},
+	lang.Elixir: {argv: []string{"mix", "run", "-e", "Client.main(System.argv())", "--"}},
 }
 
 // TestTaskstore_Clients starts the Go server and drives it with every client.
@@ -204,7 +204,7 @@ func TestTaskstore_Clients(t *testing.T) {
 	bin := t.TempDir()
 	serverBin := filepath.Join(bin, "server")
 	build := exec.Command("go", "build", "-o", serverBin, "./cmd/server")
-	build.Dir = filepath.Join(dir, language.Go)
+	build.Dir = filepath.Join(dir, lang.Go)
 	out, err := build.CombinedOutput()
 	require.NoError(t, err, "building the server:\n%s", out)
 
@@ -263,9 +263,9 @@ func TestTaskstore_Clients(t *testing.T) {
 	}
 
 	// Finally, the leader reads back everything the followers wrote.
-	goSpec := clients[language.Go]
+	goSpec := clients[lang.Go]
 	all := exec.Command(goSpec.argv[0], "--addr", addr, "list")
-	all.Dir = filepath.Join(dir, language.Go)
+	all.Dir = filepath.Join(dir, lang.Go)
 	out, err = all.CombinedOutput()
 	require.NoError(t, err, "listing from the go client:\n%s", out)
 	for _, lang := range langs {

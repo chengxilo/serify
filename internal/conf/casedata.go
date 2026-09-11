@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package conf
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/chengxilo/serify/internal/kind"
 )
 
 // Case data is decoded schema-directed, not type-guessed. Unmarshalling into
@@ -85,7 +85,7 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 	}
 
 	switch ft.Base {
-	case typekind.Uint64:
+	case kind.Uint64:
 		b, err := decodeExactInt(n)
 		if err != nil {
 			return nil, err
@@ -95,7 +95,7 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 		}
 		return b.Uint64(), nil
 
-	case typekind.Int64:
+	case kind.Int64:
 		b, err := decodeExactInt(n)
 		if err != nil {
 			return nil, err
@@ -105,7 +105,7 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 		}
 		return b.Int64(), nil
 
-	case typekind.Uint128:
+	case kind.Uint128:
 		b, err := decodeExactInt(n)
 		if err != nil {
 			return nil, err
@@ -115,7 +115,7 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 		}
 		return b, nil
 
-	case typekind.Int128:
+	case kind.Int128:
 		b, err := decodeExactInt(n)
 		if err != nil {
 			return nil, err
@@ -125,13 +125,13 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 		}
 		return b, nil
 
-	case typekind.Optional:
+	case kind.Optional:
 		if ft.Elem == nil {
 			break
 		}
 		return decodeDataValue(*ft.Elem, n) // null was handled above
 
-	case typekind.List, typekind.Array:
+	case kind.List, kind.Array:
 		if ft.Elem == nil {
 			break
 		}
@@ -149,7 +149,7 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 		}
 		return out, nil
 
-	case typekind.Map:
+	case kind.Map:
 		if ft.Elem == nil {
 			break
 		}
@@ -168,14 +168,14 @@ func decodeDataValue(ft FieldType, n *yaml.Node) (any, error) {
 		}
 		return out, nil
 
-	case typekind.Struct:
+	case kind.Struct:
 		var m map[string]yaml.Node
 		if err := n.Decode(&m); err != nil {
 			return nil, err
 		}
 		return decodeCaseData(ft.Fields, m)
 
-	case typekind.Sum:
+	case kind.Sum:
 		// A variant is either a bare tag (unit variant) or a single-key map
 		// {tag: payload}. Canonical in-memory form is always {tag: payload}
 		// (payload nil for unit), so it travels uniformly.

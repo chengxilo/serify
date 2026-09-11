@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package conf
 
 import (
 	"fmt"
@@ -25,7 +25,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/chengxilo/serify/internal/typekind"
+	"github.com/chengxilo/serify/internal/kind"
 )
 
 // A type is written in compact YAML. A record lists its fields under `fields:`,
@@ -258,11 +258,11 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 	if canon, ok := scalarAliases[expr]; ok {
 		expr = canon
 	}
-	if slices.Contains(typekind.Scalars, expr) {
+	if slices.Contains(kind.Scalars, expr) {
 		return FieldType{Base: expr}, nil
 	}
-	if expr == typekind.Struct {
-		return FieldType{Base: typekind.Struct}, nil
+	if expr == kind.Struct {
+		return FieldType{Base: kind.Struct}, nil
 	}
 	if nt, ok := r.named[expr]; ok {
 		// A sum is its variants: as a field it *is* the sum, so
@@ -287,7 +287,7 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 		if err != nil {
 			return FieldType{}, err
 		}
-		return FieldType{Base: typekind.Struct, Fields: f}, nil
+		return FieldType{Base: kind.Struct, Fields: f}, nil
 	}
 
 	m := typeParamRe.FindStringSubmatch(expr)
@@ -296,7 +296,7 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 	}
 	outer, inner := m[1], m[2]
 	switch outer {
-	case typekind.Enum:
+	case kind.Enum:
 		var vals []string
 		for v := range strings.SplitSeq(inner, ",") {
 			if v = strings.TrimSpace(v); v != "" {
@@ -306,14 +306,14 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 		if len(vals) == 0 {
 			return FieldType{}, fmt.Errorf("enum requires at least one value: %q", expr)
 		}
-		return FieldType{Base: typekind.Enum, Values: vals}, nil
-	case typekind.Optional, typekind.List:
+		return FieldType{Base: kind.Enum, Values: vals}, nil
+	case kind.Optional, kind.List:
 		elem, err := r.typeOf(inner)
 		if err != nil {
 			return FieldType{}, err
 		}
 		return FieldType{Base: outer, Elem: &elem}, nil
-	case typekind.Array:
+	case kind.Array:
 		comma := strings.LastIndex(inner, ",")
 		if comma < 0 {
 			return FieldType{}, fmt.Errorf("array type requires size: array<T,N>, got %q", expr)
@@ -326,9 +326,9 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 		if err != nil {
 			return FieldType{}, fmt.Errorf("array size must be an integer in %q", expr)
 		}
-		return FieldType{Base: typekind.Array, Elem: &elem, ArrayN: n}, nil
-	case typekind.Map:
-		kv := typekind.SplitTopLevel(inner)
+		return FieldType{Base: kind.Array, Elem: &elem, ArrayN: n}, nil
+	case kind.Map:
+		kv := kind.SplitTopLevel(inner)
 		if len(kv) != 2 {
 			return FieldType{}, fmt.Errorf("map type requires key and value: map<K,V>, got %q", expr)
 		}
@@ -340,8 +340,8 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 		if err != nil {
 			return FieldType{}, err
 		}
-		return FieldType{Base: typekind.Map, Key: &key, Elem: &val}, nil
-	case typekind.Sum:
+		return FieldType{Base: kind.Map, Key: &key, Elem: &val}, nil
+	case kind.Sum:
 		return FieldType{}, fmt.Errorf(
 			"%q: a sum is declared with a `variants:` section on its own type file, not "+
 				"as a type expression — put the arms there (an entry with no type is a unit "+
@@ -369,7 +369,7 @@ func (r *schemaResolver) sumType(raw []rawTypeField) (FieldType, error) {
 		}
 		variants = append(variants, v)
 	}
-	return FieldType{Base: typekind.Sum, Variants: variants}, nil
+	return FieldType{Base: kind.Sum, Variants: variants}, nil
 }
 
 // sumSchema is the schema of a sum type when it is the type under test. The top
