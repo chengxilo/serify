@@ -21,6 +21,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/chengxilo/serify/internal/language"
 )
 
 func TestDetectLanguage(t *testing.T) {
@@ -29,17 +31,17 @@ func TestDetectLanguage(t *testing.T) {
 		files    []string
 		wantLang string
 	}{
-		{"*.go", []string{"main.go"}, "go"},
-		{"go", []string{"go.mod"}, "go"},
-		{"rust", []string{"Cargo.toml"}, "rust"},
-		{"java", []string{"pom.xml"}, "java"},
-		{"elixir", []string{"mix.exs"}, "elixir"},
-		{"csharp", []string{"Worker.csproj"}, "csharp"},
-		{"node", []string{"package.json"}, "node"},
-		{"python", []string{"worker.py"}, "python"},
-		{"python_any", []string{"app.py"}, "python"},
-		{"*.cpp", []string{"worker.cpp"}, "cpp"},
-		{"cpp_any", []string{"main.cpp"}, "cpp"},
+		{"*.go", []string{"main.go"}, language.Go},
+		{"go", []string{"go.mod"}, language.Go},
+		{"rust", []string{"Cargo.toml"}, language.Rust},
+		{"java", []string{"pom.xml"}, language.Java},
+		{"elixir", []string{"mix.exs"}, language.Elixir},
+		{"csharp", []string{"Worker.csproj"}, language.CSharp},
+		{"node", []string{"package.json"}, language.Node},
+		{"python", []string{"worker.py"}, language.Python},
+		{"python_any", []string{"app.py"}, language.Python},
+		{"*.cpp", []string{"worker.cpp"}, language.Cpp},
+		{"cpp_any", []string{"main.cpp"}, language.Cpp},
 	}
 
 	for _, tt := range tests {
@@ -81,11 +83,11 @@ func TestDetect_NoYAML(t *testing.T) {
 
 	info, err := Detect(dir)
 	require.NoError(t, err, "unexpected error: %v", err)
-	assert.Equal(t, "go", info.Language, "language = %q, want %q", info.Language, "go")
-	if assert.NotNil(t, info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults["go"].Build) {
-		assert.Equal(t, Defaults["go"].Build, *info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults["go"].Build)
+	assert.Equal(t, language.Go, info.Language, "language = %q, want %q", info.Language, language.Go)
+	if assert.NotNil(t, info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults[language.Go].Build) {
+		assert.Equal(t, Defaults[language.Go].Build, *info.Manifest.Build, "build = %v, want default %q", info.Manifest.Build, Defaults[language.Go].Build)
 	}
-	assert.Equal(t, Defaults["go"].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults["go"].Run)
+	assert.Equal(t, Defaults[language.Go].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults[language.Go].Run)
 }
 
 func TestDetect_YAMLOverride(t *testing.T) {
@@ -97,7 +99,7 @@ func TestDetect_YAMLOverride(t *testing.T) {
 
 	info, err := Detect(dir)
 	require.NoError(t, err, "unexpected error: %v", err)
-	assert.Equal(t, "go", info.Language, "language = %q, want %q", info.Language, "go")
+	assert.Equal(t, language.Go, info.Language, "language = %q, want %q", info.Language, language.Go)
 	if assert.NotNil(t, info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom build") {
 		assert.Equal(t, "custom build", *info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom build")
 	}
@@ -113,9 +115,9 @@ func TestDetect_PartialYAML(t *testing.T) {
 
 	info, err := Detect(dir)
 	require.NoError(t, err, "unexpected error: %v", err)
-	assert.Equal(t, "rust", info.Language, "language = %q, want %q", info.Language, "rust")
+	assert.Equal(t, language.Rust, info.Language, "language = %q, want %q", info.Language, language.Rust)
 	if assert.NotNil(t, info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom cargo build") {
 		assert.Equal(t, "custom cargo build", *info.Manifest.Build, "build = %v, want %q", info.Manifest.Build, "custom cargo build")
 	}
-	assert.Equal(t, Defaults["rust"].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults["rust"].Run)
+	assert.Equal(t, Defaults[language.Rust].Run, info.Manifest.Run, "run = %q, want default %q", info.Manifest.Run, Defaults[language.Rust].Run)
 }

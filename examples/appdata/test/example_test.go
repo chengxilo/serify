@@ -23,6 +23,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/chengxilo/serify/internal/language"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
@@ -46,7 +47,7 @@ func TestExamples_Customer(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, "go")
+	requireLang(t, language.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -89,7 +90,7 @@ func allWorkersGrid(t *testing.T) testutil.ResultGrid {
 		// other skip now fails the run. Only languages actually in the run have
 		// their file read, so a partial local run raises no stale warnings.
 		args := []string{
-			"run", "--ref", "go", "--cases", casesDir, "--csv", csv,
+			"run", "--ref", language.Go, "--cases", casesDir, "--csv", csv,
 			"--expect-skips", filepath.Join(casesDir, "expected_skips"),
 		}
 		for _, lang := range availableLangs {
@@ -118,7 +119,7 @@ func TestExamples_Ledger(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, "go")
+	requireLang(t, language.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -142,7 +143,7 @@ func TestExamples_Notification(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, "go")
+	requireLang(t, language.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -186,7 +187,7 @@ func TestExamples_Signals(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, "go")
+	requireLang(t, language.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -216,11 +217,11 @@ func TestExamples_Telemetry(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, "go")
+	requireLang(t, language.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
-		if lang == "elixir" {
+		if lang == language.Elixir {
 			continue
 		}
 		for _, op := range []string{"serialize", "deserialize"} {
@@ -254,7 +255,7 @@ func TestExamples_Order(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, "go")
+	requireLang(t, language.Go)
 
 	grid := allWorkersGrid(t)
 	for _, lang := range availableLangs {
@@ -273,7 +274,7 @@ func TestExamples_Audit(t *testing.T) {
 	if len(availableLangs) == 0 {
 		t.Skip("no example worker toolchains available")
 	}
-	requireLang(t, "go")
+	requireLang(t, language.Go)
 
 	repoRoot := testutil.RepoRoot()
 	var workerDirs []string
@@ -286,7 +287,7 @@ func TestExamples_Audit(t *testing.T) {
 	casesDir := filepath.Join(repoRoot, "examples", "appdata", "cases")
 	csv := filepath.Join(t.TempDir(), "out.csv")
 
-	args := []string{"run", "--ref", "go", "--cases", casesDir, "--csv", csv, "--audit"}
+	args := []string{"run", "--ref", language.Go, "--cases", casesDir, "--csv", csv, "--audit"}
 	args = append(args, workerDirs...)
 
 	out, code := testutil.RunSerify(t, args...)

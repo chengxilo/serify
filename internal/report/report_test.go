@@ -20,12 +20,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/chengxilo/serify/internal/language"
 )
 
 // sampleReport builds a small report: two languages, one case in two formats,
 // serialize + deserialize each.
 func sampleReport() *Report {
-	langs := []string{"go", "rust"}
+	langs := []string{language.Go, language.Rust}
 	ids := []string{"user/binary/basic", "user/json/basic"}
 	r := New(langs, ids, "table")
 	for _, id := range ids {
@@ -80,18 +82,18 @@ func TestRenderTableFromRecords(t *testing.T) {
 // exactly like a healthy run: the suite reports exit 0 having compared nothing
 // about it at all.
 func TestUnimplementedTypes(t *testing.T) {
-	r := New([]string{"go", "rust"}, nil, "table")
+	r := New([]string{language.Go, language.Rust}, nil, "table")
 
 	// ledger: implemented by go, skipped by rust — a normal partial suite.
-	r.Add(Result{TestID: "ledger/binary/deposit", Language: "go", Operation: OpSerialize, Status: StatusPass})
-	r.Add(Result{TestID: "ledger/binary/deposit", Language: "rust", Operation: OpSerialize, Status: StatusSkip})
+	r.Add(Result{TestID: "ledger/binary/deposit", Language: language.Go, Operation: OpSerialize, Status: StatusPass})
+	r.Add(Result{TestID: "ledger/binary/deposit", Language: language.Rust, Operation: OpSerialize, Status: StatusSkip})
 
 	// telemetry: skipped by everyone.
-	r.Add(Result{TestID: "telemetry/binary/nominal", Language: "go", Operation: OpSerialize, Status: StatusSkip})
-	r.Add(Result{TestID: "telemetry/binary/nominal", Language: "rust", Operation: OpSerialize, Status: StatusSkip})
+	r.Add(Result{TestID: "telemetry/binary/nominal", Language: language.Go, Operation: OpSerialize, Status: StatusSkip})
+	r.Add(Result{TestID: "telemetry/binary/nominal", Language: language.Rust, Operation: OpSerialize, Status: StatusSkip})
 
 	// order: skipped by everyone too, so the result must be name-ordered.
-	r.Add(Result{TestID: "order/binary/paid", Language: "go", Operation: OpSerialize, Status: StatusSkip})
+	r.Add(Result{TestID: "order/binary/paid", Language: language.Go, Operation: OpSerialize, Status: StatusSkip})
 
 	got := r.unimplementedTypes()
 	want := []string{"order", "telemetry"}
@@ -101,8 +103,8 @@ func TestUnimplementedTypes(t *testing.T) {
 // A type with a FAIL is implemented — it ran and disagreed, which is the
 // opposite of untested.
 func TestUnimplementedTypes_FailureCounts(t *testing.T) {
-	r := New([]string{"go"}, nil, "table")
-	r.Add(Result{TestID: "wrong/binary/x", Language: "go", Operation: OpSerialize, Status: StatusFail})
+	r := New([]string{language.Go}, nil, "table")
+	r.Add(Result{TestID: "wrong/binary/x", Language: language.Go, Operation: OpSerialize, Status: StatusFail})
 	got := r.unimplementedTypes()
 	assert.Empty(t, got, "a failing type is implemented, got %v", got)
 }

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/chengxilo/serify/internal/config"
+	"github.com/chengxilo/serify/internal/language"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/stretchr/testify/assert"
 )
@@ -28,7 +29,7 @@ func skipReport(t *testing.T, entries ...report.Result) *report.Report {
 	for _, e := range entries {
 		ids = append(ids, e.TestID)
 	}
-	rep := report.New([]string{"go"}, ids, "table")
+	rep := report.New([]string{language.Go}, ids, "table")
 	for _, e := range entries {
 		rep.Add(e)
 	}
@@ -36,7 +37,7 @@ func skipReport(t *testing.T, entries ...report.Result) *report.Report {
 }
 
 func skipAt(testID, op string) report.Result {
-	return report.Result{TestID: testID, Language: "go", Operation: op, Status: report.StatusSkip}
+	return report.Result{TestID: testID, Language: language.Go, Operation: op, Status: report.StatusSkip}
 }
 
 // A skip that is declared stays a skip and keeps the run green.
@@ -46,7 +47,7 @@ func TestCheckExpectedSkips_DeclaredStaysGreen(t *testing.T) {
 		skipAt("get_stream/binary/numeric_1", report.OpDeserialize),
 	)
 	CheckExpectedSkips(rep, map[string]config.ExpectedSkips{
-		"go": {
+		language.Go: {
 			Types:      []string{"wire_name"},
 			Operations: map[string][]string{report.OpDeserialize: {"get_stream"}},
 		},
@@ -59,7 +60,7 @@ func TestCheckExpectedSkips_DeclaredStaysGreen(t *testing.T) {
 func TestCheckExpectedSkips_UndeclaredFails(t *testing.T) {
 	rep := skipReport(t, skipAt("get_client/binary/client_1", report.OpSerialize))
 	CheckExpectedSkips(rep, map[string]config.ExpectedSkips{
-		"go": {Types: []string{"wire_name"}},
+		language.Go: {Types: []string{"wire_name"}},
 	})
 	assert.False(t, rep.Success(), "an undeclared skip must fail")
 }
@@ -69,7 +70,7 @@ func TestCheckExpectedSkips_UndeclaredFails(t *testing.T) {
 func TestCheckExpectedSkips_OperationIsPerType(t *testing.T) {
 	rep := skipReport(t, skipAt("message_header/binary/simple", report.OpDeserialize))
 	CheckExpectedSkips(rep, map[string]config.ExpectedSkips{
-		"go": {Operations: map[string][]string{report.OpDeserialize: {"get_stream"}}},
+		language.Go: {Operations: map[string][]string{report.OpDeserialize: {"get_stream"}}},
 	})
 	assert.False(t, rep.Success(), "deserialize declared for get_stream must not cover message_header")
 }
@@ -81,7 +82,7 @@ func TestCheckExpectedSkips_OperationIsPerType(t *testing.T) {
 func TestCheckExpectedSkips_CascadeSkipsExempt(t *testing.T) {
 	for _, detail := range []string{SkipRefSerializeFailed, SkipRefUnsupported} {
 		rep := skipReport(t, report.Result{
-			TestID: "wrong/binary/hang", Language: "go", Operation: report.OpDeserialize,
+			TestID: "wrong/binary/hang", Language: language.Go, Operation: report.OpDeserialize,
 			Status: report.StatusSkip, Detail: detail,
 		})
 		CheckExpectedSkips(rep, map[string]config.ExpectedSkips{})
@@ -92,11 +93,11 @@ func TestCheckExpectedSkips_CascadeSkipsExempt(t *testing.T) {
 // A declaration that no longer matches anything is reported so it gets removed.
 func TestCheckExpectedSkips_StaleDeclarationWarns(t *testing.T) {
 	rep := skipReport(t, report.Result{
-		TestID: "get_client/binary/client_1", Language: "go",
+		TestID: "get_client/binary/client_1", Language: language.Go,
 		Operation: report.OpSerialize, Status: report.StatusPass,
 	})
 	CheckExpectedSkips(rep, map[string]config.ExpectedSkips{
-		"go": {Types: []string{"wire_name"}},
+		language.Go: {Types: []string{"wire_name"}},
 	})
 	assert.NotEmpty(t, rep.Warnings, "want a warning for the stale expected-skip entry")
 	assert.True(t, rep.Success(), "a stale entry warns, it does not fail")

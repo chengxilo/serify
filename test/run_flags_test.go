@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/chengxilo/serify/internal/language"
 	"github.com/chengxilo/serify/internal/report"
 	"github.com/chengxilo/serify/internal/testutil"
 )
@@ -34,14 +35,14 @@ func TestCLI_Run_FullMatrix(t *testing.T) {
 	requireWorkers(t, happy.langs...)
 
 	csv := filepath.Join(t.TempDir(), "out.csv")
-	out, code := testutil.RunSerify(t, happy.runArgs("go", happy.CasePath(), "--full-matrix", "--csv", csv)...)
+	out, code := testutil.RunSerify(t, happy.runArgs(language.Go, happy.CasePath(), "--full-matrix", "--csv", csv)...)
 	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 
 	grid := readResultGrid(t, csv)
 
 	// All four lang pairs on a known id.
 	id := "all_types/json/basic"
-	pairs := []string{"go", "rust"}
+	pairs := []string{language.Go, language.Rust}
 	for _, src := range pairs {
 		for _, dst := range pairs {
 			op := report.OpMatrix
@@ -54,15 +55,15 @@ func TestCLI_Run_FullMatrix(t *testing.T) {
 	}
 
 	// Serialize + deserialize rows still PASS.
-	testutil.AssertCell(t, grid, id, "go", report.OpSerialize, report.StatusPass, nil)
-	testutil.AssertCell(t, grid, id, "rust", report.OpSerialize, report.StatusPass, nil)
+	testutil.AssertCell(t, grid, id, language.Go, report.OpSerialize, report.StatusPass, nil)
+	testutil.AssertCell(t, grid, id, language.Rust, report.OpSerialize, report.StatusPass, nil)
 }
 
 // TestCLI_Run_JSONOutput verifies --output json produces parseable JSON records.
 func TestCLI_Run_JSONOutput(t *testing.T) {
 	requireWorkers(t, happy.langs...)
 
-	out, code := testutil.RunSerify(t, happy.runArgs("go", happy.CasePath(), "--output", "json")...)
+	out, code := testutil.RunSerify(t, happy.runArgs(language.Go, happy.CasePath(), "--output", "json")...)
 	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 
 	// Slice from the first '[' — nothing prints after the JSON array when --csv is absent.
@@ -76,13 +77,13 @@ func TestCLI_Run_JSONOutput(t *testing.T) {
 
 	found := false
 	for _, r := range records {
-		if r.TestID == "all_types/json/basic" && r.Language == "go" && r.Operation == "serialize" &&
+		if r.TestID == "all_types/json/basic" && r.Language == language.Go && r.Operation == "serialize" &&
 			r.Status == report.StatusPass {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "all_types/json/basic go serialize PASS not found in %d records", len(records))
+	assert.True(t, found, "all_types/json/basic "+language.Go+" serialize PASS not found in %d records", len(records))
 }
 
 // TestCLI_Run_BuildOnly exercises --build-only (first coverage of the real build path).
@@ -91,7 +92,7 @@ func TestCLI_Run_BuildOnly(t *testing.T) {
 
 	// Use the happy go worker dir without --no-build.
 	goDir := happy.WorkerPaths()[0]
-	out, code := testutil.RunSerify(t, "run", "--ref", "go", "--cases", happy.CasePath(), "--build-only", goDir)
+	out, code := testutil.RunSerify(t, "run", "--ref", language.Go, "--cases", happy.CasePath(), "--build-only", goDir)
 	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
 	assert.Contains(t, out, "Build complete (--build-only).", "build-only message")
 	assert.NotContains(t, out, "Suite:", "should not run tests")
@@ -149,14 +150,14 @@ func TestCLI_Run_MalformedCases(t *testing.T) {
 	badDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(badDir, "bad.yaml"), []byte("{not yaml!!"), 0644))
 	out, code := testutil.RunSerify(t, slices.Concat(
-		[]string{"run", "--ref", "go", "--cases", badDir, "--no-build"},
+		[]string{"run", "--ref", language.Go, "--cases", badDir, "--no-build"},
 		happy.WorkerPaths())...)
 	require.NotEqual(t, 0, code, "expected non-zero exit for bad yaml, got 0\n%s", out)
 	assert.Contains(t, out, "load cases:", "bad yaml error")
 
 	// Nonexistent directory.
 	out2, code2 := testutil.RunSerify(t, slices.Concat(
-		[]string{"run", "--ref", "go", "--cases", "/nonexistent", "--no-build"},
+		[]string{"run", "--ref", language.Go, "--cases", "/nonexistent", "--no-build"},
 		happy.WorkerPaths())...)
 	require.NotEqual(t, 0, code2, "expected non-zero exit for missing dir, got 0\n%s", out2)
 	assert.Contains(t, out2, "stat", "nonexistent dir")
@@ -169,9 +170,9 @@ func TestCLI_Run_BadRunCommand(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(tmp, "main.go"), []byte("package main\nfunc main() {}"), 0644))
 	// worker.yaml with a nonexistent run command.
 	require.NoError(t, os.WriteFile(filepath.Join(tmp, "worker.yaml"), []byte("run: ./no-such-worker"), 0644))
-	out, code := testutil.RunSerify(t, "run", "--ref", "go", "--cases", happy.CasePath(), "--no-build", tmp)
+	out, code := testutil.RunSerify(t, "run", "--ref", language.Go, "--cases", happy.CasePath(), "--no-build", tmp)
 	require.NotEqual(t, 0, code, "expected non-zero exit, got 0\n%s", out)
-	assert.Contains(t, out, "start go worker", "bad run command")
+	assert.Contains(t, out, "start "+language.Go+" worker", "bad run command")
 }
 
 // TestCLI_Run_DuplicateLanguage pins the rejection of two workers of the same
@@ -180,12 +181,12 @@ func TestCLI_Run_BadRunCommand(t *testing.T) {
 // silently overwrite the first: the run reported a single column and a single
 // worker's pass count, with nothing to say a worker's results were discarded.
 func TestCLI_Run_DuplicateLanguage(t *testing.T) {
-	goWorker := filepath.Join(happy.path, "go")
+	goWorker := filepath.Join(happy.path, language.Go)
 	out, code := testutil.RunSerify(t,
-		"run", "--ref", "go", "--cases", happy.CasePath(), "--no-build",
+		"run", "--ref", language.Go, "--cases", happy.CasePath(), "--no-build",
 		goWorker, goWorker)
 	require.NotEqual(t, 0, code, "expected non-zero exit for two workers of the same language\n%s", out)
-	assert.Contains(t, out, "two go workers", "error should name the duplicated language")
+	assert.Contains(t, out, "two "+language.Go+" workers", "error should name the duplicated language")
 }
 
 // TestCLI_Validate tests the `serify validate` subcommand — case file loading
@@ -199,7 +200,7 @@ func TestCLI_Validate(t *testing.T) {
 	// Validate with a worker directory.
 	out2, code2 := testutil.RunSerify(t, "validate", "--cases", happy.CasePath(), happy.WorkerPaths()[0])
 	require.Equal(t, 0, code2, "validate exit = %d, want 0\n%s", code2, out2)
-	assert.Contains(t, out2, "Worker go", "validate should detect worker")
+	assert.Contains(t, out2, "Worker "+language.Go, "validate should detect worker")
 
 	// Bad cases directory.
 	out3, code3 := testutil.RunSerify(t, "validate", "--cases", "/nonexistent")
