@@ -30,22 +30,27 @@ type serializeAuditHolder struct {
 }
 
 // fieldSnap holds a snapshot of a field value before buffer corruption,
-// used by DetectZeroCopy. orig is a deep clone of the whole field value.
+// used by detectZeroCopy. orig is a deep clone of the whole field value.
 type fieldSnap struct {
 	fm   *FieldMap
 	key  string
 	orig any
 }
 
-// The exported functions in this file are low-level audit helpers. A worker
-// driven by the serify runner never calls them: register serialize/deserialize
-// in a Suite, and Run handles audit itself when --audit is passed. They are
-// exported for audit-style checks outside the runner.
+// The functions in this file are low-level audit helpers used only by Run
+// (run.go) and buildSerializer/buildFieldMapSerializer (suite.go) when
+// --audit is passed. A worker driven by the serify runner never calls them
+// directly: register serialize/deserialize in a Suite and Run handles audit
+// itself. They are unexported deliberately — detectZeroCopy mutates its
+// buffer argument in place (via xorFlip) for the duration of the call with no
+// synchronization, which is only safe because the NDJSON loop that calls it
+// is strictly sequential; exporting it would invite a caller to run it
+// against a buffer shared with concurrent code.
 
-// SnapshotFieldMap deep-copies a FieldMap, cloning []byte values so in-place
+// snapshotFieldMap deep-copies a FieldMap, cloning []byte values so in-place
 // mutations to the original are visible as diffs. Recurses into nested
 // *FieldMap, []*FieldMap, and map[string]any containing *FieldMap.
-func SnapshotFieldMap(src *FieldMap) *FieldMap {
+func snapshotFieldMap(src *FieldMap) *FieldMap {
 	if src == nil {
 		return nil
 	}
@@ -95,14 +100,14 @@ func cloneValue(v any) any {
 		}
 		return out
 	case *FieldMap:
-		return SnapshotFieldMap(x)
+		return snapshotFieldMap(x)
 	case []*FieldMap:
 		if x == nil {
 			return x // typed nil: see the note on valuesEqual
 		}
 		out := make([]*FieldMap, len(x))
 		for i, fm := range x {
-			out[i] = SnapshotFieldMap(fm)
+			out[i] = snapshotFieldMap(fm)
 		}
 		return out
 	case map[string]any:
@@ -126,10 +131,10 @@ func cloneValue(v any) any {
 	}
 }
 
-// CompareFieldMaps returns field names that differ between before and after.
+// compareFieldMaps returns field names that differ between before and after.
 // Uses bytes.Equal for []byte, recursive comparison for nested *FieldMap,
 // and reflect.DeepEqual for everything else.
-func CompareFieldMaps(before, after *FieldMap) []string {
+func compareFieldMaps(before, after *FieldMap) []string {
 	if before == nil && after == nil {
 		return nil
 	}
@@ -181,7 +186,7 @@ func valuesEqual(a, b any) bool {
 	afm, aIsFM := a.(*FieldMap)
 	bfm, bIsFM := b.(*FieldMap)
 	if aIsFM && bIsFM {
-		return len(CompareFieldMaps(afm, bfm)) == 0
+		return len(compareFieldMaps(afm, bfm)) == 0
 	}
 	afms, aIsFMS := a.([]*FieldMap)
 	bfms, bIsFMS := b.([]*FieldMap)
@@ -190,7 +195,7 @@ func valuesEqual(a, b any) bool {
 			return false
 		}
 		for i := range afms {
-			if len(CompareFieldMaps(afms[i], bfms[i])) > 0 {
+			if len(compareFieldMaps(afms[i], bfms[i])) > 0 {
 				return false
 			}
 		}
@@ -221,12 +226,12 @@ func xorFlip(buf []byte) {
 	}
 }
 
-// DetectZeroCopy performs an active overwrite test: snapshots all aliasing-
+// detectZeroCopy performs an active overwrite test: snapshots all aliasing-
 // capable fields ([]byte, string, and container fields containing them),
 // XOR-flips the input buffer, and checks which fields changed. Fields that
 // changed were aliasing the buffer. Restores original values after.
 // Returns the list of field names that exhibited zero-copy aliasing.
-func DetectZeroCopy(fm *FieldMap, buf []byte) []string {
+func detectZeroCopy(fm *FieldMap, buf []byte) []string {
 	if len(buf) == 0 {
 		return nil
 	}
@@ -340,7 +345,7 @@ func hasBytesOrStringValue(x map[string]any) bool {
 	return false
 }
 
-// DetectInputMutation checks if the input buffer was modified during deserialization.
-func DetectInputMutation(before, current []byte) bool {
+// detectInputMutation checks if the input buffer was modified during deserialization.
+func detectInputMutation(before, current []byte) bool {
 	return !bytes.Equal(before, current)
 }

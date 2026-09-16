@@ -649,15 +649,19 @@ class Worker
 
     // ── Audit helpers ─────────────────────────────────────────────────────
     //
-    // The public methods below are low-level audit helpers. A worker driven by
-    // the serify runner never calls them: register serialize/deserialize in a
-    // suite, and the run loop handles audit itself when --audit is passed. They
-    // are public for audit-style checks outside the runner.
+    // The methods below are low-level audit helpers used only by the run loop
+    // (below) when --audit is passed. A worker driven by the serify runner
+    // never calls them directly: register serialize/deserialize in a suite and
+    // the run loop handles audit itself. They are private, not public —
+    // detectZeroCopy mutates its buffer argument in place with no
+    // synchronization, which is only safe because the NDJSON loop that calls
+    // it is strictly sequential; a public method would invite a caller to run
+    // it against a buffer shared with concurrent code.
 
     /**
      * Recursively walks a FieldMap and collects a snapshot of every byte-string value.
      */
-    public static function collectByteSnaps(FieldMap $fm, array &$snaps): void
+    private static function collectByteSnaps(FieldMap $fm, array &$snaps): void
     {
         $keys = array_keys($fm->raw());
         sort($keys);
@@ -689,7 +693,7 @@ class Worker
     /**
      * Compares two arrays and returns the keys whose values differ.
      */
-    public static function dictDiffs(array $before, array $after): array
+    private static function dictDiffs(array $before, array $after): array
     {
         $diffs = [];
         $keys = array_unique(array_merge(array_keys($before), array_keys($after)));
@@ -708,7 +712,7 @@ class Worker
      * XOR-flips the input buffer and reports which FieldMap fields changed with it,
      * i.e. which alias it. Restores the original values before returning.
      */
-    public static function detectZeroCopy(FieldMap $fm, string &$buf): array
+    private static function detectZeroCopy(FieldMap $fm, string &$buf): array
     {
         if (strlen($buf) === 0) {
             return [];

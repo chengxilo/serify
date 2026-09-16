@@ -1552,14 +1552,24 @@ fn xor_flip(buf: &mut [u8]) {
     }
 }
 
-// The four public functions below are low-level audit helpers. A worker driven
-// by the serify runner never calls them: register serialize/deserialize in a
-// Suite, and run() handles audit itself when --audit is passed. They are public
-// for audit-style checks outside the runner.
+// field_map_diffs and detect_zero_copy below are low-level audit helpers used
+// only by run() (below) when --audit is passed. A worker driven by the serify
+// runner never calls them directly: register serialize/deserialize in a Suite
+// and run() handles audit itself. They are crate-private deliberately —
+// detect_zero_copy XOR-flips its buffer argument in place for the duration of
+// the call with no synchronization, which is only safe because the NDJSON
+// loop that calls it is strictly sequential; a public API would invite a
+// caller to run it against a buffer shared with concurrent code.
+//
+// json_field_diffs and detect_output_zero_copy have no such risk (the former
+// only diffs two immutable JSON values; the latter's job is done inline at
+// the ser_hook call site above instead) and are currently unused within the
+// crate; they stay `pub` rather than `pub(crate)` so they don't trip the
+// dead_code lint CI runs with `-D warnings`.
 
 /// Compare two FieldMaps and return the list of top-level keys that differ.
 #[cfg(feature = "worker")]
-pub fn field_map_diffs(before: &FieldMap, after: &FieldMap) -> Vec<String> {
+pub(crate) fn field_map_diffs(before: &FieldMap, after: &FieldMap) -> Vec<String> {
     let mut diffs = Vec::new();
     for k in before.fields.keys() {
         let bv = before.fields.get(k);
@@ -1606,7 +1616,7 @@ pub fn json_field_diffs(before: &Value, after: &Value) -> Vec<String> {
 /// Active overwrite test: XOR-flip the input buffer and report which FieldMap
 /// fields changed (indicating they alias the buffer). Restores original values.
 #[cfg(feature = "worker")]
-pub fn detect_zero_copy(fm: &mut FieldMap, buf: &mut [u8]) -> Vec<String> {
+pub(crate) fn detect_zero_copy(fm: &mut FieldMap, buf: &mut [u8]) -> Vec<String> {
     if buf.is_empty() {
         return vec![];
     }

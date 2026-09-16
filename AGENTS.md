@@ -341,18 +341,20 @@ Key files:
 
 | File | Purpose |
 |------|---------|
-| `lib/go/serify/auditcheck.go` | Go lib: `DetectZeroCopy`, `SnapshotFieldMap`, `CompareFieldMaps`, `DetectInputMutation`, `serializeAuditHolder` |
+| `lib/go/serify/auditcheck.go` | Go lib: `detectZeroCopy`, `snapshotFieldMap`, `compareFieldMaps`, `detectInputMutation`, `serializeAuditHolder` (all unexported — used only by `run.go`/`suite.go` in the same package) |
 | `lib/go/serify/auditcheck_test.go` | Go library unit tests for audit detection functions |
 | `lib/go/serify/run.go` | Go library: NDJSON loop audit logic (stability, mutation, zero-copy, input-mutation) |
 | `lib/go/serify/suite.go` | Go lib: `buildSerializer` returns `*serializeAuditHolder` for mutation detection |
 | `lib/rust/serify/src/lib.rs` | Rust lib: `detect_zero_copy`, `detect_output_zero_copy`, `field_map_diffs`, `json_field_diffs`; audit in serialize/deserialize handlers |
 | `lib/python/serify.py` | Python lib: `_detect_zero_copy`, `_collect_bytes_snaps`, `_dict_diffs`; audit in serialize/deserialize handlers |
-| `lib/node/src/workerlib.ts` | Node lib: `detectZeroCopy`, `collectByteSnaps`, `dictDiffs`; audit in serialize/deserialize handlers |
-| `lib/csharp/Serify.cs` | C# lib: `DetectZeroCopy`, `CollectByteSnaps`, `DictDiffs`; audit in serialize/deserialize handlers |
-| `lib/cpp/serify.hpp` | C++ lib: `detect_zero_copy_cpp`, `collect_byte_snaps`, `dict_diffs`; audit in serialize/deserialize handlers |
-| `lib/java/src/main/java/io/serify/WorkerLib.java` | Java lib: `detectZeroCopy`, `collectByteSnaps`, `dictDiffs`; audit in serialize/deserialize handlers |
-| `lib/elixir/lib/serify.ex` | Elixir lib: `detect_zero_copy`, `collect_bin_snaps`, `dict_diffs`; audit in serialize/deserialize handlers |
-| `lib/php/src/Worker.php` | PHP lib: `detectZeroCopy`, `collectByteSnaps`, `dictDiffs`; audit in serialize/deserialize handlers |
+| `lib/node/src/workerlib.ts` | Node lib: `detectZeroCopy`, `collectByteSnaps`, `dictDiffs` (unexported — this file is the package's `main` entry, so exporting them would be public npm API); audit in serialize/deserialize handlers |
+| `lib/csharp/Serify.cs` | C# lib: `DetectZeroCopy`, `CollectByteSnaps`, `DictDiffs` (private, on `Worker`); audit in serialize/deserialize handlers |
+| `lib/cpp/serify.hpp` | C++ lib: `detail::detect_zero_copy_cpp`, `detail::collect_byte_snaps`, `detail::dict_diffs` (moved out of `namespace serify` into a nested `detail` namespace); audit in serialize/deserialize handlers |
+| `lib/java/src/main/java/io/serify/WorkerLib.java` | Java lib: `detectZeroCopy`, `collectByteSnaps`, `dictDiffs` (private, on `WorkerLib`); audit in serialize/deserialize handlers |
+| `lib/elixir/lib/serify.ex` | Elixir lib: `detect_zero_copy`, `collect_bin_snaps`, `dict_diffs` (all `defp`); `detect_zero_copy` is a permanent no-op (`[]`) since BEAM binaries are immutable — nothing to XOR-flip, so this one carries no mutation risk regardless of visibility; audit in serialize/deserialize handlers |
+| `lib/php/src/Worker.php` | PHP lib: `detectZeroCopy`, `collectByteSnaps`, `dictDiffs` (private, on `Worker`); audit in serialize/deserialize handlers |
+
+All of the above (except Elixir's stub) mutate their buffer argument in place via XOR-flip with no synchronization, safe only because each language's NDJSON loop calls them strictly sequentially — none are exported/public, to avoid inviting reuse against a buffer shared with concurrent code.
 | `internal/proto/proto.go` | `BindRequest.Audit`, `Response.Audit`, `AuditReport` type |
 | `internal/worker/worker.go` | `Bind` passes audit flag to the worker |
 | `internal/orch/orch.go` | `Options.Audit`; collects audit results into report |

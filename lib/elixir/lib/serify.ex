@@ -173,15 +173,16 @@ defmodule WorkerLib do
 
   # --- audit helpers --------------------------------------------------------
   #
-  # The public functions below are low-level audit helpers. A worker driven by
-  # the serify runner never calls them: register serialize/deserialize in a
-  # suite, and the run loop handles audit itself when --audit is passed. They
-  # are public for audit-style checks outside the runner.
+  # The functions below are low-level audit helpers used only by the run loop
+  # (below) when --audit is passed. A worker driven by the serify runner never
+  # calls them directly: register serialize/deserialize in a suite and the run
+  # loop handles audit itself. They are private (defp), not public — unlike
+  # the other libraries' equivalents, detect_zero_copy here never mutates
+  # anything (BEAM binaries are immutable), but collect_bin_snaps/dict_diffs
+  # are kept private too for consistency with every other language's binding.
 
-  @doc """
-  Recursively walks a field map and collects a snapshot of every binary value.
-  """
-  def collect_bin_snaps(fm, snaps) when is_map(fm) do
+  # Recursively walks a field map and collects a snapshot of every binary value.
+  defp collect_bin_snaps(fm, snaps) when is_map(fm) do
     keys = Map.keys(fm) |> Enum.sort()
     Enum.reduce(keys, snaps, fn k, acc ->
       case Map.get(fm, k) do
@@ -203,27 +204,23 @@ defmodule WorkerLib do
     end)
   end
 
-  @doc """
-  Compares two maps and returns the keys whose values differ.
-  """
+  # Compares two maps and returns the keys whose values differ.
   # `after` is a reserved word in Elixir and cannot be a parameter name.
-  def dict_diffs(before, after_fm) do
+  defp dict_diffs(before, after_fm) do
     keys = MapSet.new(Map.keys(before)) |> MapSet.union(MapSet.new(Map.keys(after_fm)))
     keys |> Enum.filter(fn k ->
       Map.get(before, k) != Map.get(after_fm, k)
     end) |> Enum.sort()
   end
 
-  @doc """
-  Reports which field-map entries alias the input buffer. On the BEAM that is
-  always none, so this always returns `[]`.
-
-  The other libraries answer this by XOR-flipping the input buffer and seeing
-  which decoded fields change with it. Neither half of that is expressible here:
-  a binary is immutable, so there is nothing to flip, and a decoded value can
-  never alias the buffer it was read from in the first place.
-  """
-  def detect_zero_copy(_fm, _buf), do: []
+  # Reports which field-map entries alias the input buffer. On the BEAM that is
+  # always none, so this always returns `[]`.
+  #
+  # The other libraries answer this by XOR-flipping the input buffer and seeing
+  # which decoded fields change with it. Neither half of that is expressible here:
+  # a binary is immutable, so there is nothing to flip, and a decoded value can
+  # never alias the buffer it was read from in the first place.
+  defp detect_zero_copy(_fm, _buf), do: []
 
   # --- protocol handlers ----------------------------------------------------
 

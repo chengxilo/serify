@@ -117,19 +117,19 @@ func deserializeAudit(
 ) map[string]any {
 	audit := make(map[string]any)
 
-	if DetectInputMutation(snapshot, buf) {
+	if detectInputMutation(snapshot, buf) {
 		audit["input_mutated"] = true
 	}
 
 	// Re-deserialize from a fresh clone of the pristine snapshot, not from buf:
 	// the zero-copy probe below corrupts buf, and the worker may already have.
 	fm2, err := deserialize(bytes.Clone(snapshot))
-	if err != nil || len(CompareFieldMaps(fm, fm2)) > 0 {
+	if err != nil || len(compareFieldMaps(fm, fm2)) > 0 {
 		audit["deser_stable"] = false
 	}
 
 	// Must run LAST: it overwrites buf to see which fields change with it.
-	if zcFields := DetectZeroCopy(fm, buf); len(zcFields) > 0 {
+	if zcFields := detectZeroCopy(fm, buf); len(zcFields) > 0 {
 		audit["zero_copy_fields"] = zcFields
 	}
 	return audit

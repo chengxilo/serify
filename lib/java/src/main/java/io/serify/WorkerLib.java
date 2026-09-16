@@ -217,10 +217,14 @@ public final class WorkerLib {
 
     // --- audit helpers --------------------------------------------------------
     //
-    // The public members below are low-level audit helpers. A worker driven by the
-    // serify runner never calls them: register serialize/deserialize in a Suite,
-    // and run() handles audit itself when --audit is passed. They are public for
-    // audit-style checks outside the runner.
+    // The members below are low-level audit helpers used only by run() (below)
+    // when --audit is passed. A worker driven by the serify runner never calls
+    // them directly: register serialize/deserialize in a Suite and run() handles
+    // audit itself. They are private, not public — detectZeroCopy mutates its
+    // buffer argument in place with no synchronization, which is only safe
+    // because the NDJSON loop that calls it is strictly sequential; a public
+    // method would invite a caller to run it against a buffer shared with
+    // concurrent code.
 
     /**
      * A snapshot of a byte[] field in a FieldMap, used for zero-copy detection.
@@ -229,7 +233,7 @@ public final class WorkerLib {
      * @param key  the field key
      * @param orig a clone of the original value: a {@code byte[]}, or a {@link Variant} whose payload is one
      */
-    public record ByteSnap(FieldMap fm, String key, Object orig) {}
+    private record ByteSnap(FieldMap fm, String key, Object orig) {}
 
     /**
      * Recursively walks a FieldMap and collects snapshots of every byte[] value.
@@ -237,7 +241,7 @@ public final class WorkerLib {
      * @param fm    the FieldMap to walk
      * @param snaps the list to which ByteSnap entries are appended
      */
-    public static void collectByteSnaps(FieldMap fm, List<ByteSnap> snaps) {
+    private static void collectByteSnaps(FieldMap fm, List<ByteSnap> snaps) {
         var keys = new ArrayList<>(fm.raw().keySet());
         Collections.sort(keys);
         for (var key : keys) {
@@ -273,7 +277,7 @@ public final class WorkerLib {
      * @param after  the state after an operation
      * @return the list of keys with differing values
      */
-    public static List<String> dictDiffs(ObjectNode before, ObjectNode after) {
+    private static List<String> dictDiffs(ObjectNode before, ObjectNode after) {
         var diffs = new ArrayList<String>();
         var allKeys = new TreeSet<String>();
         before.fieldNames().forEachRemaining(allKeys::add);
@@ -294,7 +298,7 @@ public final class WorkerLib {
      * @param buf the input buffer (will be temporarily XOR-flipped and restored)
      * @return the list of field keys that alias the input buffer
      */
-    public static List<String> detectZeroCopy(FieldMap fm, byte[] buf) {
+    private static List<String> detectZeroCopy(FieldMap fm, byte[] buf) {
         if (buf.length == 0) return List.of();
 
         var snaps = new ArrayList<ByteSnap>();

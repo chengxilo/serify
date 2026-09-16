@@ -996,6 +996,16 @@ static Json encode_field_map(const FieldMap& fm, const std::vector<SchemaField>&
 static const int PROTOCOL_VERSION = 2;
 
 // --- audit helpers --------------------------------------------------------
+//
+// The contents of `detail` below are low-level audit helpers used only by
+// run() (further below) when --audit is passed. A worker driven by the
+// serify runner never calls them directly: register serialize/deserialize
+// and run() handles audit itself. They live in `detail`, not `serify`,
+// deliberately — detect_zero_copy_cpp mutates its buffer argument in place
+// with no synchronization, which is only safe because the NDJSON loop that
+// calls it is strictly sequential; a name directly under `serify` would
+// invite a caller to run it against a buffer shared with concurrent code.
+namespace detail {
 
 // in_variant marks a snapshot taken from a sum payload rather than a plain
 // bytes field, so the comparison knows where to read the current value from.
@@ -1075,6 +1085,8 @@ inline std::vector<std::string> detect_zero_copy_cpp(FieldMap& fm, std::vector<u
     }
     return aliased;
 }
+
+} // namespace detail
 
 // One (serialize, deserialize) pair for a single format.
 using SerFn   = std::function<std::vector<uint8_t>(const FieldMap&)>;
@@ -1262,7 +1274,7 @@ inline void run_suite(const SuiteMap& suite) {
                             after = encode_field_map(model_audit->probe(), schema);
                         }
                     }
-                    auto diffs = dict_diffs(baseline, after);
+                    auto diffs = detail::dict_diffs(baseline, after);
                     if (!diffs.empty()) {
                         auto arr = Json::arr_();
                         for (auto& d : diffs) arr.push(Json::str_(d));
@@ -1312,7 +1324,7 @@ inline void run_suite(const SuiteMap& suite) {
                         auto bytes_clone = buf_snapshot;
                         auto fm2 = deserialize(bytes_clone);
                         auto data2 = encode_field_map(fm2, schema);
-                        auto deser_diffs = dict_diffs(data, data2);
+                        auto deser_diffs = detail::dict_diffs(data, data2);
                         if (!deser_diffs.empty())
                             audit.set("deser_stable", Json::bool_(false));
                     } catch (std::exception&) {
@@ -1320,7 +1332,7 @@ inline void run_suite(const SuiteMap& suite) {
                     }
 
                     // Zero-copy
-                    auto zc = detect_zero_copy_cpp(fm, bytes);
+                    auto zc = detail::detect_zero_copy_cpp(fm, bytes);
                     if (!zc.empty()) {
                         auto arr = Json::arr_();
                         for (auto& z : zc) arr.push(Json::str_(z));

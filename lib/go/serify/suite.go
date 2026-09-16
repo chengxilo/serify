@@ -225,7 +225,7 @@ func buildSerializer(
 		if holder.Enabled {
 			beforeFM := NewFieldMap()
 			codec.extract(msgPtr.Elem(), beforeFM)
-			before = SnapshotFieldMap(beforeFM)
+			before = snapshotFieldMap(beforeFM)
 		}
 
 		results := fnVal.Call([]reflect.Value{arg})
@@ -246,16 +246,16 @@ func buildSerializer(
 			// Mutation: compare struct after serialization
 			afterFM := NewFieldMap()
 			codec.extract(msgPtr.Elem(), afterFM)
-			holder.LastMutations = CompareFieldMaps(before, afterFM)
+			holder.LastMutations = compareFieldMaps(before, afterFM)
 
 			// Output zero-copy: does returned []byte alias model fields?
 			holder.LastOutputZC = nil
 			if !returnsString && len(b) > 0 {
-				afterClone := SnapshotFieldMap(afterFM)
+				afterClone := snapshotFieldMap(afterFM)
 				xorFlip(b)
 				flippedFM := NewFieldMap()
 				codec.extract(msgPtr.Elem(), flippedFM)
-				holder.LastOutputZC = CompareFieldMaps(afterClone, flippedFM)
+				holder.LastOutputZC = compareFieldMaps(afterClone, flippedFM)
 				xorFlip(b) // restore (also restores any aliased model memory)
 			}
 		}
@@ -281,7 +281,7 @@ func buildFieldMapSerializer(fn any) (func(*FieldMap) ([]byte, error), *serializ
 	serFunc := func(fm *FieldMap) ([]byte, error) {
 		var before *FieldMap
 		if holder.Enabled {
-			before = SnapshotFieldMap(fm)
+			before = snapshotFieldMap(fm)
 		}
 
 		b, err := inner(fm)
@@ -290,13 +290,13 @@ func buildFieldMapSerializer(fn any) (func(*FieldMap) ([]byte, error), *serializ
 		}
 
 		if holder.Enabled {
-			holder.LastMutations = CompareFieldMaps(before, fm)
+			holder.LastMutations = compareFieldMaps(before, fm)
 
 			holder.LastOutputZC = nil
 			if len(b) > 0 {
-				afterClone := SnapshotFieldMap(fm)
+				afterClone := snapshotFieldMap(fm)
 				xorFlip(b)
-				holder.LastOutputZC = CompareFieldMaps(afterClone, fm)
+				holder.LastOutputZC = compareFieldMaps(afterClone, fm)
 				xorFlip(b) // restore (also restores any aliased FieldMap memory)
 			}
 		}

@@ -332,15 +332,18 @@ public static class Worker
 
     // --- audit helpers --------------------------------------------------------
     //
-    // The public methods below are low-level audit helpers. A worker driven by the
-    // serify runner never calls them: register serialize/deserialize in a Suite,
-    // and Run handles audit itself when --audit is passed. They are public for
-    // audit-style checks outside the runner.
+    // The methods below are low-level audit helpers used only by Run (below) when
+    // --audit is passed. A worker driven by the serify runner never calls them
+    // directly: register serialize/deserialize in a Suite and Run handles audit
+    // itself. They are private, not public — DetectZeroCopy mutates its buffer
+    // argument in place with no synchronization, which is only safe because the
+    // NDJSON loop that calls it is strictly sequential; a public method would
+    // invite a caller to run it against a buffer shared with concurrent code.
 
     /// <summary>
     /// Recursively walks a FieldMap and collects snapshots of every byte[] value.
     /// </summary>
-    public static void CollectByteSnaps(FieldMap fm, List<(FieldMap fm, string key, object orig)> snaps)
+    private static void CollectByteSnaps(FieldMap fm, List<(FieldMap fm, string key, object orig)> snaps)
     {
         foreach (var key in fm.Fields.Keys.OrderBy(k => k))
         {
@@ -384,7 +387,7 @@ public static class Worker
     /// <summary>
     /// Compares two dictionaries and returns the keys whose values differ.
     /// </summary>
-    public static string[] DictDiffs(Dictionary<string, object?> before, Dictionary<string, object?> after)
+    private static string[] DictDiffs(Dictionary<string, object?> before, Dictionary<string, object?> after)
     {
         var diffs = new List<string>();
         var allKeys = new SortedSet<string>(before.Keys);
@@ -447,7 +450,7 @@ public static class Worker
     /// <summary>
     /// Detects whether any byte[] fields in the FieldMap alias the input buffer by XOR-flipping the buffer and checking for changes, then restoring the original values.
     /// </summary>
-    public static string[] DetectZeroCopy(FieldMap fm, byte[] buf)
+    private static string[] DetectZeroCopy(FieldMap fm, byte[] buf)
     {
         if (buf.Length == 0) return Array.Empty<string>();
 

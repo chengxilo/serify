@@ -77,23 +77,23 @@ func TestSum_SnapshotDeepCopiesPayload(t *testing.T) {
 	fm := NewFieldMap()
 	fm.SetVariant("id", "key", []byte{1, 2, 3})
 
-	before := SnapshotFieldMap(fm)
+	before := snapshotFieldMap(fm)
 	payload, _ := fm.GetVariant("id")
 	payload.Value.([]byte)[0] = 0xFF // a serializer mutating its input
 
-	diffs := CompareFieldMaps(before, fm)
-	assert.Equal(t, []string{"id"}, diffs, "CompareFieldMaps = %v, want [id]: a mutated sum payload must be detected", diffs)
+	diffs := compareFieldMaps(before, fm)
+	assert.Equal(t, []string{"id"}, diffs, "compareFieldMaps = %v, want [id]: a mutated sum payload must be detected", diffs)
 }
 
-// DetectZeroCopy must see through a sum: a bytes payload aliasing the input
+// detectZeroCopy must see through a sum: a bytes payload aliasing the input
 // buffer is exactly the case iggy's partitioning<messages_key: bytes> hits.
 func TestSum_DetectZeroCopyOnPayload(t *testing.T) {
 	buf := []byte{1, 2, 3, 4}
 	fm := NewFieldMap()
 	fm.SetVariant("id", "key", buf) // aliased, not copied
 
-	aliased := DetectZeroCopy(fm, buf)
-	assert.Equal(t, []string{"id"}, aliased, "DetectZeroCopy = %v, want [id]", aliased)
+	aliased := detectZeroCopy(fm, buf)
+	assert.Equal(t, []string{"id"}, aliased, "detectZeroCopy = %v, want [id]", aliased)
 }
 
 // A worker builds a sum from scratch via SetVariant, and it encodes correctly.

@@ -462,15 +462,19 @@ function encodeOptional(sf: SchemaField, elem: string, v: unknown): unknown {
 
 // --- audit helpers ----------------------------------------------------------
 //
-// The functions below are low-level audit helpers. A worker driven by the serify
-// runner never calls them: register serialize/deserialize in a suite, and run()
-// handles audit itself when --audit is passed. They are exported for audit-style
-// checks outside the runner.
+// The functions below are low-level audit helpers used only by run() (below)
+// when --audit is passed. A worker driven by the serify runner never calls
+// them directly: register serialize/deserialize in a suite and run() handles
+// audit itself. They are not exported — this file is the package's `main`
+// entry (see package.json), so an export here is the public npm surface, and
+// detectZeroCopy mutates its buffer argument in place with no synchronization,
+// which is only safe because the NDJSON loop that calls it is strictly
+// sequential.
 
 type FieldSnap = { fm: FieldMap; key: string; orig: Buffer | Variant };
 
 /** Recursively walks a FieldMap and collects a snapshot of every Buffer value. */
-export function collectByteSnaps(fm: FieldMap, snaps: FieldSnap[]): void {
+function collectByteSnaps(fm: FieldMap, snaps: FieldSnap[]): void {
   const keys = Array.from(fm._fields.keys()).sort();
   for (const k of keys) {
     const v = fm._fields.get(k);
@@ -499,7 +503,7 @@ export function collectByteSnaps(fm: FieldMap, snaps: FieldSnap[]): void {
 }
 
 /** Compares two plain objects and returns the keys whose values differ. */
-export function dictDiffs(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
+function dictDiffs(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
   const diffs: string[] = [];
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   for (const k of Array.from(keys).sort()) {
@@ -525,7 +529,7 @@ type ModelProbedDeser = ((data: Buffer) => FieldMap) & {
  * XOR-flips the input buffer and reports which FieldMap fields changed with it,
  * i.e. which alias it. Restores the original values before returning.
  */
-export function detectZeroCopy(fm: FieldMap, buf: Buffer): string[] {
+function detectZeroCopy(fm: FieldMap, buf: Buffer): string[] {
   if (buf.length === 0) return [];
 
   const snaps: FieldSnap[] = [];

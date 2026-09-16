@@ -29,7 +29,7 @@ func TestDetectZeroCopy_BytesAliasing(t *testing.T) {
 	fm := NewFieldMap()
 	fm.SetBytes("payload", aliased)
 
-	got := DetectZeroCopy(fm, buf)
+	got := detectZeroCopy(fm, buf)
 	assert.Equal(t, []string{"payload"}, got, "expected [payload], got %v", got)
 }
 
@@ -40,7 +40,7 @@ func TestDetectZeroCopy_BytesIndependent(t *testing.T) {
 	fm := NewFieldMap()
 	fm.SetBytes("payload", independent)
 
-	got := DetectZeroCopy(fm, buf)
+	got := detectZeroCopy(fm, buf)
 	assert.Empty(t, got, "expected no aliasing, got %v", got)
 }
 
@@ -50,7 +50,7 @@ func TestDetectZeroCopy_StringAliasing(t *testing.T) {
 	fm := NewFieldMap()
 	fm.SetString("tag", s)
 
-	got := DetectZeroCopy(fm, buf)
+	got := detectZeroCopy(fm, buf)
 	assert.Equal(t, []string{"tag"}, got, "expected [tag], got %v", got)
 }
 
@@ -60,7 +60,7 @@ func TestDetectZeroCopy_StringCopied(t *testing.T) {
 	fm := NewFieldMap()
 	fm.SetString("tag", s)
 
-	got := DetectZeroCopy(fm, buf)
+	got := detectZeroCopy(fm, buf)
 	assert.Empty(t, got, "expected no aliasing, got %v", got)
 }
 
@@ -72,7 +72,7 @@ func TestDetectZeroCopy_Nested(t *testing.T) {
 	fm := NewFieldMap()
 	fm.SetStruct("address", nested)
 
-	got := DetectZeroCopy(fm, buf)
+	got := detectZeroCopy(fm, buf)
 	assert.Equal(t, []string{"street"}, got, "expected [street], got %v", got)
 }
 
@@ -80,9 +80,9 @@ func TestDetectZeroCopy_EmptyBuffer(t *testing.T) {
 	fm := NewFieldMap()
 	fm.SetBytes("payload", []byte{0x01})
 
-	got := DetectZeroCopy(fm, nil)
+	got := detectZeroCopy(fm, nil)
 	assert.Nil(t, got, "expected nil for nil buffer, got %v", got)
-	got = DetectZeroCopy(fm, []byte{})
+	got = detectZeroCopy(fm, []byte{})
 	assert.Nil(t, got, "expected nil for empty buffer, got %v", got)
 }
 
@@ -92,7 +92,7 @@ func TestDetectZeroCopy_Restores(t *testing.T) {
 	fm := NewFieldMap()
 	fm.SetBytes("payload", aliased)
 
-	DetectZeroCopy(fm, buf)
+	detectZeroCopy(fm, buf)
 
 	got, err := fm.GetBytes("payload")
 	require.NoError(t, err)
@@ -103,10 +103,10 @@ func TestDetectInputMutation(t *testing.T) {
 	before := []byte{0x01, 0x02, 0x03}
 
 	// Identical → no mutation
-	assert.False(t, DetectInputMutation(before, []byte{0x01, 0x02, 0x03}), "expected no mutation for identical buffers")
+	assert.False(t, detectInputMutation(before, []byte{0x01, 0x02, 0x03}), "expected no mutation for identical buffers")
 
 	// Different → mutation
-	assert.True(t, DetectInputMutation(before, []byte{0x01, 0xFF, 0x03}), "expected mutation detected for different buffers")
+	assert.True(t, detectInputMutation(before, []byte{0x01, 0xFF, 0x03}), "expected mutation detected for different buffers")
 }
 
 func TestCompareFieldMaps_Equal(t *testing.T) {
@@ -118,7 +118,7 @@ func TestCompareFieldMaps_Equal(t *testing.T) {
 	fm2.SetU32("value", 42)
 	fm2.SetBytes("payload", []byte{0x01, 0x02})
 
-	diffs := CompareFieldMaps(fm1, fm2)
+	diffs := compareFieldMaps(fm1, fm2)
 	assert.Empty(t, diffs, "expected no diffs, got %v", diffs)
 }
 
@@ -129,7 +129,7 @@ func TestCompareFieldMaps_ByteDiff(t *testing.T) {
 	fm2 := NewFieldMap()
 	fm2.SetBytes("payload", []byte{0xFF, 0x02, 0x03})
 
-	diffs := CompareFieldMaps(fm1, fm2)
+	diffs := compareFieldMaps(fm1, fm2)
 	assert.Equal(t, []string{"payload"}, diffs, "expected [payload], got %v", diffs)
 }
 
@@ -140,7 +140,7 @@ func TestCompareFieldMaps_ScalarDiff(t *testing.T) {
 	fm2 := NewFieldMap()
 	fm2.SetU64("value", 99)
 
-	diffs := CompareFieldMaps(fm1, fm2)
+	diffs := compareFieldMaps(fm1, fm2)
 	assert.Equal(t, []string{"value"}, diffs, "expected [value], got %v", diffs)
 }
 
@@ -156,19 +156,19 @@ func TestCompareFieldMaps_NaN(t *testing.T) {
 	same1.SetF64("v", nan)
 	same2 := NewFieldMap()
 	same2.SetF64("v", nan)
-	assert.Empty(t, CompareFieldMaps(same1, same2), "two NaN values must compare equal")
+	assert.Empty(t, compareFieldMaps(same1, same2), "two NaN values must compare equal")
 
 	// float32 NaN too.
 	f1 := NewFieldMap()
 	f1.SetF32("v", float32(math.NaN()))
 	f2 := NewFieldMap()
 	f2.SetF32("v", float32(math.NaN()))
-	assert.Empty(t, CompareFieldMaps(f1, f2), "two float32 NaN values must compare equal")
+	assert.Empty(t, compareFieldMaps(f1, f2), "two float32 NaN values must compare equal")
 
 	// A real change is still a diff — the fix must not blind the comparison.
 	changed := NewFieldMap()
 	changed.SetF64("v", 1.5)
-	diffs := CompareFieldMaps(same1, changed)
+	diffs := compareFieldMaps(same1, changed)
 	assert.Equal(t, []string{"v"}, diffs, "NaN vs 1.5 must diff, got %v", diffs)
 }
 
@@ -178,7 +178,7 @@ func TestSnapshotFieldMap_DeepCopy(t *testing.T) {
 	fm.SetBytes("payload", payload)
 	fm.SetString("tag", "hello")
 
-	snap := SnapshotFieldMap(fm)
+	snap := snapshotFieldMap(fm)
 
 	// Mutate original
 	payload[0] = 0xFF
@@ -205,11 +205,11 @@ func TestCompareFieldMaps_NilValuesAreNotMutations(t *testing.T) {
 	fm.fields["raw"] = []any(nil)
 
 	// A snapshot of an untouched FieldMap must compare equal to it.
-	assert.Empty(t, CompareFieldMaps(SnapshotFieldMap(fm), fm),
+	assert.Empty(t, compareFieldMaps(snapshotFieldMap(fm), fm),
 		"a FieldMap full of nil values reported mutations against its own snapshot")
 
 	// A real change to one of those fields must still be caught.
-	before := SnapshotFieldMap(fm)
+	before := snapshotFieldMap(fm)
 	fm.SetBytes("payload", []byte{1})
-	assert.Equal(t, []string{"payload"}, CompareFieldMaps(before, fm))
+	assert.Equal(t, []string{"payload"}, compareFieldMaps(before, fm))
 }
