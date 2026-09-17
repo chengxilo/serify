@@ -46,9 +46,8 @@ public final class WorkerLib {
         public short    getU16(String k) { return (Short) fields.get(k); }
         public int      getU32(String k) { return (Integer) fields.get(k); }
         public long     getU64(String k) { return (Long) fields.get(k); }
-        /** uint128/int128: Java has no 128-bit primitive type, so both are carried as
-         *  BigInteger. Parsing them into a long (as this library used to) silently truncates
-         *  every value above 2^64. */
+        /** uint128/int128: Java has no 128-bit primitive, so both are carried as
+         *  BigInteger — a long truncates every value above 2^64. */
         public BigInteger getBig(String k) { return (BigInteger) fields.get(k); }
         public byte     getI8(String k)  { return (Byte) fields.get(k); }
         public short    getI16(String k) { return (Short) fields.get(k); }
@@ -215,16 +214,9 @@ public final class WorkerLib {
      */
     private static final int PROTOCOL_VERSION = 2;
 
-    // --- audit helpers --------------------------------------------------------
-    //
-    // The members below are low-level audit helpers used only by run() (below)
-    // when --audit is passed. A worker driven by the serify runner never calls
-    // them directly: register serialize/deserialize in a Suite and run() handles
-    // audit itself. They are private, not public — detectZeroCopy mutates its
-    // buffer argument in place with no synchronization, which is only safe
-    // because the NDJSON loop that calls it is strictly sequential; a public
-    // method would invite a caller to run it against a buffer shared with
-    // concurrent code.
+    // Audit helpers. They stay private: detectZeroCopy mutates its buffer
+    // argument in place with no synchronization, which is safe only because the
+    // NDJSON loop that calls it is strictly sequential.
 
     /**
      * A snapshot of a byte[] field in a FieldMap, used for zero-copy detection.
@@ -304,7 +296,6 @@ public final class WorkerLib {
         var snaps = new ArrayList<ByteSnap>();
         collectByteSnaps(fm, snaps);
 
-        // XOR-flip
         for (int i = 0; i < buf.length; i++) buf[i] ^= 0xFF;
 
         var aliased = new ArrayList<String>();
@@ -321,7 +312,6 @@ public final class WorkerLib {
             }
         }
 
-        // Restore
         for (var snap : snaps) snap.fm.raw().put(snap.key, snap.orig);
 
         return aliased;
@@ -385,9 +375,8 @@ public final class WorkerLib {
      * <p>{@link #formats} is the other path, for a type with no natural class
      * (the audit fixtures mutate a FieldMap on purpose).
      *
-     * <p>Which of the two a worker wrote is settled by the compiler, not by a
-     * shape test at run time as in python and node. That matters: an unresolved
-     * (type, format) is reported SKIPPED, so a lookup that quietly understood
+     * <p>Which of the two a worker wrote is settled by the compiler: an
+     * unresolved (type, format) is reported SKIPPED, so a lookup understanding
      * neither spelling would produce a green run made entirely of SKIPs.
      */
     @FunctionalInterface
@@ -481,8 +470,6 @@ public final class WorkerLib {
 
                 switch (op) {
                     case "ping" -> {
-                        // Health check: report liveness and the protocol revision
-                        // this library speaks. Binds nothing.
                         var resp = mapper.createObjectNode();
                         resp.put("op", "ping");
                         resp.put("status", "OK");
@@ -701,9 +688,7 @@ public final class WorkerLib {
                 else if (type.startsWith("optional<")) { decodeOptional(fm, sf, type.substring(9, type.length()-1), el); }
                 else if (type.startsWith("array<")) {
                     // An array<T,N> is a list whose length the schema fixes, so it
-                    // shares decodeList outright and adds only the length check. A
-                    // separate representation is what pinned array<T,N> to int[4]
-                    // — it silently truncated anything longer.
+                    // shares decodeList outright and adds only the length check.
                     var parts = splitArrayType(type);
                     decodeList(fm, sf, parts.elem(), el);
                     int got = ((List<?>) fm.raw().get(name)).size();
@@ -718,9 +703,8 @@ public final class WorkerLib {
                     var parts = splitMapTypes(type);
                     fm.setMap(name, decodeMap(parts[1], sf.fields, el));
                 }
-                // Falling off the chain left the field absent from the FieldMap,
-                // which surfaces far downstream as a missing value rather than as
-                // "this library does not know that type".
+                // Falling off the chain would leave the field absent from the
+                // FieldMap, surfacing far downstream as a missing value.
                 else throw new IllegalArgumentException("unknown type \"" + type + "\"");
             }
         }
@@ -762,10 +746,7 @@ public final class WorkerLib {
 
     /**
      * Decodes every element through {@link #decodeField}, so a list supports
-     * exactly the element types a bare field does. This used to carry its own
-     * switch with no default arm at all, so a list of any element type it did not
-     * name — uint8, uint16, int8, int16, int32, int64, float64, bool, bytes —
-     * left the field silently absent from the FieldMap rather than raising.
+     * exactly the element types a bare field does.
      */
     private static void decodeList(FieldMap fm, SchemaField sf, String elem, JsonNode el) {
         if (!LIST_ELEMS.contains(elem))
@@ -958,8 +939,7 @@ public final class WorkerLib {
     /**
      * Inverse of {@link #decodeList}: every element goes back out through
      * {@link #encodeField}, so the two directions cannot cover different element
-     * types. The old version fell through to {@code mapper.valueToTree(v)} for
-     * anything it did not name, which silently emitted the wrong wire form.
+     * types.
      */
     @SuppressWarnings("unchecked")
     private static JsonNode encodeList(SchemaField sf, String elem, Object v, ObjectMapper mapper) {
@@ -1204,12 +1184,9 @@ public final class WorkerLib {
             else if (val instanceof Variant v)  fm.raw().put(key, v);
             else if (val instanceof List<?> v) {
                 // Store the list as-is: the schema, not the first element,
-                // decides the element type on the wire. Guessing from v.get(0)
-                // meant an *empty* list stored nothing at all — the field simply
-                // vanished from the FieldMap — and any list of booleans,
-                // BigIntegers, Shorts, Doubles or byte[] fell through the same way.
-                // A list<struct> is the one element type that does need
-                // converting, since the encoder speaks FieldMap, not models.
+                // decides the element type on the wire. A list<struct> is the one
+                // element type that needs converting, since the encoder speaks
+                // FieldMap, not models.
                 fm.raw().put(key, v.stream().map(SerifyModelHelper::flatten).toList());
             }
             else if (val instanceof FieldMap v) fm.setStruct(key, v);
@@ -1230,11 +1207,9 @@ public final class WorkerLib {
         /**
          * A nested model becomes a FieldMap; anything else passes through.
          *
-         * Without this a nested struct fell to {@code setString(key,
-         * val.toString())} and went out as its own class name, and a
-         * list<struct> or map<K,struct> carried models the encoder does not
-         * speak. Nothing caught it because no example had a nested struct until
-         * customer.
+         * Without this a nested struct falls to {@code setString(key,
+         * val.toString())} and goes out as its own class name, and a
+         * list<struct> or map<K,struct> carries models the encoder cannot speak.
          */
         private static Object flatten(Object v) {
             return v != null && isModel(v.getClass()) ? toFieldMap(v) : v;

@@ -68,8 +68,7 @@ class NotificationRecord:
         buf = bytearray(struct.pack("<I", self.notification_id))
 
         # The tag ordinal is the variant's position in the case file's sum,
-        # which is the declaration order of the four arms above. The schema tag
-        # *names* are the binding's business, and never appear here.
+        # which is the declaration order of the four arms above.
         match self.channel:
             case Silent():
                 buf += b"\x00"  # a unit variant is nothing but its tag

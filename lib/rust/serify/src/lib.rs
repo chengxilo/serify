@@ -44,9 +44,8 @@ pub trait SerifyModel: Sized {
 /// `T::serify_read(fm, key)` and lets `T` decide.
 ///
 /// `#[derive(SerifyModel)]` emits this alongside `SerifyModel`: on a struct it
-/// reads and writes a nested struct, on an enum a variant. There is deliberately
-/// no blanket impl — a blanket for `T: SerifyModel` would collide with the enum
-/// derive's own impl, and the point is that each type answers for itself.
+/// reads and writes a nested struct, on an enum a variant. There is no blanket
+/// impl — one for `T: SerifyModel` would collide with the enum derive's own.
 pub trait SerifyField: Sized {
     fn serify_read(fm: &FieldMap, key: &str) -> Result<Self, String>;
     fn serify_write(&self, fm: &mut FieldMap, key: &str);
@@ -57,9 +56,7 @@ pub trait SerifyField: Sized {
 ///
 /// Emitted by `#[derive(SerifyModel)]` for the same reason as [`SerifyField`]:
 /// the enclosing enum's derive sees only a type's spelling, so the type itself
-/// has to say whether it is a struct, or a newtype that is transparent to
-/// whatever it wraps. As with `SerifyField` there is deliberately no blanket
-/// impl — one would collide with the per-type impls the derive emits.
+/// has to say whether it is a struct or a transparent newtype.
 pub trait SerifyPayload: Sized {
     fn from_payload(v: &FieldValue) -> Result<Self, String>;
     fn to_payload(&self) -> FieldValue;
@@ -69,8 +66,8 @@ pub use serify_derive::SerifyModel;
 
 /// `SerifyField` + `SerifyPayload` for the built-in scalar types, so a
 /// `#[serify(transparent)]` newtype over any of them works without further
-/// machinery. Written out per type rather than blanket-implemented: a blanket
-/// would collide with the impls the derive emits for user types.
+/// machinery. Written out per type: a blanket impl would collide with the ones
+/// the derive emits for user types.
 macro_rules! serify_scalar {
     ($($ty:ty => $variant:ident, $get:ident, $set:ident;)*) => {$(
         impl SerifyField for $ty {
@@ -114,11 +111,9 @@ serify_scalar! {
 
 /// An `Option<T>` occupies a field exactly as `T` does, plus a null for `None`.
 ///
-/// Delegating to `T`'s own `SerifyField` is the whole point: how a type sits in
-/// a field is `T`'s decision. A `#[serify(transparent)]` newtype writes itself
-/// straight into the field, a product type nests — and an enclosing `Option`
-/// must not re-decide that. Hardcoding "nest it" here is what made
-/// `Option<WireName>` round-trip as a struct and lose its value.
+/// How a type sits in a field is `T`'s decision — a `#[serify(transparent)]`
+/// newtype writes itself straight in, a product type nests — and an enclosing
+/// `Option` must not re-decide it.
 impl<T: SerifyField> SerifyField for Option<T> {
     fn serify_read(fm: &FieldMap, key: &str) -> Result<Self, String> {
         match fm.fields.get(key) {
@@ -752,8 +747,8 @@ fn decode_field(fm: &mut FieldMap, sf: &SchemaField, v: &Value) -> Result<(), St
             let s = v.as_str().ok_or("u64 must be string")?;
             fm.set_u64(name, s.parse::<u64>().map_err(|e| e.to_string())?);
         }
-        // 128-bit values are parsed at full width. Folding them into the u64/i64
-        // branch (as this library used to) silently truncates everything above 2^64.
+        // Parsed at full width: folding these into the u64/i64 branch truncates
+        // everything above 2^64.
         "uint128" => {
             let s = v.as_str().ok_or("u128 must be string")?;
             fm.set_u128(name, s.parse::<u128>().map_err(|e| e.to_string())?);
@@ -810,9 +805,7 @@ fn decode_field(fm: &mut FieldMap, sf: &SchemaField, v: &Value) -> Result<(), St
             decode_optional(fm, sf, elem, v)?;
         }
         // An array<T,N> is a list whose length the schema fixes, so it shares
-        // decode_list outright and adds only the length check. Keeping a second
-        // representation is what pinned array<T,N> to exactly [u32; 4] — it
-        // silently truncated anything longer and refused negative elements.
+        // decode_list outright and adds only the length check.
         typ if typ.starts_with("array<") => {
             let (elem, want) = array_parts(typ)?;
             decode_list(fm, sf, elem, v)?;
@@ -821,11 +814,9 @@ fn decode_field(fm: &mut FieldMap, sf: &SchemaField, v: &Value) -> Result<(), St
                 return Err(format!("array {name}: expected {want} elements, got {got}"));
             }
         }
-        // enum<a,b,c>: an enum value is just its variant name — a plain string,
-        // exactly as the Go reference stores it. An enum is NOT a sum: it carries
-        // no payload, and a worker models the field as a String, so it must be
-        // stored and read as a string (not a payload-less Variant, which is the
-        // sum representation and would leave a String-typed field unreadable).
+        // enum<a,b,c>: an enum value is just its variant name, stored as a plain
+        // String. Not a payload-less Variant — that is the sum representation and
+        // would leave a String-typed model field unreadable.
         typ if typ.starts_with("enum<") => {
             let tag = v.as_str().ok_or("enum must be a string")?;
             fm.set_string(name, tag.to_string());
@@ -892,8 +883,7 @@ fn array_parts(typ: &str) -> Result<(&str, usize), String> {
 
 /// Decodes every element through `decode_field`, so a list supports exactly the
 /// element types a bare field does. The match below only names the `Vec` each
-/// element type packs into — it holds no decoding logic, which is why a scalar
-/// cannot be reachable as a field but not as a list element.
+/// element type packs into; it holds no decoding logic.
 #[cfg(feature = "worker")]
 fn decode_list(fm: &mut FieldMap, sf: &SchemaField, elem: &str, v: &Value) -> Result<(), String> {
     let arr = v.as_array().ok_or("list must be array")?;
@@ -1254,13 +1244,10 @@ fn encode_list(sf: &SchemaField, elem: &str, fv: &FieldValue) -> Result<Value, S
 
 #[cfg(feature = "worker")]
 fn encode_optional(sf: &SchemaField, elem: &str, fv: &FieldValue) -> Result<Value, String> {
-    // Dispatch on what the model actually stored, not on the element type.
-    // decode_optional always produces the dedicated Optional* variant, but a
-    // model is free to hold a present value directly — a `#[serify(transparent)]`
-    // newtype writes `Option<WireName>` as a plain String, never an
-    // OptionalString. Keying on `elem` instead made those two representations
-    // mutually exclusive, so such a field decoded correctly and then failed on
-    // the way back out.
+    // Dispatch on what the model actually stored, not on the element type:
+    // decode_optional produces the dedicated Optional* variant, but a model may
+    // hold a present value directly (a `#[serify(transparent)]` newtype writes
+    // `Option<WireName>` as a plain String).
     match fv {
         FieldValue::OptionalString(v) => return Ok(v.as_ref().map_or(Value::Null, |s| json!(s))),
         FieldValue::OptionalStruct(v) => {
@@ -1293,9 +1280,9 @@ pub type DeserializeFn = Box<dyn Fn(&[u8]) -> Result<FieldMap, String>>;
 #[cfg(feature = "worker")]
 pub type ModelProbeFn = Box<dyn Fn() -> Option<FieldMap>>;
 
-/// Lets `--audit` probe the model a call actually used. Without it a model
-/// format is a pure conversion and the probes only ever see the caller's
-/// FieldMap, which the worker never touched.
+/// Lets `--audit` probe the model a call actually used; otherwise a model format
+/// is a pure conversion and the probes only see a FieldMap the worker never
+/// touched.
 #[cfg(feature = "worker")]
 struct ModelHook {
     /// The model's state on entry. Unused for deserialize.
@@ -1552,20 +1539,13 @@ fn xor_flip(buf: &mut [u8]) {
     }
 }
 
-// field_map_diffs and detect_zero_copy below are low-level audit helpers used
-// only by run() (below) when --audit is passed. A worker driven by the serify
-// runner never calls them directly: register serialize/deserialize in a Suite
-// and run() handles audit itself. They are crate-private deliberately —
-// detect_zero_copy XOR-flips its buffer argument in place for the duration of
-// the call with no synchronization, which is only safe because the NDJSON
-// loop that calls it is strictly sequential; a public API would invite a
-// caller to run it against a buffer shared with concurrent code.
+// field_map_diffs and detect_zero_copy are crate-private: detect_zero_copy
+// XOR-flips its buffer argument in place with no synchronization, which is safe
+// only because the NDJSON loop that calls it is strictly sequential.
 //
-// json_field_diffs and detect_output_zero_copy have no such risk (the former
-// only diffs two immutable JSON values; the latter's job is done inline at
-// the ser_hook call site above instead) and are currently unused within the
-// crate; they stay `pub` rather than `pub(crate)` so they don't trip the
-// dead_code lint CI runs with `-D warnings`.
+// json_field_diffs and detect_output_zero_copy carry no such risk and are unused
+// within the crate; they stay `pub` so they do not trip the dead_code lint CI
+// runs with `-D warnings`.
 
 /// Compare two FieldMaps and return the list of top-level keys that differ.
 #[cfg(feature = "worker")]
@@ -1698,8 +1678,6 @@ pub fn run_suite(suite: Suite) {
 
         match op {
             "ping" => {
-                // Health check: report liveness and the protocol revision this
-                // library speaks. Binds nothing.
                 emit!(json!({"op": "ping", "status": "OK",
                     "protocol_version": PROTOCOL_VERSION}));
             }
@@ -1713,7 +1691,6 @@ pub fn run_suite(suite: Suite) {
                 let type_name = msg["type"].as_str().unwrap_or("");
                 let format_name = msg["format"].as_str().unwrap_or("");
 
-                // Both type and format are required; the runner always sends them.
                 if type_name.is_empty() {
                     emit!(json!({"op": "bind", "status": "ERROR",
                         "error": "bind requires a \"type\" field"}));
@@ -2214,10 +2191,7 @@ mod tests {
         assert_eq!(r2, want);
     }
     // A sum payload is aliasing-capable, so detect_zero_copy must see through
-    // the variant. Rust gets this for free — FieldMap derives Clone and
-    // PartialEq, so cloning a Variant deep-copies its boxed payload and the diff
-    // compares it by value — but nothing pinned that, and the equivalent code in
-    // Go, Node, Python, C# and Java all had to be fixed by hand.
+    // the variant.
     #[test]
     fn sum_detect_zero_copy_on_payload() {
         let mut buf = vec![1u8, 2, 3, 4];
@@ -2237,10 +2211,7 @@ mod tests {
     }
 
     /// Pins the invariant that a list supports every element type a bare field
-    /// does. Before `decode_list` routed through `decode_field` it carried its
-    /// own match, and uint8/uint16/int8/int16/int32/int64/float32/float64/bool/
-    /// bytes were all missing from it — declarable in a case file, accepted by
-    /// `serify validate`, and only failing once a worker actually ran.
+    /// does.
     #[test]
     fn list_supports_every_scalar_elem() {
         // (element type, the JSON array the runner sends)
@@ -2289,13 +2260,7 @@ mod tests {
         }
     }
 
-    /// `optional<T>` for a scalar and for a nested model. The derive used to
-    /// recognise only `Option<String>`; anything else fell through to the
-    /// "nested model" classification and failed to compile with
-    /// "the trait bound `Option<f32>: SerifyField` is not satisfied", which is
-    /// why no Rust model could carry an `optional<scalar>` — and why the
-    /// `telemetry` case type, whose `humidity_pct` is one, had never been
-    /// implemented in Rust.
+    /// `optional<T>` for a scalar and for a nested model.
     #[test]
     fn optional_scalar_and_nested_round_trip() {
         #[derive(serify_derive::SerifyModel, Debug, PartialEq)]

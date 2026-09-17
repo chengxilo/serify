@@ -39,11 +39,9 @@ class Worker
      * array. Null means the worker does not implement it. '*' matches any
      * type/format and backs the single-type run() below.
      *
-     * Public, and separate from runSuite, so it can be tested without stdin: an
-     * unresolved (type, format) is reported SKIPPED, so a registration shape
-     * this silently fails to understand produces a *green* conformance run made
-     * entirely of SKIPs — indistinguishable from a worker that legitimately
-     * does not implement the type.
+     * Public, and separate from runSuite, so it can be tested without stdin: a
+     * registration shape this fails to understand is reported SKIPPED, which
+     * reads exactly like a worker that does not implement the type.
      *
      * @param array<string, Type|array<string, array{0: ?callable, 1: ?callable}>> $suite
      * @return array{0: ?callable, 1: ?callable}|null
@@ -109,8 +107,6 @@ class Worker
 
             switch ($op) {
                 case 'ping':
-                    // Health check: report liveness and the protocol revision
-                    // this library speaks. Binds nothing.
                     self::emit([
                         'op' => 'ping',
                         'status' => 'OK',
@@ -350,8 +346,7 @@ class Worker
                 } elseif (str_starts_with($type, 'array<')) {
                     // An array<T,N> is a list whose length the schema fixes, so
                     // it shares decodeList outright and adds only the length
-                    // check. A separate representation is what pinned
-                    // array<T,N> to integers cast through (int).
+                    // check.
                     [$elem, $n] = self::splitArrayType($type);
                     self::decodeList($fm, $sf, $elem, (array) $v);
                     $got = count($fm->raw()[$name]);
@@ -367,9 +362,8 @@ class Worker
                     [, $valType] = self::splitMapTypes($type);
                     $fm->setMap($name, self::decodeMap($valType, $sf['fields'], (array) $v));
                 } else {
-                    // Breaking out silently left the field absent from the
-                    // FieldMap, which surfaces far downstream as a missing value
-                    // rather than as "this library does not know that type".
+                    // Breaking out would leave the field absent from the
+                    // FieldMap, surfacing far downstream as a missing value.
                     throw new \InvalidArgumentException("unknown type \"$type\"");
                 }
                 break;
@@ -418,9 +412,7 @@ class Worker
 
     /**
      * Decode every element through decodeField, so a list supports exactly the
-     * element types a bare field does. This used to carry its own switch, which
-     * is why uint16/int8/int16/float64/bytes were declarable in a case file and
-     * accepted by `serify validate`, but threw once a worker actually ran.
+     * element types a bare field does.
      */
     private static function decodeList(FieldMap $fm, array $sf, string $elem, array $arr): void
     {
@@ -721,7 +713,6 @@ class Worker
         $snaps = [];
         self::collectByteSnaps($fm, $snaps);
 
-        // XOR-flip
         for ($i = 0; $i < strlen($buf); $i++) {
             $buf[$i] = chr(ord($buf[$i]) ^ 0xFF);
         }
@@ -734,7 +725,6 @@ class Worker
             }
         }
 
-        // Restore
         foreach ($snaps as $snap) {
             $snap['fm']->setBytes($snap['key'], $snap['orig']);
         }

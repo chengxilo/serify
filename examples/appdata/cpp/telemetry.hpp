@@ -139,9 +139,7 @@ inline std::vector<uint8_t> telemetry_marshal(const TelemetryFrame& t) {
     put_le<uint32_t>(out, static_cast<uint32_t>(t.visible_cells.size()), 4);
     for (uint32_t v : t.visible_cells) put_le<uint32_t>(out, v, 4);
 
-    // Entry order is the unordered_map's own — deliberately not sorted. A map is
-    // unordered, so telemetry declares `oracle: semantic` and the decoded value
-    // is what gets compared. See docs/protocol.md.
+    // Entry order is the collection's own: telemetry declares `oracle: semantic`.
     put_le<uint32_t>(out, static_cast<uint32_t>(t.packet_counts.size()), 4);
     for (const auto& [k, v] : t.packet_counts) {
         put_str(out, k);

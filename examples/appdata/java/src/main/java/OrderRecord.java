@@ -81,9 +81,7 @@ public final class OrderRecord {
 
         subtotal.pack(out);
 
-        // Entry order is the map's own — deliberately not sorted. A map is
-        // unordered, so order declares `oracle: semantic` and the decoded value
-        // is what gets compared. See docs/protocol.md.
+        // Entry order is the collection's own: order declares `oracle: semantic`.
         writeCount(out, adjustments.size());
         for (Map.Entry<String, Money> e : adjustments.entrySet()) {
             Wire.writeLenPrefixed(out, e.getKey());

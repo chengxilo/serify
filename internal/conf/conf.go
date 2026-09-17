@@ -31,7 +31,6 @@ import (
 )
 
 // ErrNoTypesFound is returned by LoadSuite when a directory has no tested types.
-// Callers that are tolerant of reusable-only directories can check with errors.Is.
 var ErrNoTypesFound = errors.New("no type files found")
 
 const (
@@ -72,9 +71,8 @@ func (ft FieldType) String() string {
 	case kind.Map:
 		return fmt.Sprintf("%s<%s,%s>", kind.Map, ft.Key, ft.Elem)
 	case kind.Enum:
-		// Self-describing, like list<T> and map<K,V>: the worker gets the variants
-		// so it can derive an ordinal for its byte layout. The *value* still travels
-		// as the variant name.
+		// Self-describing, like list<T>: the worker gets the variants so it can
+		// derive an ordinal. The value itself still travels as the variant name.
 		return fmt.Sprintf("%s<%s>", kind.Enum, strings.Join(ft.Values, ","))
 	case kind.Sum:
 		parts := make([]string, len(ft.Variants))
@@ -106,18 +104,14 @@ type CasesFile struct {
 	ReferenceLanguage string   // set by the caller (--ref, or the suite _config.yaml)
 	Schema            []Field
 	Cases             []TestCase // yaml `cases:`
-	// Oracles maps each of Formats to its comparison oracle, declared per type
-	// because map-ness is a property of the *type*, not of the format. `binary`
-	// is shared by types that contain a map<K,V> and types that do not, and the
-	// two want opposite verdicts: the map-free ones are the only place
-	// cross-language byte parity is actually checked, so they must stay on
-	// bytes even when a map-bearing type sharing their format goes semantic.
+	// Oracles maps each of Formats to its comparison oracle. It is declared per
+	// type because map-ness is a property of the type, not of the format: one
+	// format name is shared by map-bearing and map-free types, which want
+	// opposite verdicts.
 	Oracles map[string]string
 }
 
 // OracleFor returns the comparison oracle this type declared for a format.
-// Every (type, format) declares one explicitly — see loadTypeFile — so an
-// unknown format here is a programming error rather than a defaulting case.
 func (cf *CasesFile) OracleFor(format string) string {
 	return cf.Oracles[format]
 }
@@ -159,9 +153,8 @@ type TestCase struct {
 // default build/run commands for the auto-detected language. The language
 // itself is always detected from marker files in the worker directory.
 //
-// Build is a pointer so that an explicit `build: ""` (this worker needs no build
-// step) is distinguishable from an absent key (use the language default). A
-// plain string cannot express the difference, and the absent case wins.
+// Build is a pointer so an explicit `build: ""` (no build step) stays
+// distinguishable from an absent key (use the language default).
 type WorkerManifest struct {
 	Build *string `yaml:"build"`
 	Run   string  `yaml:"run"`
@@ -211,7 +204,6 @@ func loadTypeFile(path string) (*CasesFile, error) {
 
 	name := strings.TrimSuffix(filepath.Base(path), extYAML)
 
-	// Build the named-type registry from imports (transitively).
 	registry := map[string]rawType{}
 	seen := map[string]bool{}
 	for _, imp := range tmp.Import {
@@ -234,8 +226,6 @@ func loadTypeFile(path string) (*CasesFile, error) {
 	if err := checkSections(path, tmp.Fields, tmp.Variants, rawFields, tmp.Transparent); err != nil {
 		return nil, err
 	}
-	// A sum under test is carried as the single field `value`; anything else is
-	// an ordinary field list.
 	resolver := newSchemaResolver(registry)
 	var schema []Field
 	if isSum {
@@ -259,11 +249,6 @@ func loadTypeFile(path string) (*CasesFile, error) {
 		cases[i] = TestCase{Name: rc.Name, Description: rc.Description, Data: data}
 	}
 
-	// Split the declared formats into names (what most callers want) and the
-	// per-format oracle. Declaring the oracle is mandatory: it decides whether a
-	// disagreement between two workers is a failure or is allowed wire freedom,
-	// and defaulting it silently picked that for the author. A bare name leaves
-	// Oracle empty, which is the error below.
 	formats := make([]string, len(tmp.Formats))
 	oracles := make(map[string]string, len(tmp.Formats))
 	for i, f := range tmp.Formats {
@@ -295,8 +280,7 @@ func loadTypeFile(path string) (*CasesFile, error) {
 
 // LoadSuite loads a set of types from a directory, one type per file. Every non
 // _-prefixed *.yaml is one type (tested if it has cases, otherwise reusable via
-// import). The reference language is supplied by the caller (the --ref flag),
-// not stored in the directory, so ReferenceLanguage is left empty here.
+// import).
 func LoadSuite(dir string) (*CasesSet, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
@@ -330,11 +314,6 @@ func LoadSuite(dir string) (*CasesSet, error) {
 	}
 	slices.SortFunc(types, func(a, b *CasesFile) int { return cmp.Compare(a.Name, b.Name) })
 
-	// The suite's own config: its reference language, and the format-name
-	// universe. Loaded here for its validation too — a stray `oracle:` in it is
-	// an author reaching for the old per-format spelling, and saying so beats
-	// silently ignoring it. The names it declares are enforced against each
-	// type's formats by `serify schema`.
 	sc, err := LoadSuiteConfig(dir)
 	if err != nil {
 		return nil, err
@@ -342,10 +321,8 @@ func LoadSuite(dir string) (*CasesSet, error) {
 	return &CasesSet{Types: types, ReferenceLanguage: sc.ReferenceLanguage}, nil
 }
 
-// scalarAliases maps alternative spellings to their canonical name. Canonical
-// names are the long form (uint8, int64, float32, …); these aliases are
-// normalized at parse time so everything downstream (workers, the wire format,
-// comparison) only ever sees the canonical form.
+// scalarAliases maps alternative spellings to their canonical long form. They
+// are normalized at parse time, so nothing downstream ever sees an alias.
 var scalarAliases = map[string]string{
 	"float":   kind.Float32,
 	"double":  kind.Float64,
@@ -356,20 +333,15 @@ var typeParamRe = regexp.MustCompile(`^(\w+)<(.+)>$`)
 
 // ParseType parses a type string like "uint64", "struct", "optional<string>", "array<uint32,4>", "list<struct>", "map<string,uint32>".
 // Aliases (e.g. "float" for "float32") are normalized to their canonical form.
-// It is the schemaResolver grammar with no named types in scope.
 func ParseType(s string) (FieldType, error) {
 	return newSchemaResolver(nil).typeOf(s)
 }
 
-// validate checks one type's schema and cases. reference_language is a
-// suite-level concern (checked by the caller), not required per type file.
+// validate checks one type's schema and cases.
 func (cf *CasesFile) validate() error {
 	if len(cf.Schema) == 0 {
 		return fmt.Errorf("type %q: schema must have at least one field", cf.Name)
 	}
-	// A tested type (one with cases) must declare its serialization formats
-	// explicitly; there is no implicit default. Reusable-only types (no cases,
-	// imported by others) are exempt.
 	if len(cf.Cases) > 0 && len(cf.Formats) == 0 {
 		return fmt.Errorf(
 			"type %q: must declare at least one format (add a `formats:` list, e.g. `formats: [binary]`)",
@@ -401,8 +373,8 @@ func (cf *CasesFile) validate() error {
 }
 
 // validateEnum rejects an enum value that is not one of the declared variants.
-// Enums travel as plain strings, so without this a typo'd variant reaches the
-// workers and is only caught (if at all) as a byte mismatch far downstream.
+// Enums travel as plain strings, so a typo'd variant would otherwise surface
+// only as a byte mismatch far downstream.
 func validateEnum(ft FieldType, v any) error {
 	if ft.Base != kind.Enum {
 		return nil
@@ -442,28 +414,24 @@ func LoadWorkerManifest(dir string) (*WorkerManifest, error) {
 const SuiteConfigFile = "_config.yaml"
 
 type suiteConfigFile struct {
-	// ReferenceLanguage is the suite's own answer to --ref. A suite knows which
-	// of its workers owns the byte layout — that is a property of the cases, not
-	// of the command line — so declaring it here means the run command stops
-	// having to repeat it. --ref still wins when passed.
+	// ReferenceLanguage is the suite's own answer to --ref, which still wins
+	// when passed.
 	ReferenceLanguage string       `yaml:"reference_language"`
 	Formats           []FormatSpec `yaml:"formats"`
 }
 
-// suiteConfigKeys is every key _config.yaml accepts. A misspelling is a load
-// error rather than a silently-ignored setting, the same rule case files follow.
+// suiteConfigKeys is every key _config.yaml accepts; anything else is a load
+// error rather than a silently-ignored setting.
 var suiteConfigKeys = map[string]bool{"reference_language": true, "formats": true}
 
 // Oracle names the comparison strategy applied to a format's serialize output.
 const (
 	// OracleBytes compares each worker's serialized bytes to the reference's,
-	// byte-for-byte. It is the default and suits canonical/deterministic formats,
-	// where the exact wire layout (including map key order) is part of the contract.
+	// byte-for-byte: the exact wire layout is part of the contract.
 	OracleBytes = "bytes"
 	// OracleSemantic compares by value: the reference deserializes each worker's
-	// bytes and the decoded value is checked against the expected case data. Wire
-	// freedom a non-canonical format allows — map entry order, field order — no
-	// longer fails, so sorting becomes the worker author's free choice.
+	// bytes and the decoded value is checked against the expected case data, so
+	// wire freedom such as map entry order no longer fails.
 	OracleSemantic = "semantic"
 )
 
@@ -474,9 +442,8 @@ const (
 //	  - name: binary
 //	    oracle: bytes
 //
-// A bare name still parses (leaving Oracle empty) so the caller can report a
-// missing oracle against the format it belongs to, rather than failing with a
-// YAML type error that names no format at all.
+// A bare name still parses, leaving Oracle empty, so the caller can report a
+// missing oracle against the format it belongs to.
 type FormatSpec struct {
 	Name   string
 	Oracle string
@@ -503,9 +470,8 @@ func (f *FormatSpec) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// loadOptionalYAML unmarshals <path> into a T. A missing file is not an error —
-// it means the suite did not declare this at all — and is reported by the bool
-// so a caller can still tell it apart from a file that exists but is empty.
+// loadOptionalYAML unmarshals <path> into a T. A missing file is not an error;
+// the bool reports it, so a caller can tell it apart from an empty file.
 func loadOptionalYAML[T any](path string) (T, bool, error) {
 	var v T
 	raw, err := os.ReadFile(path)
@@ -525,11 +491,9 @@ func loadOptionalYAML[T any](path string) (T, bool, error) {
 // file yields the zero value: no format restriction, no declared reference.
 type SuiteConfig struct {
 	ReferenceLanguage string
-	// Formats is the declared format-name *universe*, names only. The oracle is
-	// not here: it is a property of the (type, format) pair and lives in each
-	// type file, because one format name is shared by types that want opposite
-	// verdicts (see CasesFile.Oracles). Nil means the suite declares no
-	// restriction.
+	// Formats is the declared format-name universe, names only; the oracle is a
+	// property of the (type, format) pair and lives in each type file (see
+	// CasesFile.Oracles). Nil means no restriction.
 	Formats []string
 }
 
@@ -595,13 +559,8 @@ func LoadFormatsRegistry(dir string) ([]string, error) {
 //	types:      whole conformance types this SDK has no code for (both directions)
 //	operations: per-direction type lists, e.g. deserialize: [a, b]
 //
-// There is deliberately no per-format granularity: every worker either
-// implements a type in all its formats or in none, so a `formats:` key would be
-// a feature with no caller. Add it when a worker actually needs it.
-//
-// Deliberately no wildcards: declaring a whole direction would re-hide exactly
-// the regressions this guards against (a type that *does* have a decoder losing
-// its registration would silently skip under a blanket "deserialize").
+// There is deliberately no per-format granularity and no wildcards: a blanket
+// "deserialize" would re-hide the regressions this guards against.
 type ExpectedSkips struct {
 	Types      []string            `yaml:"types"`
 	Operations map[string][]string `yaml:"operations"`

@@ -26,8 +26,7 @@ import java.nio.ByteOrder;
  * Mirrors examples/appdata/cases/ledger.yaml.
  *
  * <p>The annotations are the entire schema binding — nothing here calls a
- * FieldMap accessor. Everything else is the byte layout, which is the part a
- * conformance worker exists to exercise.
+ * FieldMap accessor. Everything else is the byte layout.
  *
  * <p>Java has no 128-bit primitive type, so the two int128 fields are
  * BigInteger and converted to 16 little-endian two's-complement bytes by hand —

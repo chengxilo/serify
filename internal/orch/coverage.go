@@ -37,11 +37,9 @@ func isCascadeSkip(detail string) bool {
 
 // CheckExpectedSkips enforces the coverage each worker declares.
 //
-// A SKIP is exit-code-neutral: it means "this worker does not implement that".
-// That is the honest answer when an SDK genuinely has no such code — but it also
-// means a renamed type, a dropped registration or a typo'd worker entry turns
-// green instead of failing, and the lost coverage never surfaces. Declaring the
-// allowed gaps makes every other skip a failure.
+// A SKIP is exit-code-neutral, so a renamed type, a dropped registration or a
+// typo'd worker entry turns green instead of failing. Declaring the allowed
+// gaps makes every other skip a failure.
 //
 // Undeclared skip  -> FAIL (coverage regressed)
 // Declared but nothing skipped -> WARN (stale entry, delete it)
@@ -64,7 +62,6 @@ func CheckExpectedSkips(rep *report.Report, expected map[string]conf.ExpectedSki
 	}
 
 	for testID, byLang := range rep.Results {
-		// A test id is type/format/case.
 		typeName, rest, _ := strings.Cut(testID, "/")
 		format, _, _ := strings.Cut(rest, "/")
 		for lang, byOp := range byLang {

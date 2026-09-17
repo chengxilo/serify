@@ -35,12 +35,9 @@ import (
 //	             active variant's payload — nothing at all for a unit variant
 //	int128       16 bytes, two's complement
 //
-// Map entry order is unspecified, and this worker does not sort. A map<K,V> is
-// unordered, so requiring one key-derived order was requiring every worker in
-// every language to implement a collation its own map type does not have — and
-// to get UTF-8 vs UTF-16 collation right while doing it. Types holding a map
-// declare `oracle: semantic` instead, which compares the decoded value rather
-// than the bytes. See docs/protocol.md § Comparison oracles.
+// Map entry order is unspecified and this worker does not sort. Types holding a
+// map declare `oracle: semantic`, which compares the decoded value rather than
+// the bytes; see docs/protocol.md § Comparison oracles.
 
 var errTruncated = errors.New("truncated")
 
@@ -61,11 +58,9 @@ func readLenStr(b []byte) (string, []byte, error) {
 	return string(b[:n]), b[n:], nil
 }
 
-// mapKeys returns the map's keys in whatever order Go hands them over —
-// deliberately not sorted. A map<K,V> is unordered, so the worker emits its
-// natural order and the semantic oracle judges the decoded value instead of the
-// bytes. Go randomises map iteration per run, which makes this worker a live
-// check that the oracle really is order-insensitive.
+// mapKeys returns the map's keys unsorted, on purpose: Go randomises map
+// iteration per run, which makes this worker a live check that the semantic
+// oracle really is order-insensitive.
 func mapKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

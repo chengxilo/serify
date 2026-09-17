@@ -24,12 +24,8 @@ import (
 // they all produce the same bytes. Run it with --audit and two of them report a
 // finding. See ../README.md.
 //
-// The codecs speak the Frame model and never see a FieldMap, which is what a
-// worker author actually writes — serify converts on the way in and out. Audit
-// is not weakened by that: it snapshots the struct around the serializer and
-// extracts a FieldMap that shares the struct's backing memory, so aliasing and
-// mutation are caught through the model exactly as they are at the raw
-// boundary.
+// The codecs speak the Frame model and never see a FieldMap. Audit is not
+// weakened by that: the FieldMap it extracts shares the struct's backing memory.
 func main() {
 	serify.Run(serify.Suite{
 		Types: map[string]serify.Type{

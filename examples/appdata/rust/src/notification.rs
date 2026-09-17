@@ -46,8 +46,7 @@ impl NotificationRecord {
         buf.extend_from_slice(&self.notification_id.to_le_bytes());
 
         // The tag ordinal is the variant's position in the case file's sum,
-        // which is this enum's declaration order. The schema tag *names* are the
-        // derive's business, and never appear here.
+        // which is this enum's declaration order.
         match &self.channel {
             Channel::Silent => buf.push(0), // a unit variant is nothing but its tag
             Channel::Sms(s) => {

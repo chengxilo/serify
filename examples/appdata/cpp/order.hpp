@@ -165,9 +165,7 @@ inline std::vector<uint8_t> order_marshal(const OrderRecord& o) {
 
     money_pack(out, o.subtotal);
 
-    // Entry order is the unordered_map's own — deliberately not sorted. A map is
-    // unordered, so order declares `oracle: semantic` and the decoded value is
-    // what gets compared. See docs/protocol.md.
+    // Entry order is the collection's own: order declares `oracle: semantic`.
     put_le<uint32_t>(out, static_cast<uint32_t>(o.adjustments.size()), 4);
     for (const auto& [k, m] : o.adjustments) {
         put_str(out, k);

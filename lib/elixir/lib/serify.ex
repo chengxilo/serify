@@ -133,8 +133,6 @@ defmodule WorkerLib do
           else
             case Jason.decode(line) do
               {:ok, %{"op" => "ping"}} ->
-                # Health check: report liveness and the protocol revision this
-                # library speaks. Binds nothing.
                 emit(%{"op" => "ping", "status" => "OK", "protocol_version" => @protocol_version})
                 {ser, deser, schema, audit_enabled}
 
@@ -171,15 +169,8 @@ defmodule WorkerLib do
     end
   end
 
-  # --- audit helpers --------------------------------------------------------
-  #
-  # The functions below are low-level audit helpers used only by the run loop
-  # (below) when --audit is passed. A worker driven by the serify runner never
-  # calls them directly: register serialize/deserialize in a suite and the run
-  # loop handles audit itself. They are private (defp), not public — unlike
-  # the other libraries' equivalents, detect_zero_copy here never mutates
-  # anything (BEAM binaries are immutable), but collect_bin_snaps/dict_diffs
-  # are kept private too for consistency with every other language's binding.
+  # Audit helpers, private as in every other binding. Nothing here mutates:
+  # BEAM binaries are immutable.
 
   # Recursively walks a field map and collects a snapshot of every binary value.
   defp collect_bin_snaps(fm, snaps) when is_map(fm) do
@@ -213,13 +204,9 @@ defmodule WorkerLib do
     end) |> Enum.sort()
   end
 
-  # Reports which field-map entries alias the input buffer. On the BEAM that is
-  # always none, so this always returns `[]`.
-  #
-  # The other libraries answer this by XOR-flipping the input buffer and seeing
-  # which decoded fields change with it. Neither half of that is expressible here:
-  # a binary is immutable, so there is nothing to flip, and a decoded value can
-  # never alias the buffer it was read from in the first place.
+  # Reports which field-map entries alias the input buffer — always none on the
+  # BEAM: a binary is immutable, so there is nothing to flip and nothing that
+  # could alias it.
   defp detect_zero_copy(_fm, _buf), do: []
 
   # --- protocol handlers ----------------------------------------------------
@@ -401,9 +388,7 @@ defmodule WorkerLib do
   defp decode_field(%{type: "optional<string>"}, nil), do: nil
   defp decode_field(%{type: "optional<string>"}, v),   do: v
   # An array<T,N> is a list whose length the schema fixes, so it shares the
-  # list clause outright and adds only the length check. Matching the literal
-  # type string "array<uint32,4>" is what pinned arrays to that one shape —
-  # any other element type or length had no clause at all.
+  # list clause outright and adds only the length check.
   defp decode_field(%{type: "array<" <> rest} = sf, v) do
     {elem, n} = split_array(rest)
     out = decode_field(%{sf | type: "list<#{elem}>"}, v)
@@ -630,7 +615,6 @@ defmodule WorkerLib.Serify.Model do
 
   # Generate to_field_map / from_field_map at compile time.
   def def_serify_functions(fields, _mod) do
-    # Generate to_field_map clauses
     to_clauses =
       for {name, type, opts} <- fields do
         key = Keyword.get(opts, :key, to_string(name))
@@ -683,8 +667,7 @@ defmodule WorkerLib.Serify.Model do
     end
   end
   # Every other element type: the FieldMap carries the list as-is and the schema
-  # decides the element's wire form, so one clause covers all of them. Naming
-  # them individually is what left :u16, :i8, :bool, :bytes and the rest unbound.
+  # decides the element's wire form, so one clause covers all of them.
   defp to_clause(name, {:list, _elem}, key, _opts),
     do: quote(do: fm = Map.put(fm, unquote(key), struct.unquote(name)))
   # An array<T,N> is carried exactly as the list<T> it is.
@@ -693,8 +676,7 @@ defmodule WorkerLib.Serify.Model do
   defp to_clause(name, {:optional, :string}, key, _opts),
     do: quote(do: fm = Map.put(fm, unquote(key), struct.unquote(name)))
   # Every other optional<T>: the FieldMap carries nil or the bare value, exactly
-  # as it does for a string, so one clause covers all of them. Naming only
-  # :string and :struct is what left optional<float32> and the rest unbound.
+  # as it does for a string, so one clause covers all of them.
   defp to_clause(name, {:optional, elem}, key, _opts) when elem != :struct,
     do: quote(do: fm = Map.put(fm, unquote(key), struct.unquote(name)))
   defp to_clause(name, {:optional, :struct}, key, opts) do

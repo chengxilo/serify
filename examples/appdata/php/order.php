@@ -19,19 +19,11 @@
  * `OrderRecord` mirrors examples/appdata/cases/order.yaml — a placed order.
  *
  * `LineItem` mirrors the reusable line_item.yaml it imports, which itself nests
- * money — so any type using it exercises struct-inside-struct. `Address` and
- * `Money` come from customer.php, as they do in the Go worker.
+ * money. `Address` and `Money` come from customer.php.
  *
- * Between them the fields cover the four composite types nothing else in the
- * suite exercises end to end: an `enum`, a `list<struct>`, a
- * `map<string,struct>` and an `optional<struct>`. `$billingAddress` is the
- * suite's only optional<struct>, and unlike the list and map beside it, it
- * needs no `elem:` — its own property type says which class it is.
- *
- * An enum needs nothing from the binding: it travels as its variant *name*, so
- * the property is a plain string. The u8 ordinal in the layout is this worker's
- * own choice, which is why STATUSES has to match the case file's declaration
- * order.
+ * An enum travels as its variant *name*, so the property is a plain string. The
+ * u8 ordinal in the layout is this worker's own choice, which is why STATUSES
+ * has to match the case file's declaration order.
  *
  * PHP's int is 64-bit *signed*, so the two u64 ids travel as decimal strings
  * through ext-gmp, as the other models here do.
@@ -129,9 +121,7 @@ class OrderRecord
 
         $out .= $this->subtotal->pack();
 
-        // Entry order is the array's own — deliberately not sorted. A map is
-        // unordered, so order declares `oracle: semantic` and the decoded value
-        // is what gets compared. See docs/protocol.md.
+        // Entry order is the array's own: order declares `oracle: semantic`.
         $out .= pack('V', count($this->adjustments));
         foreach ($this->adjustments as $k => $m) {
             $out .= lenPrefixed((string) $k) . $m->pack();

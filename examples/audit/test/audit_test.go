@@ -15,10 +15,6 @@
 // Package audit tests the audit example: that three codecs sharing one byte
 // layout are indistinguishable to a conformance run, and that --audit tells
 // them apart.
-//
-// The second test is the one that carries the lesson. Without it this package
-// would assert that a passing suite passes, which every other example already
-// does.
 package audit
 
 import (
@@ -79,9 +75,7 @@ func runSuite(t *testing.T, audit bool) testutil.ResultGrid {
 
 // TestAudit_ConformanceIsBlindToBoth is the premise of the whole example: all
 // three formats encode the same layout, so a conformance run cannot tell the
-// safe codec from the unsafe ones. If this test ever fails, the example has
-// stopped making its point — either a codec drifted, or a format started
-// producing different bytes and the lesson is now about something else.
+// safe codec from the unsafe ones.
 func TestAudit_ConformanceIsBlindToBoth(t *testing.T) {
 	grid := runSuite(t, false)
 
@@ -159,9 +153,8 @@ func TestAudit_FindsWhatConformanceCannot(t *testing.T) {
 		}
 	}
 
-	// So are the cases with nothing in them to find, under the very codecs that
-	// were unsafe a case ago. This is what stops the example from reading as
-	// "audit flags this format", when what it flags is this format on this data.
+	// So are the cases with nothing to find, under the very codecs that were
+	// unsafe a case ago: a finding is about this format on this data.
 	for _, c := range quietCases {
 		for _, op := range auditOps {
 			requireNoCell(t, grid, "frame/fast/"+c, lang.Go, op)

@@ -205,8 +205,6 @@ func Run(suite Suite) {
 
 		switch base.Op {
 		case string(proto.OpPing):
-			// Health check: report liveness and the protocol revision this
-			// library speaks. Binds nothing.
 			emit(map[string]any{
 				"op":                proto.OpPing,
 				wireStatus:          proto.StatusOK,
@@ -226,7 +224,6 @@ func Run(suite Suite) {
 			}
 			schema = msg.Schema
 
-			// Both type and format are required; the runner always sends them.
 			if msg.Type == "" {
 				emitErr(nil, proto.OpBind, proto.StatusError, `bind requires a "type" field`)
 				continue

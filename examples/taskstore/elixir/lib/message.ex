@@ -39,8 +39,7 @@ defmodule Request do
   serify_field(:op, :sum)
 
   def marshal(%__MODULE__{} = req) do
-    # The tag ordinal is the arm's position in the case file's sum. The schema
-    # tag *names* are the binding's business, and never appear here.
+    # The tag ordinal is the arm's position in the case file's sum.
     tagged =
       case req.op do
         :list_all -> <<0>>

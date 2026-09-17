@@ -154,7 +154,7 @@ class SerifyModelHelper
             $payload = $props[0]->getValue($val);
             // A single payload that is itself a model travels as a struct.
             // The test is isModel, not method_exists('toFieldMap'): toFieldMap
-            // is a static helper here, so the old duck-type check never fired.
+            // is a static helper here, so a duck-type check never fires.
             return new Variant(self::armTag($arm),
                 self::isModel($payload) ? self::toFieldMap($payload) : $payload);
         }
@@ -232,11 +232,8 @@ class SerifyModelHelper
                 break;
             case is_array($val) && array_is_list($val):
                 // Store the list as-is: the schema, not the value, decides the
-                // element type on the wire. Guessing from $val[0] meant an empty
-                // list — and any list of bools, floats or byte strings — was
-                // stored as though its elements were strings.
-                // A list<struct> is the one element type that does need
-                // converting, since the encoder speaks FieldMap, not models.
+                // element type on the wire. A list<struct> is the one element
+                // type that needs converting, since the encoder speaks FieldMap.
                 $fm->setRaw($key, array_map([self::class, 'flatten'], $val));
                 break;
             case is_array($val):
@@ -268,13 +265,9 @@ class SerifyModelHelper
     }
 
     /**
-     * A nested model becomes a FieldMap; anything else passes through.
-     *
-     * The check used to be method_exists($x, 'toFieldMap'), which no model has
-     * ever satisfied -- toFieldMap is a helper method on this class, not on the
-     * model -- so every nested struct fell to the (string) cast in the default
-     * arm and PHP threw on converting an object to a string. Nothing caught it
-     * because no example had a nested struct until customer.
+     * A nested model becomes a FieldMap; anything else passes through. The test
+     * is isModel, not method_exists($x, 'toFieldMap'): toFieldMap lives on this
+     * helper, not on the model.
      */
     private static function flatten(mixed $x): mixed
     {

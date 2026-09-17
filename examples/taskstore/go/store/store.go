@@ -46,9 +46,8 @@ func New() *Store {
 // Apply runs one request and returns the response to send back. It is the
 // entire server: everything else is sockets and bytes.
 //
-// Note what the signature does not have — no error return. Every way this can
-// go wrong is an api.Failed the client is meant to read, so the failure modes
-// are in the protocol rather than beside it.
+// No error return: every way this can go wrong is an api.Failed the client is
+// meant to read, so the failure modes are in the protocol rather than beside it.
 func (s *Store) Apply(req api.Request) api.Response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -73,11 +72,9 @@ func (s *Store) Apply(req api.Request) api.Response {
 
 	case api.Create:
 		draft := api.Draft(op)
-		// An empty title is checked here because the wire can carry one: a
-		// zero-length string is a perfectly good string. A bad *priority* is not
-		// checked, because an enum travels as an ordinal into a fixed list — a
-		// value outside it has no encoding, so it cannot arrive. Validating it
-		// again here would be dead code that reads like a safety net.
+		// An empty title is checked because the wire can carry one. A bad
+		// priority is not: an enum travels as an ordinal into a fixed list, so a
+		// value outside it has no encoding and cannot arrive.
 		if draft.Title == "" {
 			return failf(api.CodeInvalid, "a task needs a title")
 		}

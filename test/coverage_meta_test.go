@@ -30,10 +30,8 @@ import (
 // The decision logic behind --expect-skips is unit-tested in
 // internal/orch/coverage_test.go. What that cannot reach is the half
 // that lives in the CLI: finding the directory, loading <lang>.yaml, and
-// deciding whether to enforce at all. Every one of those steps fails *open* —
-// a missing directory, an unreadable file and an empty declaration all leave
-// the run green — so a break in the wiring looks exactly like a passing run,
-// which is the failure mode this flag exists to prevent in workers.
+// deciding whether to enforce at all. Every one of those steps fails *open*, so
+// a break in the wiring looks exactly like a passing run.
 //
 // The fixture is the audit suite driven by go and python. python's worker does
 // not register the formats whose faults need a mutable alias into a
@@ -95,9 +93,7 @@ func TestCLI_ExpectSkips(t *testing.T) {
 	}
 
 	// Baseline: with no directory the flag is inert and python's gaps are
-	// invisible. This is the behaviour the other three cases depart from, and
-	// the reason the flag has to be opt-in by directory rather than by default:
-	// switching it on for every suite would fail every existing honest skip.
+	// invisible. Enforcing by default would fail every existing honest skip.
 	t.Run("no directory leaves skips exit-code-neutral", func(t *testing.T) {
 		out, code, grid := run(t)
 		require.Equal(t, 0, code, "serify exit = %d, want 0 (a skip alone must not fail a run)\n%s", code, out)

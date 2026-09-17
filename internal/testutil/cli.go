@@ -28,11 +28,9 @@ import (
 )
 
 const (
-	// serifyTimeout guards against a hung worker wedging the whole test binary.
-	// The all-language conformance run builds eight worker toolchains before it
-	// executes a single case; a cold cargo/npm/mix/dotnet build alone can take
-	// minutes, so this has to be generous enough not to fire on a slow-but-healthy
-	// run. It only exists to catch a genuinely wedged worker.
+	// serifyTimeout only exists to catch a genuinely wedged worker: a cold
+	// cargo/npm/mix/dotnet build alone can take minutes, so it must be generous
+	// enough never to fire on a slow-but-healthy run.
 	serifyTimeout = 10 * time.Minute
 	// serifyWaitDelay is the grace period for the CLI's I/O to drain after its
 	// context is cancelled, before the process is killed outright.

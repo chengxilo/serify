@@ -120,9 +120,7 @@ public final class TelemetryFrame {
             out.writeBytes(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(v).array());
         }
 
-        // Entry order is the map's own — deliberately not sorted. A map is
-        // unordered, so telemetry declares `oracle: semantic` and the decoded
-        // value is what gets compared. See docs/protocol.md.
+        // Entry order is the collection's own: telemetry declares `oracle: semantic`.
         out.writeBytes(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(packetCounts.size()).array());
         for (Map.Entry<String, Long> e : packetCounts.entrySet()) {
             Wire.writeLenPrefixed(out, e.getKey());

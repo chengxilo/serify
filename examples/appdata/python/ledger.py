@@ -16,8 +16,7 @@
 
 `@serify_model` is the entire schema binding — it reads the dataclass annotations
 and generates `from_field_map` / `to_field_map`, so nothing here calls a
-`get_*`/`set_*` accessor. Everything else is the byte layout, which is the part a
-conformance worker exists to exercise.
+`get_*`/`set_*` accessor. Everything else is the byte layout.
 
 Go is the --ref language and owns that layout; see the comment at the top of
 examples/appdata/go/wire.go.

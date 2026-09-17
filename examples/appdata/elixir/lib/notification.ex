@@ -36,8 +36,7 @@ defmodule NotificationRecord do
   serify_field(:urgent, :bool)
 
   def marshal(%__MODULE__{} = n) do
-    # The tag ordinal is the variant's position in the case file's sum. The
-    # schema tag *names* are the binding's business, and never appear here.
+    # The tag ordinal is the variant's position in the case file's sum.
     tagged =
       case n.channel do
         :silent -> <<0>>

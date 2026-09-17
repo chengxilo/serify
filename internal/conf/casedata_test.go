@@ -38,8 +38,8 @@ func loadOneCase(t *testing.T, schema, data string) (map[string]any, error) {
 }
 
 func TestCaseData_BareBigIntsDecodeExactly(t *testing.T) {
-	// Unquoted 128-bit literals used to degrade to float64 via yaml.v3's
-	// type guessing; schema-directed decoding must keep them exact.
+	// yaml.v3's type guessing degrades an unquoted 128-bit literal to float64;
+	// schema-directed decoding must keep them exact.
 	data, err := loadOneCase(t,
 		"  - amount: uint128\n  - debit: int128\n  - count: uint64\n  - ts: int64\n",
 		"      amount: 340282366920938463463374607431768211455\n"+

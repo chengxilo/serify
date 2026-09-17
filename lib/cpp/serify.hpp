@@ -63,10 +63,9 @@ using ListF64    = std::vector<double>;
 using ListBool   = std::vector<bool>;
 using ListBytes  = std::vector<Bytes>;
 
-// u128/i128: __int128 is a GCC/Clang extension. The standard library has no
-// std::stoull / std::to_string for it, so serify_u128_from_str / serify_u128_to_str
-// below do the decimal conversion by hand. Parsing these as uint64_t (as this library
-// used to) silently truncates every value above 2^64.
+// u128/i128: __int128 is a GCC/Clang extension with no std::stoull /
+// std::to_string, so serify_u128_from_str / serify_u128_to_str below do the
+// decimal conversion by hand. uint64_t would truncate every value above 2^64.
 using u128 = unsigned __int128;
 using i128 = __int128;
 
@@ -132,23 +131,16 @@ using FieldValue = std::variant<
     StructPtr,                          // struct
     ListStruct,                         // list<struct>
     std::optional<StructPtr>,           // optional<struct>
-    // A null optional<T> for every T that has no std::optional alternative of
-    // its own. Without it an optional<uint32> had nowhere to put "no value" and
-    // the field was simply dropped.
+    // A null optional<T> for every T with no std::optional alternative of its
+    // own; otherwise an optional<uint32> has nowhere to put "no value".
     std::monostate                      // null
 >;
 
 // Map fields are stored separately to avoid recursive variant definition.
 //
-// unordered_map, not map. A schema `map<K,V>` is unordered, and every other
-// serify library holds one in its language's unordered type (Go map, Rust
-// HashMap, C# Dictionary, Python dict). This was a std::map only because the
-// protocol used to require workers to emit map entries in UTF-8 key order, and
-// std::map handed that over for free — so C++ satisfied a rule it never had to
-// implement. That rule is gone (docs/protocol.md § Maps: the format decides),
-// and with it the reason to impose an ordering the type does not have. A worker
-// whose format really is canonical over maps now sorts explicitly, the same as
-// every other language has always had to.
+// unordered_map, not map: a schema `map<K,V>` is unordered and the format
+// decides entry order (docs/protocol.md § Maps). A worker whose format is
+// canonical over maps sorts explicitly, as every other language must.
 using MapStore = std::unordered_map<std::string, FieldValue>;
 
 // One arm of a sum: a tag and its decoded payload (null for a unit variant).
@@ -670,9 +662,7 @@ static FieldMap decode_field_map(const Json& data, const std::vector<SchemaField
         else if (t.rfind("list<",0)==0) {
             // Every element is decoded through this same function, as a one-field
             // record, so a list supports exactly the element types a bare field
-            // does. This branch used to carry its own if/else chain with no final
-            // else at all, so a list of any element type it did not name left the
-            // field silently absent from the FieldMap instead of raising.
+            // does.
             std::string elem = t.substr(5, t.size()-6);
             if (!serify_is_list_elem(elem))
                 throw std::runtime_error("unsupported list element type \"" + elem + "\"");
@@ -719,8 +709,7 @@ static FieldMap decode_field_map(const Json& data, const std::vector<SchemaField
         else if (t.rfind("optional<",0)==0) {
             // string and struct have their own std::optional alternatives; every
             // other element type decodes through the scalar path and carries a
-            // null as std::monostate. This branch used to name only those two and
-            // silently drop the field for anything else.
+            // null as std::monostate.
             std::string elem = t.substr(9, t.size()-10);
             if (el->is_null()) {
                 if (elem=="string") fm.set_optional_string(n,std::nullopt);
@@ -740,9 +729,7 @@ static FieldMap decode_field_map(const Json& data, const std::vector<SchemaField
         }
         else if (t.rfind("array<",0)==0) {
             // An array<T,N> is a list whose length the schema fixes, so it shares
-            // the list branch outright and adds only the length check. A separate
-            // representation is what pinned array<T,N> to uint32 with N = 4 — it
-            // silently truncated anything longer.
+            // the list branch outright and adds only the length check.
             auto [elem, want] = serify_split_array(t);
             if (el->arr.size() != want)
                 throw std::runtime_error("array " + n + ": expected " + std::to_string(want) +
@@ -804,9 +791,8 @@ static FieldMap decode_field_map(const Json& data, const std::vector<SchemaField
             }
             fm.set_map(n,std::move(m));
         }
-        // Falling off the chain left the field absent from the FieldMap, which
-        // surfaces far downstream as a missing value rather than as "this
-        // library does not know that type".
+        // Falling off the chain would leave the field absent from the FieldMap,
+        // surfacing far downstream as a missing value.
         else throw std::runtime_error("unknown type \"" + t + "\"");
     }
     return fm;
@@ -995,16 +981,9 @@ static Json encode_field_map(const FieldMap& fm, const std::vector<SchemaField>&
 // match and refuses to start a worker reporting anything else.
 static const int PROTOCOL_VERSION = 2;
 
-// --- audit helpers --------------------------------------------------------
-//
-// The contents of `detail` below are low-level audit helpers used only by
-// run() (further below) when --audit is passed. A worker driven by the
-// serify runner never calls them directly: register serialize/deserialize
-// and run() handles audit itself. They live in `detail`, not `serify`,
-// deliberately — detect_zero_copy_cpp mutates its buffer argument in place
-// with no synchronization, which is only safe because the NDJSON loop that
-// calls it is strictly sequential; a name directly under `serify` would
-// invite a caller to run it against a buffer shared with concurrent code.
+// Audit helpers. They live in `detail`, not `serify`: detect_zero_copy_cpp
+// mutates its buffer argument in place with no synchronization, which is safe
+// only because the NDJSON loop that calls it is strictly sequential.
 namespace detail {
 
 // in_variant marks a snapshot taken from a sum payload rather than a plain
@@ -1118,11 +1097,9 @@ using SuiteMap = std::map<std::string, std::map<std::string, FormatPair>>;
 // Assigning a plain FormatPair is the other path, for a type with no natural
 // struct — the audit fixtures mutate a FieldMap on purpose.
 //
-// The conversion is baked in here, at registration, rather than resolved when
-// the runner binds. That is deliberate and matches rust's Format::model::<M>():
-// with no reflection there is nothing to resolve at run time, and a model whose
-// binding does not compile is a compile error at the registration site, not a
-// (type, format) that silently reports SKIPPED.
+// The conversion is baked in at registration, not resolved when the runner
+// binds, so a model whose binding does not compile is a compile error at the
+// registration site rather than a (type, format) that silently reports SKIPPED.
 template <typename M, typename Ser, typename Deser>
 FormatPair model_format(Ser serialize, Deser deserialize) {
     auto hook = std::make_shared<ModelAuditHook>();
@@ -1204,8 +1181,6 @@ inline void run_suite(const SuiteMap& suite) {
         if (auto* el = msg.get("id")) id = el->as_str();
 
         if (op == "ping") {
-            // Health check: report liveness and the protocol revision this
-            // library speaks. Binds nothing.
             auto r = Json::obj_();
             r.set("op", Json::str_("ping"));
             r.set("status", Json::str_("OK"));

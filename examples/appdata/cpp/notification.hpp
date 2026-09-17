@@ -70,7 +70,6 @@ inline std::vector<uint8_t> notification_marshal(const NotificationRecord& n) {
 
     // The tag ordinal is the alternative's position in the case file's sum,
     // which is its index in the variant above — so it needs no lookup table.
-    // The schema tag *names* are the binding's business, and never appear here.
     out.push_back(static_cast<uint8_t>(n.channel.index()));
     switch (n.channel.index()) {
         case 0: break;  // a unit variant is nothing but its tag

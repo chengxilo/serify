@@ -61,9 +61,8 @@ operations:
 	assert.True(t, es.Covers("telemetry", "serialize"), "declared type must cover serialize")
 	assert.True(t, es.Covers("telemetry", "deserialize"), "declared type must cover deserialize")
 
-	// An operations entry covers that direction only. This is the whole point
-	// of the split: a worker that can decode but not encode declares one, and a
-	// regression in the other direction still fails.
+	// An operations entry covers that direction only, so a regression in the
+	// other direction still fails.
 	assert.True(t, es.Covers("order", "deserialize"), "declared operation must cover its own direction")
 	assert.False(t, es.Covers("order", "serialize"), "an operations entry must not leak into the other direction")
 

@@ -318,12 +318,9 @@ fn unmarshal_model_zero_copy(data: &[u8]) -> Result<AuditModel, String> {
     unmarshal_model_inner(data, false)
 }
 
-// `mutating` is deliberately NOT registered for audit_model. A serify
-// serializer receives `&M`; mutating through it is UB, and a release build
-// discards the write outright — the model still reads 42. It is not a fault an
-// honest Rust worker can commit through a model, the same reason it declines
-// `value-mutating` above and `handoff` in examples/audit. Interior mutability
-// would be the legitimate way to express it, and serify has no such field kind.
+// `mutating` is deliberately NOT registered for audit_model: a serify
+// serializer receives `&M`, so mutating through it is UB and a release build
+// discards the write outright. Same reason it declines `value-mutating` above.
 
 /// The positive control: this fault shows in the returned bytes, so it reports
 /// whether or not the model survives the call.

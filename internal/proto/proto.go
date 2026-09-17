@@ -55,10 +55,8 @@ const (
 )
 
 // ProtocolVersion is the wire revision this runner speaks. Workers report theirs
-// in the ping response and the two must match exactly. The runner and every
-// worker library ship from this repository together, so a mismatch always means
-// one side was built from different sources — there is no version range to
-// negotiate. Bump this on any breaking change to the messages below.
+// in the ping response and the two must match exactly; there is no version range
+// to negotiate. Bump it on any breaking change to the messages below.
 const ProtocolVersion = 2
 
 // PingRequest is the startup health check. It names no type and carries no
@@ -68,8 +66,7 @@ type PingRequest struct {
 }
 
 // BindRequest points the worker at one (type, format) and its schema. The
-// runner sends one per (type, format) group; it is not a once-per-process
-// initialisation, which is why it is not called init.
+// runner sends one per (type, format) group, not once per process.
 type BindRequest struct {
 	Op     Op            `json:"op"`
 	Schema []SchemaField `json:"schema"`
@@ -112,9 +109,7 @@ type ExitRequest struct {
 	Op Op `json:"op"` // "exit"
 }
 
-// Constructors stamp each request with its own op: the wire format wants an
-// explicit "op" on every message, and the request type is the one place that
-// knows it. Callers pass the payload fields and never spell an op.
+// Constructors stamp each request with its own op so callers never spell one.
 
 func NewPingRequest() PingRequest {
 	return PingRequest{Op: OpPing}
@@ -170,12 +165,10 @@ type Writer struct{ w io.Writer }
 
 func NewWriter(w io.Writer) *Writer { return &Writer{w: w} }
 
-// Write emits one NDJSON message. It deliberately avoids json.Marshal, which
-// HTML-escapes <, > and & by default: that would send a type like
-// optional<string> as "optional<string>". Standard JSON libraries decode
-// that back, but a worker with a hand-rolled JSON parser (several worker libs have one)
-// sees a mangled type name and silently fails to match any schema type. Nothing
-// here is ever embedded in HTML, so the escaping buys nothing.
+// Write emits one NDJSON message. It deliberately avoids json.Marshal, whose
+// HTML escaping would send optional<string> as "optional\u003cstring\u003e":
+// the hand-rolled JSON parsers in several worker libs see a mangled type name
+// and silently match no schema type.
 func (w *Writer) Write(v any) error {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf) // Encode already appends the newline NDJSON needs

@@ -23,11 +23,8 @@ import (
 // TelemetryFrame mirrors examples/appdata/cases/telemetry.yaml — one reading from a
 // field device.
 //
-// This type is what exercises the corners the other examples do not: a
-// `uint128` address, two differently shaped fixed arrays, an `optional<float32>`
-// (the only `optional<scalar>` in the suite), a `map<string,uint64>`, and float
-// cases covering NaN, ±Inf and negative zero. Its `binary` format is the only
-// one declared, because NaN and Inf have no JSON representation.
+// Only `binary` is declared: the float cases run through NaN and ±Inf, which
+// have no JSON representation.
 //
 // Binary layout follows the conventions in wire.go, with two additions:
 //

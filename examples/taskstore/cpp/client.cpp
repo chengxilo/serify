@@ -24,12 +24,9 @@
 //   ./client update 1001 "Buy oat milk" true high errand
 //   ./client delete 1001
 //
-// Note the -I: the client needs serify.hpp on the include path even though it
-// never calls a line of it. The schema binding in C++ is a set of macros, and
-// macros have to be expanded, so model.hpp includes the header and everything
-// downstream of it inherits that. Go and Python are the only two of the nine
-// whose codec can be free of the harness at compile time; the README's
-// "Where serify appears" section has the full split.
+// Note the -I: the schema binding in C++ is a set of macros, so model.hpp
+// includes serify.hpp and everything downstream of it inherits that, even though
+// the client never calls a line of it.
 
 #include "frame.hpp"
 #include "message.hpp"
@@ -70,10 +67,9 @@ uint64_t parse_id(const std::string& raw) {
     return std::strtoull(raw.c_str(), nullptr, 10);
 }
 
-/// Rejects a bad priority here, before anything is encoded. This is the only
-/// place in the project where one can exist: an enum has no wire representation
-/// outside its declared variants, so by the time a request is bytes the value is
-/// already known to be good — which is why the server does not check it again.
+/// Rejects a bad priority before anything is encoded. An enum has no wire
+/// representation outside its declared variants, so by the time a request is
+/// bytes the value is already known to be good.
 std::string parse_priority(const std::string& s) {
     for (const auto& p : taskstore::PRIORITIES)
         if (p == s) return s;
@@ -144,10 +140,8 @@ taskstore::Op parse_op(const std::vector<std::string>& args) {
 std::string render_task(const taskstore::Task& t) {
     std::string line = std::string("[") + (t.done ? "x" : " ") + "] " + std::to_string(t.id) + "  ";
     std::string title = t.title;
-    // Padded by bytes, because std::string counts bytes. Go and Python count
-    // runes, so a non-ASCII title lines up differently there. That is display
-    // only — nothing in this padding reaches the wire, where the length prefix
-    // has always been a byte count in every language.
+    // Padded by bytes, because std::string counts bytes; Go and Python count
+    // runes, so a non-ASCII title lines up differently. Display only.
     if (title.size() < 30) title.append(30 - title.size(), ' ');
     line += title + "  " + t.priority;
     if (!t.tags.empty()) {

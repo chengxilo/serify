@@ -82,9 +82,8 @@ static std::string take_len_str(const std::vector<uint8_t>& data, size_t& off) {
 }
 
 // MapStore is a std::unordered_map, so a canonical format has to ask for key
-// order explicitly — the same cost every other language's worker has always
-// paid. std::string compares by bytes, which is the UTF-8 order the canonical
-// layout specifies.
+// order explicitly. std::string compares by bytes, which is the UTF-8 order the
+// canonical layout specifies.
 static std::vector<std::string> map_keys(const serify::MapStore& m, bool sorted) {
     std::vector<std::string> keys;
     keys.reserve(m.size());
@@ -100,10 +99,8 @@ static std::vector<uint8_t> binary_serialize(const FieldMap& fm) {
     return binary_serialize_with(fm, true);
 }
 
-// The same layout with the map sort removed, judged by the semantic oracle.
-// MapStore is a std::unordered_map, so this is genuinely the container's own
-// order — bucket order, which depends on the hash and the insertion history and
-// matches no other language's.
+// The same layout with the map sort removed, judged by the semantic oracle: the
+// unordered_map's bucket order matches no other language's.
 static std::vector<uint8_t> binary_unordered_serialize(const FieldMap& fm) {
     return binary_serialize_with(fm, false);
 }

@@ -181,8 +181,7 @@ var auditModelWarnings = []struct {
 	{
 		// The positive control: this fault is visible in the returned bytes, so
 		// it does not depend on the model surviving the call. Every language
-		// reporting it is what proves each model worker really ran under
-		// --audit, which is what makes a silence elsewhere meaningful.
+		// reporting it is what makes a silence elsewhere meaningful.
 		format: "unstable",
 		op:     report.OpAuditStability,
 		detail: "serializer produced different output on repeat call",
@@ -239,8 +238,7 @@ func TestAuditWarningsAreReported(t *testing.T) {
 		}
 	}
 
-	// The same grid, one layer up: the model path. Same CLI run, so this costs
-	// nothing beyond the assertions.
+	// The same grid one layer up, on the model path.
 	t.Run("model path", func(t *testing.T) {
 		// Control group: a model worker that does nothing wrong is silent.
 		for _, lang := range audit.langs {

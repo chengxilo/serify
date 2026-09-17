@@ -128,13 +128,10 @@ defmodule CustomerRecord do
   @moduledoc """
   Mirrors examples/appdata/cases/customer.yaml — a store account.
 
-  This is the only type in the suite carrying two formats, and the second one is
-  the point: `binary` is a layout written by hand below, `json` goes through
-  OTP 27's `:json`, so the two fail in completely different ways. Both declare
-  `oracle: semantic`, so what has to match the reference is the decoded value
-  rather than the bytes — Go's encoder HTML-escapes `<`, `>` and `&` and always
-  escapes U+2028/U+2029, and under a byte oracle every worker would have to
-  reproduce that quirk.
+  The suite's only type with two formats: `binary` is a layout written
+  by hand below, `json` goes through OTP 27's `:json`. Both declare
+  `oracle: semantic`, since a byte oracle would make every worker
+  reproduce Go's HTML escaping.
 
   It is also this worker's first model with nested structs, and the binding
   takes them without help: `:struct` names the module, `{:list, :struct}` and
@@ -195,9 +192,7 @@ defmodule CustomerRecord do
         s -> <<1>> <> Wire.str(s)
       end
 
-    # Entry order is the map's own — deliberately not sorted. A map is
-    # unordered, so customer declares `oracle: semantic` and the decoded value
-    # is what gets compared. See docs/protocol.md.
+    # Entry order is the collection's own: customer declares `oracle: semantic`.
     book =
       Enum.map_join(c.address_book, fn {k, a} -> Wire.str(k) <> Address.pack(a) end)
 

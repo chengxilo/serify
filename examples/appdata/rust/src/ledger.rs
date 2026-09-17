@@ -17,7 +17,7 @@
 //! math/big to hold the same range.
 //!
 //! `#[derive(SerifyModel)]` is the entire schema binding. Everything below it is
-//! the byte layout, which is the part a conformance worker exists to exercise.
+//! the byte layout.
 
 use serify::SerifyModel;
 

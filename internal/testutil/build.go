@@ -51,14 +51,9 @@ type Worker struct {
 }
 
 // Build compiles the fixture worker through the same detect-and-build path the
-// serify CLI uses, so the worker's own manifest is authoritative.
-//
-// This package used to hardcode one build command per language. Those commands
-// silently drifted from the manifests they were standing in for: the Java and
-// Node fixtures each compile the serify worker library before compiling
-// themselves, a step the hardcoded versions omitted. Both languages therefore
-// kept building against a stale copy of the library, which stayed invisible for
-// as long as nothing in the library changed shape.
+// serify CLI uses, so the worker's own manifest is authoritative. A build
+// command hardcoded here instead drifts from the manifest it stands in for —
+// the Java and Node fixtures compile the worker library before themselves.
 func (w Worker) Build() error {
 	probe, known := buildProbes[w.Language]
 	if !known {

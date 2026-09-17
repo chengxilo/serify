@@ -90,7 +90,6 @@ func TestCLI_Run_JSONOutput(t *testing.T) {
 func TestCLI_Run_BuildOnly(t *testing.T) {
 	requireWorkers(t, happy.langs...)
 
-	// Use the happy go worker dir without --no-build.
 	goDir := happy.WorkerPaths()[0]
 	out, code := testutil.RunSerify(t, "run", "--ref", lang.Go, "--cases", happy.CasePath(), "--build-only", goDir)
 	require.Equal(t, 0, code, "exit code = %d, want 0\n%s", code, out)
@@ -146,7 +145,6 @@ func TestCLI_Run_FlagValidation(t *testing.T) {
 
 // TestCLI_Run_MalformedCases exercises error paths for bad case files.
 func TestCLI_Run_MalformedCases(t *testing.T) {
-	// Invalid YAML.
 	badDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(badDir, "bad.yaml"), []byte("{not yaml!!"), 0644))
 	out, code := testutil.RunSerify(t, slices.Concat(
@@ -155,7 +153,6 @@ func TestCLI_Run_MalformedCases(t *testing.T) {
 	require.NotEqual(t, 0, code, "expected non-zero exit for bad yaml, got 0\n%s", out)
 	assert.Contains(t, out, "load cases:", "bad yaml error")
 
-	// Nonexistent directory.
 	out2, code2 := testutil.RunSerify(t, slices.Concat(
 		[]string{"run", "--ref", lang.Go, "--cases", "/nonexistent", "--no-build"},
 		happy.WorkerPaths())...)
@@ -176,10 +173,8 @@ func TestCLI_Run_BadRunCommand(t *testing.T) {
 }
 
 // TestCLI_Run_DuplicateLanguage pins the rejection of two workers of the same
-// language. Results are keyed by language everywhere downstream — report, CSV
-// and table all have one column per language — so the second worker used to
-// silently overwrite the first: the run reported a single column and a single
-// worker's pass count, with nothing to say a worker's results were discarded.
+// language: results are keyed by language everywhere downstream, so the second
+// would otherwise silently overwrite the first.
 func TestCLI_Run_DuplicateLanguage(t *testing.T) {
 	goWorker := filepath.Join(happy.path, lang.Go)
 	out, code := testutil.RunSerify(t,
@@ -192,7 +187,6 @@ func TestCLI_Run_DuplicateLanguage(t *testing.T) {
 // TestCLI_Validate tests the `serify validate` subcommand — case file loading
 // and worker detection without running tests.
 func TestCLI_Validate(t *testing.T) {
-	// Validate cases only (no workers).
 	out, code := testutil.RunSerify(t, "validate", "--cases", happy.CasePath())
 	require.Equal(t, 0, code, "validate exit = %d, want 0\n%s", code, out)
 	assert.Contains(t, out, "Suite:", "validate should show suite")
@@ -202,19 +196,14 @@ func TestCLI_Validate(t *testing.T) {
 	require.Equal(t, 0, code2, "validate exit = %d, want 0\n%s", code2, out2)
 	assert.Contains(t, out2, "Worker "+lang.Go, "validate should detect worker")
 
-	// Bad cases directory.
 	out3, code3 := testutil.RunSerify(t, "validate", "--cases", "/nonexistent")
 	require.NotEqual(t, 0, code3, "expected non-zero exit for bad cases, got 0\n%s", out3)
 	assert.Contains(t, out3, "load cases:", "bad cases error")
 }
 
-// TestCLI_Validate_CasesDirPassedPositionally pins the fix for a silent
-// wrong-answer bug: positional arguments are worker directories, so
-// `serify validate my-cases` used to validate whatever --cases defaulted to
-// (./cases), print a full successful suite report for it, and only then fail
-// with an unrelated-looking "cannot detect language" error. A user with a
-// ./cases directory therefore saw a green report for a directory they never
-// named.
+// TestCLI_Validate_CasesDirPassedPositionally pins a silent wrong-answer:
+// positional arguments are worker directories, so `serify validate my-cases`
+// must not validate whatever --cases defaulted to and report it as green.
 func TestCLI_Validate_CasesDirPassedPositionally(t *testing.T) {
 	out, code := testutil.RunSerify(t, "validate", happy.CasePath())
 	require.NotEqual(t, 0, code, "expected non-zero exit when a cases dir is passed positionally\n%s", out)

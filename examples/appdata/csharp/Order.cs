@@ -132,9 +132,7 @@ internal sealed class OrderRecord
 
         Subtotal.Pack(ms);
 
-        // Entry order is the dictionary's own — deliberately not sorted. A map
-        // is unordered, so order declares `oracle: semantic` and the decoded
-        // value is what gets compared. See docs/protocol.md.
+        // Entry order is the collection's own: order declares `oracle: semantic`.
         WriteCount(ms, Adjustments.Count);
         foreach (var (k, m) in Adjustments) { Wire.WriteLenPrefixed(ms, k); m.Pack(ms); }
 

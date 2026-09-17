@@ -207,14 +207,10 @@ class ApiError:
 # --- the sums ----------------------------------------------------------------
 #
 # A union of dataclasses is Python's sum type, and it is all the schema binding
-# needs: the union names the arms, each arm's own fields give its payload, and a
-# request carrying two operations at once is unwritable. Go needs a hand-written
-# converter for the same five arms (see go/main.go) because its sealed interface
-# cannot be enumerated at run time.
+# needs: the union names the arms and each arm's own fields give its payload.
 #
 # The arity rule is the schema's: 0 fields is a unit variant, 1 field is that
-# value as the payload, N fields make the payload a struct. Every arm here is 0
-# or 1, because each payload is already a record of its own.
+# value as the payload, N fields make the payload a struct.
 
 
 @dataclass
@@ -379,10 +375,8 @@ class Response:
 # A TCP connection is a byte stream with no message boundaries in it, so the
 # protocol puts them there: a u32 little-endian length, then that many bytes.
 #
-# This sits outside the conformance suite on purpose. serify tests the contents
-# of a message — it hands a worker one message's bytes — so the frame header is
-# in none of the cases, and a follower could read its socket some other way and
-# still pass. What it may not do is disagree about what is inside.
+# This sits outside the conformance suite on purpose: serify hands a worker one
+# message's bytes, so the frame header is in none of the cases.
 
 MAX_FRAME_LEN = 1 << 20
 

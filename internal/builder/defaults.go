@@ -24,10 +24,8 @@ type LangDefault struct {
 
 // Defaults maps each supported language to its default build/run commands, used
 // when a worker directory has no worker.yaml overriding them. They assume a
-// self-contained worker laid out the conventional way for its language. Every
-// worker in this repo does override them, because each has to reach a library
-// under lib/ by relative path — that is a property of living in the repo, not a
-// sign the defaults are wrong.
+// self-contained worker; every worker in this repo overrides them, because each
+// reaches a library under lib/ by relative path.
 var Defaults = map[string]LangDefault{
 	lang.Go: {
 		Build: "go build -o worker .",

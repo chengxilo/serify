@@ -31,8 +31,7 @@ public final class Request {
         Wire.putU32(out, requestId);
 
         // The tag ordinal is the arm's position in the case file's sum, which is
-        // the declaration order in Op.java. The schema tag *names* are the
-        // binding's business and never appear here.
+        // the declaration order in Op.java.
         //
         // An if/else chain rather than a switch: pattern matching for switch is
         // Java 21 and this project targets 17, where only `instanceof` patterns

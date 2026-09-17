@@ -19,13 +19,11 @@ import (
 )
 
 // The records this server stores and sends. Each mirrors the case file of the
-// same name, and each owns its own byte layout — the layout is a property of
-// the type, not of some central encoder that has to know about all of them.
+// same name and owns its own byte layout.
 //
-// The `serify:"…"` tags are the schema binding. They cost this package nothing
-// at run time and, more to the point, they cost it no dependency: struct tags
-// are inert strings, so `api` imports the standard library and nothing else.
-// The conformance worker in ../main.go is the only file here that links serify.
+// The `serify:"…"` tags are the schema binding, and they are inert strings: this
+// package imports the standard library and nothing else. The conformance worker
+// in ../main.go is the only file here that links serify.
 
 // Priority is the urgency of a task: the `enum<low, normal, high>` in
 // cases/task.yaml. It is a plain string because that is what an enum travels

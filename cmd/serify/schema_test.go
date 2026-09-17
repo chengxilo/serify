@@ -83,11 +83,8 @@ cases:
 		assert.Contains(t, props, k, "top-level properties missing %q", k)
 	}
 
-	// A formats entry is a {name, oracle} mapping, both required — the shape
-	// the loader demands. The name enum is generated from the file's own
-	// formats: list. This used to assert a bare string enum, which is the
-	// pre-oracle syntax: the generated schema then rejected every real case
-	// file's formats: block while the loader accepted it.
+	// A formats entry is a {name, oracle} mapping, both required — the shape the
+	// loader demands. The name enum is generated from the file's own formats:.
 	fitems := props["formats"].(map[string]any)["items"].(map[string]any)
 	assert.Equal(t, "object", fitems["type"], "a formats entry must be a mapping, got %v", fitems)
 	assert.ElementsMatch(t, []any{"name", "oracle"}, fitems["required"],

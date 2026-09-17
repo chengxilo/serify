@@ -76,13 +76,11 @@ class Rec
 
 // ── Worker::resolveRegistered ────────────────────────────────────────────
 //
-// The test a conformance run cannot replace. An unresolved (type, format) is
-// reported SKIPPED, so a spelling resolveRegistered fails to understand yields
-// a *green* run made entirely of SKIPs — indistinguishable from a worker that
-// honestly does not implement the type. The `instanceof Type` that separates
-// the two spellings is a run-time check, and PHP's instanceof against a class
-// that was never loaded is silently false, which is the same failure wearing a
-// different hat.
+// The test a conformance run cannot replace: an unresolved (type, format) is
+// reported SKIPPED, so a spelling resolveRegistered fails to understand yields a
+// green run made entirely of SKIPs. The `instanceof Type` separating the two
+// spellings is a run-time check, and instanceof against a class that was never
+// loaded is silently false.
 
 $asType = ['rec' => new Type(Rec::class, [
     'binary' => [fn(Rec $r): string => $r->marshal(), Rec::unmarshal(...)],
@@ -140,9 +138,8 @@ check(Worker::resolveRegistered($wild, 'anything', 'anyhow') !== null, 'the * wi
 
 // ── A sum arm whose payload is a model ────────────────────────────────────
 //
-// Both directions were broken: going out, a duck-type check no model satisfies
-// meant the conversion never ran; coming back, the raw FieldMap was assigned
-// straight to a typed property.
+// Both directions need converting: a duck-type check satisfies no model going
+// out, and coming back a raw FieldMap cannot be assigned to a typed property.
 
 #[SerifyModel]
 class ArmPayload

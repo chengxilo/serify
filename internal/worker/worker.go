@@ -127,7 +127,6 @@ func Start(ctx context.Context, info StartInfo, timeoutSec int) (*Worker, error)
 		reader:   protocol.NewReader(stdout),
 	}
 
-	// Collect stderr in background
 	go func() {
 		s := bufio.NewScanner(stderr)
 		for s.Scan() {
@@ -251,11 +250,9 @@ func (w *Worker) Send(ctx context.Context, req any, timeoutSec int) (*protocol.R
 }
 
 // markFatal kills the worker and marks it dead when err means the response
-// stream can no longer be trusted: a timeout or cancellation abandoned the
-// reader goroutine mid-read, and an id or op mismatch means runner and worker
-// are desynced. Killing the process unblocks the abandoned reader and prevents a
-// later request from racing it on the shared reader, or from consuming the
-// stale response.
+// stream can no longer be trusted: a timeout abandoned the reader goroutine
+// mid-read, or an id/op mismatch means the two sides are desynced. Killing the
+// process unblocks that reader so a later request cannot race it.
 func (w *Worker) markFatal(err error) {
 	if errors.Is(err, errTimeout) || errors.Is(err, errIDMismatch) ||
 		errors.Is(err, errOpMismatch) ||
@@ -309,7 +306,6 @@ func (w *Worker) readWithTimeout(
 		if r.err != nil {
 			return nil, r.err
 		}
-		// Validate the response ID against the expected request ID.
 		if expectID != "" && r.resp.ID != expectID {
 			return nil, fmt.Errorf("%w (got %q, want %q)", errIDMismatch, r.resp.ID, expectID)
 		}
@@ -351,7 +347,6 @@ func (w *Worker) Stop() error {
 	w.deadReason = "stopped"
 	w.mu.Unlock()
 
-	// Send exit and close stdin.
 	_ = w.writer.Write(protocol.NewExitRequest())
 	_ = w.stdin.Close()
 
@@ -359,7 +354,6 @@ func (w *Worker) Stop() error {
 		return nil
 	}
 
-	// Wait for a graceful exit in a goroutine; kill on timeout.
 	done := make(chan error, 1)
 	go func() {
 		done <- w.cmd.Wait()

@@ -55,8 +55,7 @@ internal sealed class NotificationRecord
         ms.Write(buf[..4]);
 
         // The tag ordinal is the variant's position in the case file's sum,
-        // which is the declaration order of the four arms above. The schema tag
-        // *names* are the binding's business, and never appear here.
+        // which is the declaration order of the four arms above.
         switch (Channel)
         {
             case Channel.Silent:

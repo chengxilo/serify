@@ -51,8 +51,7 @@ type Options struct {
 // type's serialization formats. For each (type, format) it binds the workers to
 // that schema and format, then runs that type's cases (ids namespaced as
 // "type/format/case") via Run. Workers that cannot bind a (type, format)
-// combination are marked SKIP for it. Every tested type declares its formats
-// explicitly (enforced at load time).
+// combination are marked SKIP for it.
 func RunSuite(
 	ctx context.Context,
 	set *conf.CasesSet,
@@ -63,16 +62,13 @@ func RunSuite(
 	var firstErr error
 	for _, ty := range set.Types {
 		for _, format := range ty.Formats {
-			// The oracle is per (type, format): this type declared it, and a
-			// sibling type sharing the format name may have declared the other.
 			fmtOpts := opts
 			fmtOpts.Oracle = ty.OracleFor(format)
 			if err := runTypeFormat(ctx, set, ty, format, workers, rep, fmtOpts); err != nil {
 				if firstErr == nil {
 					firstErr = err
 				}
-				// Continue with remaining types/formats — the error has
-				// already been recorded as ERROR rows for this type/format.
+				// Already recorded as ERROR rows; keep going with the rest.
 			}
 		}
 	}
@@ -96,13 +92,12 @@ func runTypeFormat(
 		case err == nil:
 			sub[lang] = w
 		case errors.Is(err, worker.ErrTypeNotSupported):
-			// The worker is healthy and told us it does not implement this
-			// (type, format). That is a declaration, not a failure.
+			// A healthy worker declaring it does not implement this
+			// (type, format) — not a failure.
 			markTypeSkipped(rep, lang, ty, format, err.Error())
 		default:
-			// Anything else — a crash, a timeout, a malformed bind response —
-			// is a real failure. Reporting it as SKIP would hide a dead worker
-			// behind a zero exit code.
+			// A crash, timeout or malformed bind response. Reporting it as SKIP
+			// would hide a dead worker behind a zero exit code.
 			markTypeErrored(rep, lang, ty, format, err.Error())
 		}
 	}
@@ -163,7 +158,6 @@ func markType(
 }
 
 // Run executes all test rounds and populates rep.
-// skip/xfail/audit handling. A real decomposition of this is worth doing separately.
 //
 //nolint:gocognit,gocyclo,cyclop,funlen // matrix driver: cases x languages x ops, each with its own
 func Run(
@@ -173,7 +167,6 @@ func Run(
 	rep *report.Report,
 	opts Options,
 ) error {
-	// Build ordered language list (reference first)
 	refLang := cases.ReferenceLanguage
 	langs := OrderedLangs(workers, refLang)
 
@@ -191,7 +184,6 @@ func Run(
 	var firstErr error
 
 	for _, tc := range cases.Cases {
-		// Encode data once for all workers
 		encoded, err := encodeCase(tc, cases.Schema)
 		if err != nil {
 			if firstErr == nil {
@@ -221,7 +213,6 @@ func Run(
 			g.Go(func() error {
 				resp, err := w.Send(gctx, proto.NewSerializeRequest(tc.Name, encoded), opts.TimeoutSec)
 
-				// Check context cancellation during the send.
 				select {
 				case <-gctx.Done():
 					return nil
@@ -238,11 +229,9 @@ func Run(
 				}
 				hexMu.Unlock()
 
-				// Audit: serialize mutation + stability + output zero-copy.
-				// Recorded before the verdict, not after: a finding is a property
-				// of what the worker did, independent of whether its bytes match,
-				// and the deferred-verdict return below would otherwise drop the
-				// warnings of every non-reference worker.
+				// Recorded before the verdict, not after: the deferred-verdict
+				// return below would otherwise drop every non-reference worker's
+				// findings.
 				if opts.Audit && resp != nil && resp.Audit != nil {
 					a := resp.Audit
 					if len(a.Mutations) > 0 {
@@ -259,12 +248,9 @@ func Run(
 					}
 				}
 
-				// A non-reference worker that serialized OK has not been judged
-				// yet: only the byte comparison below can say whether it passed,
-				// and therefore whether a known failure actually held. Recording
-				// a status here would report a byte mismatch as OK — and, worse,
-				// turn a known failure into an XPASS before the bytes were even
-				// looked at.
+				// A non-reference worker that serialized OK is not judged yet:
+				// only the comparison below can say whether it passed, and
+				// therefore whether a known failure actually held.
 				if okNow && lang != refLang {
 					return nil
 				}
@@ -286,7 +272,6 @@ func Run(
 
 		refHex := hexResults[refLang]
 
-		// Compare all non-reference serialization results against reference.
 		// Only compare when both the reference and the candidate serialized OK;
 		// a worker that returned SKIP/ERROR already has its status recorded.
 		for _, lang := range langs {
@@ -310,11 +295,8 @@ func Run(
 			var diff string
 			switch opts.Oracle {
 			case conf.OracleSemantic:
-				// Semantic oracle: the reference deserializes the candidate's
-				// bytes and we compare the decoded value, not the bytes — so map
-				// entry order and other non-canonical wire freedom do not fail.
-				// This checks the candidate's serializer; Round 2 checks its
-				// deserializer, giving bidirectional semantic conformance.
+				// Semantic oracle: compare the decoded value, not the bytes, so
+				// map entry order and other wire freedom do not fail.
 				diff = semanticSerializeDiff(ctx, workers[refLang], tc.Name, lang,
 					hexResults[lang], encoded, fieldNames, floatFields, opts.TimeoutSec)
 			default: // OracleBytes (also the empty default)
@@ -356,11 +338,9 @@ func Run(
 
 				status, detail := resolveResult(lang, tc.Name, resp, err, opts.KnownFails)
 
-				// Only the data comparison can judge a worker that responded OK.
-				// Letting resolveResult decide first meant a known failure
-				// returned XPASS, which failed the `status == Pass` guard and so
-				// skipped the comparison entirely — reporting "expected to fail
-				// but passed" for data that had never been compared.
+				// Only the data comparison can judge a worker that responded OK;
+				// resolveResult would return XPASS for a known failure before
+				// anything was compared.
 				if resp != nil && resp.Status == proto.StatusOK {
 					reason, known := opts.KnownFails[lang][tc.Name]
 					status, detail = verdict(
@@ -426,7 +406,6 @@ func runMatrix(
 		for _, dstLang := range langs {
 			srcHex := hexResults[srcLang]
 			if srcHex == "" {
-				// Record SKIP for this matrix cell — source language's serialize failed.
 				rep.Add(report.Result{
 					TestID:    tc.Name,
 					Language:  fmt.Sprintf("%s→%s", srcLang, dstLang),
@@ -463,9 +442,8 @@ func runMatrix(
 
 // semanticSerializeDiff implements the semantic serialize oracle: it asks the
 // reference worker to deserialize a candidate's serialized bytes and diffs the
-// decoded value against the expected case data (order-insensitive for maps). A
-// non-empty return means the candidate's output did not decode to the right
-// value — or the reference could not decode it at all; "" means it conformed.
+// decoded value against the expected case data (order-insensitive for maps).
+// A non-empty return means the candidate's output did not conform.
 func semanticSerializeDiff(
 	ctx context.Context,
 	ref *worker.Worker,
@@ -492,9 +470,8 @@ func semanticSerializeDiff(
 // verdict turns one comparison outcome into a status, honouring known failures.
 // diff is empty when the bytes (or decoded data) matched.
 //
-// A known failure can only be settled here, after the comparison: judging it
-// from the worker's response status alone reports a byte mismatch as OK, and
-// turns a known failure into an XPASS before the bytes have been looked at.
+// A known failure can only be settled here, after the comparison: the response
+// status alone would report a byte mismatch as OK.
 func verdict(diff, reason string, known bool) (report.Status, string) {
 	switch {
 	case diff != "" && known:
@@ -527,10 +504,8 @@ func resolveResult(
 
 	switch resp.Status {
 	case proto.StatusOK:
-		// Check known failures — if expected to fail but passed, return XPASS.
 		// The reference worker has nothing to compare against, so its verdict is
-		// settled here; every other worker is judged by verdict() after the
-		// comparison.
+		// settled here; every other worker is judged by verdict() afterwards.
 		if reason, ok := knownFails[lang][testID]; ok {
 			return report.StatusXPass, xpassDetail(reason)
 		}
@@ -538,7 +513,6 @@ func resolveResult(
 	case proto.StatusSkipped:
 		return report.StatusSkip, resp.Reason
 	case proto.StatusError:
-		// Check known failures
 		if reason, ok := knownFails[lang][testID]; ok {
 			return report.StatusXFail, reason
 		}

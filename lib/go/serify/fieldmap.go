@@ -116,9 +116,7 @@ func (f *FieldMap) GetOptionalStruct(key string) (*FieldMap, error) {
 }
 
 // An array<T,N> is stored as the same []T a list<T> is, so it is read and
-// written through the GetList*/SetList* accessors above — there is no separate
-// array accessor family, and adding one would re-limit array<T,N> to whatever
-// shapes it happened to spell.
+// written through the GetList*/SetList* accessors above.
 
 func (f *FieldMap) SetU8(key string, v uint8)      { f.fields[key] = v }
 func (f *FieldMap) SetU16(key string, v uint16)    { f.fields[key] = v }
@@ -251,9 +249,7 @@ func getTyped[T any](f *FieldMap, key string) (T, error) {
 }
 
 // setScalar stores val under key if it is one of the Go types that maps directly
-// onto a serify scalar, and reports whether it did. Every caller that accepts a
-// value of unknown type starts here and then handles whatever else it allows, so
-// the scalars are enumerated once.
+// onto a serify scalar, and reports whether it did.
 func setScalar(fm *FieldMap, key string, val any) bool {
 	switch v := val.(type) {
 	case uint8:
@@ -311,9 +307,8 @@ func MapOf(kvs ...any) *FieldMap {
 			fm.SetListStruct(key, v)
 		default:
 			// A Go array is how a worker spells an array<T,N> field; it is stored
-			// as the []T a list<T> would be. Anything else is stored as-is rather
-			// than dropped — silently ignoring an unrecognised value is how a
-			// field goes missing with nothing reported.
+			// as the []T a list<T> would be. Anything else is stored as-is: an
+			// unrecognised value dropped here is a field gone missing in silence.
 			rv := reflect.ValueOf(v)
 			if rv.IsValid() && rv.Kind() == reflect.Array {
 				out := reflect.MakeSlice(reflect.SliceOf(rv.Type().Elem()), rv.Len(), rv.Len())

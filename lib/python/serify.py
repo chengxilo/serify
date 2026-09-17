@@ -182,8 +182,7 @@ def _decode_field(fm: FieldMap, name: str, typ: str, sf: dict[str, Any], v: Any)
             fm._fields[name] = tmp._fields[name]
     elif typ.startswith("array<"):
         # An array<T,N> is a list whose length the schema fixes, so it shares
-        # _decode_list outright and adds only the length check. A separate
-        # representation is what pinned array<T,N> to uint32.
+        # _decode_list outright and adds only the length check.
         elem_type, n = _split_array_type(typ)
         out = _decode_list(elem_type, sf.get("fields", []), v)
         if len(out) != n:
@@ -388,7 +387,6 @@ def serify_model(cls: type | None = None, *, rename: dict[str, str] | None = Non
     def _wrap(cls: type) -> type:
         return _apply_serify_model(cls, rename or {})
 
-    # Support both @serify_model and @serify_model(rename={...})
     if cls is None:
         return _wrap
     return _wrap(cls)
@@ -402,14 +400,11 @@ def _apply_serify_model(cls: type, rename_map: dict[str, str]) -> type:
     if not _fields:
         raise TypeError(f"{cls.__name__}: serify_model requires a dataclass with fields")
 
-    # Collect type annotations
     hints = _get_type_hints(cls)
 
-    # Build (python_attr, serify_key, type_hint) triples
     triples: list[tuple[str, str, type]] = []
     for fld in _fields:
         py_name = fld.name
-        # Determine schema key: explicit rename map → metadata → field name
         key = rename_map.get(py_name)
         if key is None:
             key = fld.metadata.get("serify", py_name)
@@ -507,12 +502,9 @@ def _type_info(hint: Any) -> tuple[str, Any]:
         if isinstance(inner, type) and hasattr(inner, "from_field_map"):
             return ("list_struct", inner)
         if inner in (str, int, float, bool, bytes):
-            # One kind for every scalar element type. A Python hint cannot say
+            # One kind for every scalar element type: a Python hint cannot say
             # which width `list[int]` means — the schema does — and the FieldMap
-            # stores the list as-is either way, so distinguishing here would only
-            # reintroduce the per-element-type gap this used to have (it named
-            # str/int/float and silently fell back to list_string for the rest,
-            # so a list[bool] was stored as though it were strings).
+            # stores the list as-is either way.
             return ("list_scalar", None)
         raise ValueError(f"unsupported list element type {inner!r}")
 
@@ -811,7 +803,6 @@ def _detect_zero_copy(fm: FieldMap, buf: bytearray) -> list[str]:
     snaps: list[tuple[FieldMap, str, Any]] = []
     _collect_bytes_snaps(fm, snaps)
 
-    # XOR-flip
     for i in range(len(buf)):
         buf[i] ^= 0xFF
 
@@ -827,7 +818,6 @@ def _detect_zero_copy(fm: FieldMap, buf: bytearray) -> list[str]:
         elif cur != orig:
             aliased.append(key)
 
-    # Restore
     for target_fm, key, orig in snaps:
         target_fm._fields[key] = orig
 
@@ -866,9 +856,8 @@ class Format:
 
         from_fm = model.from_field_map  # type: ignore[attr-defined]
 
-        # The wrappers retain the instance each call used so --audit can read
-        # the model live, rather than the caller's FieldMap the worker never
-        # touched.
+        # The wrappers retain the instance each call used so --audit can read the
+        # model live, not a FieldMap the worker never touched.
         state: dict[str, Any] = {"ser_model": None, "ser_before": None, "deser_model": None}
 
         def _serialize(fm: FieldMap) -> bytes:
@@ -977,8 +966,6 @@ def _run_loop(
         msg_id: str = msg.get("id", "")
 
         if op == "ping":
-            # Health check: report liveness and the protocol revision this
-            # library speaks. Binds nothing.
             _emit({"op": "ping", "status": "OK", "protocol_version": PROTOCOL_VERSION})
 
         elif op == "bind":

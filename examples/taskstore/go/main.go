@@ -26,13 +26,10 @@ import (
 // The conformance worker: the whole of serify's presence in this project.
 //
 // It registers the two types that cross the socket and hands each one the very
-// serializer the server uses — api.Request.MarshalBinary is not a test double,
-// it is the function cmd/server calls on every reply. That is the point of the
-// arrangement: if this worker passes, the server's own bytes are what the
-// followers were checked against.
+// serializer the server uses — api.Request.MarshalBinary is the function
+// cmd/server calls on every reply, not a test double.
 //
-// Everything below the Run call is the price Go charges for not having a sum
-// type. See the comment on opConverter.
+// Everything below the Run call is the price Go charges for having no sum type.
 func main() {
 	serify.Run(serify.Suite{
 		Types: map[string]serify.Type{
@@ -65,15 +62,9 @@ func main() {
 // opConverter teaches serify how api.Op maps to a schema sum, in both
 // directions.
 //
-// Go is one of the three languages that needs this. A sum binds onto whatever
-// sum type the language already has, and six of the nine can be read by the
-// binding on their own — a Rust enum, a Python union of dataclasses, a Java
-// sealed interface. Go's sealed interface cannot: there is no way to enumerate
-// the implementations of an interface at run time, so the arms have to be named
-// somewhere, and this is that somewhere.
-//
-// Compare python/worker.py, which registers the same two types and declares no
-// converter at all.
+// Go needs this where most bindings do not: there is no way to enumerate an
+// interface's implementations at run time, so the arms have to be named
+// somewhere.
 var opConverter = serify.NewConverter(
 	func(v *serify.Variant) (api.Op, error) {
 		switch v.Tag {
@@ -183,9 +174,8 @@ func payload(v *serify.Variant) (*serify.FieldMap, error) {
 	return fm, nil
 }
 
-// The struct payloads, field by field. This is the one place the schema's field
-// names are written out by hand; everywhere else in the project they come from
-// the `serify:"…"` tags on the structs themselves.
+// The struct payloads, field by field — the one place the schema's field names
+// are written out by hand rather than coming from a `serify:"…"` tag.
 
 func taskToFieldMap(t api.Task) *serify.FieldMap {
 	fm := serify.NewFieldMap()

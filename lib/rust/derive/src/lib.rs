@@ -695,11 +695,8 @@ fn classify(ty: &Type) -> TypeKind {
                             if path_is_ident(inner, "String") {
                                 return TypeKind::OptionString;
                             }
-                            // Only Option<String> used to be recognised, so an
-                            // Option<f32> fell through to Nested and failed to
-                            // compile with "the trait bound `Option<f32>:
-                            // SerifyField` is not satisfied" — which is why no
-                            // Rust model could carry an optional<scalar>.
+                            // Every other Option<scalar>: without these arms it
+                            // falls through to Nested and fails to compile.
                             if let Type::Path(ip) = inner {
                                 if let Some(is) = ip.path.segments.last() {
                                     match is.ident.to_string().as_str() {

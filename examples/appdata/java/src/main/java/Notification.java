@@ -54,8 +54,7 @@ public final class Notification {
                 .putInt(notificationId).array());
 
         // The tag ordinal is the variant's position in the case file's sum,
-        // which is the declaration order of the four arms above. The schema tag
-        // *names* are the binding's business, and never appear here.
+        // which is the declaration order of the four arms above.
         //
         // An if/else chain rather than a switch: pattern matching for switch is
         // Java 21, and this project targets 17, where only `instanceof` patterns

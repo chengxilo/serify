@@ -24,20 +24,17 @@ import (
 var ToolchainProbes = map[string][]string{
 	lang.Go:   {"go"},
 	lang.Rust: {"cargo"},
-	// python3 only. Every python worker.yaml runs `python3 worker.py`, so `python`
-	// is never invoked — demanding it dropped python from SERIFY_REQUIRE on any
-	// machine that ships only the versioned name, which is most of them. Same
-	// mistake the PHP probe made with composer.
+	// python3 only: every python worker.yaml runs `python3 worker.py`, so
+	// demanding `python` drops python from SERIFY_REQUIRE on the many machines
+	// that ship only the versioned name.
 	lang.Python: {"python3"},
 	lang.Node:   {"node", "npm"},
 	lang.Java:   {"mvn", "java"},
 	lang.Cpp:    {"g++"},
 	lang.CSharp: {"dotnet"},
 	lang.Elixir: {"mix"},
-	// php only. Every php worker.yaml in the repo sets `build: ""`, and the
-	// library is loaded with require_once rather than an autoloader, so
-	// composer never runs — demanding it here made SERIFY_REQUIRE drop php on
-	// machines that could have run it perfectly well.
+	// php only: every php worker.yaml sets `build: ""` and the library is loaded
+	// with require_once rather than an autoloader, so composer never runs.
 	lang.PHP: {"php"},
 }
 

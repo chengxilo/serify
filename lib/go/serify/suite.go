@@ -241,9 +241,7 @@ func buildSerializer(
 			b, _ = results[0].Interface().([]byte)
 		}
 
-		// Audit: mutation + output-ZC detection
 		if holder.Enabled {
-			// Mutation: compare struct after serialization
 			afterFM := NewFieldMap()
 			codec.extract(msgPtr.Elem(), afterFM)
 			holder.LastMutations = compareFieldMaps(before, afterFM)
@@ -266,9 +264,8 @@ func buildSerializer(
 }
 
 // buildFieldMapSerializer handles a Type with no Model: the worker's function
-// takes the FieldMap itself. Audit works one layer down from the model path —
-// there is no struct to compare, so mutation and output aliasing are measured
-// against the FieldMap the worker was handed, which is what it can reach.
+// takes the FieldMap itself. With no struct to compare, audit measures mutation
+// and output aliasing against the FieldMap the worker was handed.
 func buildFieldMapSerializer(fn any) (func(*FieldMap) ([]byte, error), *serializeAuditHolder, error) {
 	inner, ok := fn.(func(*FieldMap) ([]byte, error))
 	if !ok {

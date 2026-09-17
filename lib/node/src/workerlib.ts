@@ -212,8 +212,7 @@ function decodeField(fm: FieldMap, sf: SchemaField, v: unknown): void {
   }
   if (typ.startsWith('array<')) {
     // An array<T,N> is a list whose length the schema fixes, so it shares
-    // decodeList outright and adds only the length check. A separate
-    // representation is what pinned array<T,N> to uint32 with N = 4.
+    // decodeList outright and adds only the length check.
     const [elem, n] = splitArrayType(typ);
     decodeList(fm, sf, elem, v as unknown[]);
     const got = (fm._fields.get(name) as unknown[]).length;
@@ -227,9 +226,8 @@ function decodeField(fm: FieldMap, sf: SchemaField, v: unknown): void {
     const [, valType] = splitMapTypes(typ);
     fm.setMap(name, decodeMap(valType, sf.fields || [], v as Record<string, unknown>)); return;
   }
-  // Falling off the end left the field absent from the FieldMap, which surfaces
-  // far downstream as a missing value rather than as "this library does not
-  // know that type".
+  // Falling off the end would leave the field absent from the FieldMap,
+  // surfacing far downstream as a missing value.
   throw new Error(`unknown type "${typ}"`);
 }
 
@@ -298,9 +296,7 @@ const LIST_ELEMS = new Set([
 
 /**
  * Decodes every element through decodeField, so a list supports exactly the
- * element types a bare field does. This used to carry its own switch, which is
- * why uint16/int8/int16/float64/bytes were declarable in a case file and
- * accepted by `serify validate`, but blew up once a worker ran.
+ * element types a bare field does.
  */
 /** Split "array<T,N>" into its element type and length. */
 function splitArrayType(typ: string): [string, number] {
@@ -365,9 +361,6 @@ function encodeField(sf: SchemaField, v: unknown): unknown {
   }
   if (typ === 'uint64' || typ === 'uint128' || typ === 'int64' || typ === 'int128') {
     // A number is accepted, but only where it still holds the value exactly.
-    // This is the guard that used to live in the model binding, which had to
-    // guess from the value; here the schema has already said "integer", so it
-    // fires on the case it was written for and not on floats.
     if (typeof v === 'number' && !Number.isSafeInteger(v)) {
       throw new Error(
         `serify: ${v} for field "${sf.name}" is ${typ} but arrived as a JS number that ` +
@@ -441,8 +434,7 @@ function encodeMap(valType: string, nestedSchema: SchemaField[], m: Map<string, 
 
 /**
  * Inverse of decodeList: every element goes back out through encodeField, so
- * the two directions cannot cover different element types. The old version fell
- * through to returning `arr` untouched for anything it did not name.
+ * the two directions cannot cover different element types.
  */
 function encodeList(sf: SchemaField, elem: string, arr: unknown[]): unknown {
   if (!LIST_ELEMS.has(elem)) throw new Error(`unsupported list element type "${elem}"`);
@@ -460,16 +452,9 @@ function encodeOptional(sf: SchemaField, elem: string, v: unknown): unknown {
   }
 }
 
-// --- audit helpers ----------------------------------------------------------
-//
-// The functions below are low-level audit helpers used only by run() (below)
-// when --audit is passed. A worker driven by the serify runner never calls
-// them directly: register serialize/deserialize in a suite and run() handles
-// audit itself. They are not exported — this file is the package's `main`
-// entry (see package.json), so an export here is the public npm surface, and
+// Audit helpers. Not exported: this file is the package's `main` entry, and
 // detectZeroCopy mutates its buffer argument in place with no synchronization,
-// which is only safe because the NDJSON loop that calls it is strictly
-// sequential.
+// which is safe only because the NDJSON loop that calls it is sequential.
 
 type FieldSnap = { fm: FieldMap; key: string; orig: Buffer | Variant };
 
@@ -535,7 +520,6 @@ function detectZeroCopy(fm: FieldMap, buf: Buffer): string[] {
   const snaps: FieldSnap[] = [];
   collectByteSnaps(fm, snaps);
 
-  // XOR-flip
   for (let i = 0; i < buf.length; i++) buf[i] ^= 0xFF;
 
   const aliased: string[] = [];
@@ -548,7 +532,6 @@ function detectZeroCopy(fm: FieldMap, buf: Buffer): string[] {
     }
   }
 
-  // Restore
   for (const { fm: targetFm, key, orig } of snaps) {
     targetFm._fields.set(key, orig);
   }
@@ -606,17 +589,14 @@ export namespace Serify {
       const key = typeof propertyKey === 'string' ? propertyKey : String(propertyKey);
       const serKey = opts?.rename ?? key;
 
-      // Track field list on prototype
       let keys = _serifyKeys.get(target);
       if (!keys) { keys = []; _serifyKeys.set(target, keys); }
       if (!keys.includes(key)) keys.push(key);
 
-      // Track rename map on prototype
       let keyMap = _serifyKeyMap.get(target);
       if (!keyMap) { keyMap = new Map(); _serifyKeyMap.set(target, keyMap); }
       if (serKey !== key) keyMap.set(key, serKey);
 
-      // Track the nested model class, if one was named
       if (opts?.model) {
         let models = _serifyModels.get(target);
         if (!models) { models = new Map(); _serifyModels.set(target, models); }
@@ -693,8 +673,7 @@ export namespace Serify {
     if (props.length === 0) return new arm();
     if (props.length === 1) {
       // A single model payload arrives as a FieldMap; the arm's own default
-      // value says which model it is. Without this, toVariant's model branch
-      // has no inverse and the arm is handed a raw FieldMap.
+      // value says which model it is.
       const fallback = new arm()[props[0]];
       if (v.value instanceof FieldMap && isModel(fallback)) {
         return new arm(fromFieldMap(fallback.constructor as any, v.value));
@@ -755,13 +734,8 @@ export namespace Serify {
   /**
    * Is this a class the worker registered with @Serify.Model()?
    *
-   * This is how a nested struct is recognised on the way out. The check used to
-   * be `typeof val.toFieldMap === 'function'`, which no model has ever
-   * satisfied — the binding exposes toFieldMap as a namespace function, not a
-   * method — so every one of those branches was unreachable and a nested model
-   * fell through to `setString(key, String(val))`, arriving as the string
-   * "[object Object]". Nothing caught it because no example had a nested struct
-   * until customer.
+   * This is how a nested struct is recognised on the way out. It cannot key off
+   * a `toFieldMap` method: the binding exposes that as a namespace function.
    */
   function isModel(val: any): boolean {
     return val !== null && typeof val === 'object'
@@ -813,13 +787,9 @@ export namespace Serify {
     if (t === 'bigint') {
       fm.setI64(key, val);
     } else if (t === 'number') {
-      // Store the number as-is, for the same reason the list branch below does:
-      // the schema, not the value, decides what this field is. Classifying by
-      // Number.isInteger meant an integral-valued float — 0.0, -0.0, and every
-      // float32 boundary, all of which satisfy it — was stored as a bigint and
-      // then handed to the float encoder, which cannot take one. Large ones did
-      // not even get that far: they were rejected outright as unrepresentable
-      // integers while being perfectly good floats.
+      // Store the number as-is: the schema, not the value, decides what this
+      // field is. Classifying by Number.isInteger sends an integral-valued
+      // float (0.0, every float32 boundary) to the integer path.
       fm._fields.set(key, val);
     } else if (t === 'boolean') {
       fm.setBool(key, val);
@@ -829,17 +799,14 @@ export namespace Serify {
       fm.setBytes(key, val);
     } else if (Array.isArray(val)) {
       // Store the list as-is: the schema, not the value, decides the element
-      // type on the wire, and encodeList reads it from there. Guessing from
-      // val[0] meant an empty list — and any list of bigints, booleans or
-      // Buffers — was stored as though its elements were strings.
+      // type on the wire, and encodeList reads it from there. val[0] says
+      // nothing about an empty list.
       fm._fields.set(key, val.map(x => (isModel(x) ? toFieldMap(x) : x)));
     } else if (val instanceof FieldMap) {
       fm.setStruct(key, val);
     } else if (val instanceof Map) {
-      // Convert model values the way the list branch above does. Storing the
-      // Map as-is left a map<K,struct> holding model instances the encoder has
-      // no idea what to do with — the list case was handled and this one was
-      // not, purely because no example had a map of structs until customer.
+      // Convert model values the way the list branch above does: the encoder
+      // speaks FieldMap, so a map<K,struct> cannot carry model instances.
       fm.setMap(key, new Map([...val].map(([k, v]) => [k, isModel(v) ? toFieldMap(v) : v])));
     } else if (val instanceof Variant) {
       fm._fields.set(key, val);

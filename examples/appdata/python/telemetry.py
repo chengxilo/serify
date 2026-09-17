@@ -15,18 +15,14 @@
 """`TelemetryFrame` mirrors examples/appdata/cases/telemetry.yaml — one reading from a
 field device.
 
-This is the type that covers the corners the other examples do not: a `uint128`
-address, two differently shaped fixed arrays, the suite's only
-`optional<scalar>`, a `map<string,uint64>`, and float cases running through NaN,
-±Inf and negative zero. Only `binary` is declared, because NaN and Inf have no
-JSON spelling.
+Only `binary` is declared: the float cases run through NaN and ±Inf, which have
+no JSON spelling.
 
 Two Python-specific notes. `int` covers every integer width the schema has, so
 the annotations cannot say which one a field is — the byte layout below is where
-the width lives, which is the part a conformance worker exists to exercise. And
-a Python float is always a double: packing `<f` narrows to float32 on the way
-out and unpacking widens back, so a float32 field round-trips through the value
-float32 can actually hold, which is what the reference worker also stores.
+the width lives. And a Python float is always a double: packing `<f` narrows to
+float32 on the way out and unpacking widens back, so a float32 field round-trips
+through the value float32 can actually hold.
 
 Go is the --ref language and owns the layout; see examples/appdata/go/wire.go.
 """
@@ -103,9 +99,7 @@ class TelemetryFrame:
         for v in self.visible_cells:
             buf += struct.pack('<I', v)
 
-        # Entry order is the dict's own — deliberately not sorted. A map is
-        # unordered, so telemetry declares `oracle: semantic` and the decoded
-        # value is what gets compared. See docs/protocol.md.
+        # Entry order is the collection's own: telemetry declares `oracle: semantic`.
         buf += struct.pack('<I', len(self.packet_counts))
         for k, v in self.packet_counts.items():
             buf += _pack_str(k)

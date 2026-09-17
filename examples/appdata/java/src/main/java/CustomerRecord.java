@@ -34,19 +34,15 @@ import io.serify.WorkerLib;
 /**
  * Mirrors examples/appdata/cases/customer.yaml — a store account.
  *
- * <p>This is the only type in the suite carrying two formats, and the second one
- * is the point: {@code binary} is a layout written by hand below, {@code json}
- * goes through Jackson, so the two fail in completely different ways. Both
- * declare {@code oracle: semantic}, so what has to match the reference is the
- * decoded value rather than the bytes — Go's encoder HTML-escapes {@code <},
- * {@code >} and {@code &} and always escapes U+2028/U+2029, and under a byte
- * oracle every worker would have to reproduce that quirk.
+ * The suite's only type with two formats: `binary` is a layout written
+ * by hand below, `json` goes through Jackson. Both declare
+ * `oracle: semantic`, since a byte oracle would make every worker
+ * reproduce Go's HTML escaping.
  *
- * <p>It is also the first Java model with nested structs. Nothing here declares
- * that: a field typed with another {@code @SerifyModel} is a struct, a
- * {@code List} of them a list&lt;struct&gt;, a {@code Map} of them a
- * map&lt;K,struct&gt;. The binding reads the element type off the field's
- * generic signature, which survives erasure.
+ * <p>Nothing declares the nested structs: a field typed with another
+ * {@code @SerifyModel} is a struct, a {@code List} of them a
+ * list&lt;struct&gt;, a {@code Map} of them a map&lt;K,struct&gt;. The binding
+ * reads the element type off the field's generic signature.
  *
  * <p>Java has no unsigned primitives, so {@code customerId} is a {@code long}
  * holding the unsigned value — at max uint64 it reads as -1. That is invisible
@@ -111,9 +107,7 @@ public final class CustomerRecord {
         writeCount(out, shippingAddresses.size());
         for (Address a : shippingAddresses) a.pack(out);
 
-        // Entry order is the map's own — deliberately not sorted. A map is
-        // unordered, so customer declares `oracle: semantic` and the decoded
-        // value is what gets compared. See docs/protocol.md.
+        // Entry order is the collection's own: customer declares `oracle: semantic`.
         writeCount(out, addressBook.size());
         for (Map.Entry<String, Address> e : addressBook.entrySet()) {
             Wire.writeLenPrefixed(out, e.getKey());

@@ -25,13 +25,9 @@ use serify::SerifyModel;
 
 use crate::wire::{append_len_str, read_bytes, read_len_str};
 
-/// The `mode` enum from signals.yaml. An enum is a named constant, not a sum:
-/// its value is just the variant *name*, and on the wire it travels as a plain
-/// string (exactly as the Go reference and every other worker treat it). So the
-/// field is a `String`; the binary layout (Go's to own) maps the name to a u8
-/// ordinal by hand in marshal/unmarshal below. (A Rust `enum` is reserved for a
-/// `sum` — see notification.rs — which is what `#[derive(SerifyModel)]` maps an
-/// enum type onto.)
+/// The `mode` enum from signals.yaml. An enum travels as its variant *name*, so
+/// the field is a `String` and marshal/unmarshal map it to a u8 ordinal by hand.
+/// A Rust `enum` is reserved for a `sum` — see notification.rs.
 const MODE_VARIANTS: [&str; 4] = ["idle", "active", "fault", "calibrating"];
 
 fn mode_ordinal(s: &str) -> Result<u8, String> {

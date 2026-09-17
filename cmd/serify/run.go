@@ -130,9 +130,7 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 	if err != nil {
 		return fmt.Errorf("load cases: %w", err)
 	}
-	// --ref overrides whatever the suite declared; a suite that declares one
-	// makes the flag optional rather than obsolete, since a run may legitimately
-	// want to compare against a different worker.
+	// --ref overrides whatever the suite declared.
 	if opts.refLang != "" {
 		set.ReferenceLanguage = opts.refLang
 	}
@@ -190,10 +188,8 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 		return err
 	}
 
-	// A skip is exit-code-neutral, so undeclared coverage loss would pass
-	// silently. Opt in by creating the directory: enforcement only runs when it
-	// exists, so a suite that has not declared its gaps keeps its old behaviour
-	// instead of every existing skip suddenly failing.
+	// Opt-in: enforcement runs only when the directory exists, so a suite that
+	// has not declared its gaps does not suddenly fail on every existing skip.
 	if expected, ok := loadExpectedSkips(opts.expectSkipDir, workers); ok {
 		orch.CheckExpectedSkips(rep, expected)
 	}
@@ -220,11 +216,8 @@ func runTests(ctx context.Context, workerDirs []string, opts runOpts) error {
 
 func detectAndBuild(workerDirs []string, noBuild bool) ([]*builder.WorkerInfo, error) {
 	infos := make([]*builder.WorkerInfo, 0, len(workerDirs))
-	// Results are keyed by language everywhere downstream — the report, the CSV
-	// and the table all have one column per language — so two workers of the
-	// same language are ambiguous: the second would overwrite the first and the
-	// run would report a single column and a single worker's pass count, with
-	// nothing to say a worker's results had been discarded. Reject it instead.
+	// Results are keyed by language everywhere downstream, so a second worker of
+	// the same language would overwrite the first with nothing to say so.
 	seenLang := make(map[string]string, len(workerDirs))
 	fmt.Println("Detecting workers...")
 	for _, dir := range workerDirs {
@@ -257,13 +250,10 @@ func detectAndBuild(workerDirs []string, noBuild bool) ([]*builder.WorkerInfo, e
 // startWorkers launches every worker and completes its ping handshake, bounded
 // by --startup-timeout rather than --timeout.
 //
-// The two are separate because they measure different things. --timeout asks
-// "is this worker answering requests promptly", which is a property of the
-// worker's code. Coming up is a property of its *runtime*: `dotnet run -c
-// Release` has to restore and JIT before the program's first statement, and on
-// a cold machine that alone can exceed a per-request budget that is otherwise
-// generous. Sharing one number meant a 10s default either false-failed csharp
-// on start-up or blunted hang detection everywhere to accommodate it.
+// The two measure different things: --timeout is a property of the worker's
+// code, while coming up is a property of its runtime (`dotnet run -c Release`
+// restores and JITs first). One shared number either false-fails csharp on
+// start-up or blunts hang detection everywhere.
 func startWorkers(
 	ctx context.Context,
 	infos []*builder.WorkerInfo,
@@ -307,9 +297,8 @@ func loadKnownFailures(dir string, workers map[string]*worker.Worker) map[string
 }
 
 // loadExpectedSkips reads the per-language declarations of allowed coverage
-// gaps. It reports ok=false when the directory does not exist, which means the
-// suite has not opted in and enforcement must stay off. Once opted in, a
-// language with no file is expected to cover everything.
+// gaps. ok=false means the directory does not exist and the suite has not
+// opted in. Once opted in, a language with no file must cover everything.
 func loadExpectedSkips(dir string, workers map[string]*worker.Worker) (map[string]conf.ExpectedSkips, bool) {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return nil, false

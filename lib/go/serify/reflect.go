@@ -43,11 +43,9 @@ func reflectFill(v reflect.Value, fm *FieldMap) error { return reflectCodec{}.fi
 func reflectExtract(v reflect.Value, fm *FieldMap)    { reflectCodec{}.extract(v, fm) }
 
 // promotable reports whether f is an anonymous embedded struct field to flatten
-// into the parent — the same promotion Go and encoding/json apply, so an SDK
-// type that groups fields in an embedded struct maps to a flat schema without a
-// shim. A tagged embed is treated as a named field, not promoted; a non-struct
-// embed has nothing to promote; a type with its own whole-type converter is a
-// value, not a group to flatten.
+// into the parent — the same promotion encoding/json applies. A tagged embed is
+// a named field; a type with its own whole-type converter is a value, not a
+// group to flatten.
 func (c reflectCodec) promotable(f reflect.StructField) bool {
 	if !f.Anonymous || f.Tag.Get("serify") != "" {
 		return false
@@ -264,9 +262,8 @@ func (c reflectCodec) fill(v reflect.Value, fm *FieldMap) error {
 					return fmt.Errorf("field %q: %w", key, err)
 				}
 				elemType := fv.Type().Elem()
-				// Build a non-nil slice even when empty: a nil []T marshals to
-				// JSON null where an empty one marshals to [], and workers in
-				// other languages emit [].
+				// Non-nil even when empty: a nil []T marshals to JSON null where
+				// every other language's worker emits [].
 				out := reflect.MakeSlice(fv.Type(), len(nested), len(nested))
 				for i, n := range nested {
 					elem := reflect.New(elemType).Elem()
@@ -304,9 +301,7 @@ func (c reflectCodec) fill(v reflect.Value, fm *FieldMap) error {
 				fv.Set(newMap)
 			case fv.Kind() == reflect.Pointer:
 				// optional<T>: decodeOptional stores either nil, the concrete
-				// scalar, or a *FieldMap for a struct. Only *string and *big.Int
-				// used to be handled here, which is why a model could express
-				// neither optional<float32> nor optional<struct>.
+				// scalar, or a *FieldMap for a struct.
 				raw, ok := fm.fields[key]
 				if !ok || raw == nil {
 					fv.Set(reflect.Zero(fv.Type()))
@@ -344,10 +339,9 @@ func (c reflectCodec) fill(v reflect.Value, fm *FieldMap) error {
 				p.Elem().Set(rv)
 				fv.Set(p)
 			case fv.Kind() == reflect.Slice:
-				// Any remaining list: []bool, []uint16, []int8, [][]byte and so
-				// on. decodeList stores exactly the []T the schema implies, so
-				// the stored value is assignable as-is and this needs no arm per
-				// element type — which is what kept several of them unreachable.
+				// Any remaining list: []bool, []uint16, [][]byte and so on.
+				// decodeList stores exactly the []T the schema implies, so the
+				// stored value is assignable as-is, with no arm per element type.
 				raw, ok := fm.fields[key]
 				if !ok {
 					return fmt.Errorf("field %q: declared %s but case data has no such field", key, fv.Type())
@@ -497,8 +491,7 @@ func (c reflectCodec) extract(v reflect.Value, fm *FieldMap) {
 					fm.fields[key] = fv.Elem().Interface()
 				}
 			case fv.Kind() == reflect.Slice:
-				// Mirror of fill's generic slice arm: encodeList expects exactly
-				// the []T the schema implies, which is what the field already is.
+				// Mirror of fill's generic slice arm.
 				fm.fields[key] = fv.Interface()
 			case fv.Kind() == reflect.Map && fv.Type().Key().Kind() == reflect.String:
 				out := make(map[string]any, fv.Len())

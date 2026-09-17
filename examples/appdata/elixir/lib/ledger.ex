@@ -17,8 +17,7 @@ defmodule LedgerEntry do
   Mirrors examples/appdata/cases/ledger.yaml.
 
   The `serify_field` declarations are the entire schema binding — nothing here
-  touches a raw map key. Everything else is the byte layout, which is the part a
-  conformance worker exists to exercise.
+  touches a raw map key. Everything else is the byte layout.
 
   Elixir integers are arbitrary-precision and the bitstring syntax takes a
   128-bit size directly (`<<v::signed-little-128>>`), so int128 needs no special

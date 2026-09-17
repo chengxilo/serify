@@ -89,9 +89,8 @@ func decodeField(fm *FieldMap, sf SchemaField, r json.RawMessage) error {
 	case strings.HasPrefix(typ, "map<"):
 		return decodeMap(fm, sf, r)
 	case strings.HasPrefix(typ, "enum<"):
-		// The variant name travels as a string. The variants themselves are in the
-		// type (enum<a,b,c>), so a worker can derive an ordinal for its byte layout
-		// with EnumVariants below.
+		// The variant name travels as a string; the type carries the variants
+		// (enum<a,b,c>), so a worker derives its ordinal with EnumVariants.
 		v, err := jsonValue[string](r)
 		if err != nil {
 			return err
@@ -140,9 +139,8 @@ func decodeSum(fm *FieldMap, sf SchemaField, r json.RawMessage) error {
 }
 
 // decodeScalar decodes a single non-container value (scalars + nested struct)
-// into the concrete Go type the FieldMap stores for that type. It is the one
-// place wire types are mapped to Go types; the field, list, optional and map
-// paths all route element decoding through here.
+// into the concrete Go type the FieldMap stores for it. It is the one place wire
+// types map to Go types: field, list, optional and map all route through here.
 func decodeScalar(typ string, fields []SchemaField, r json.RawMessage) (any, error) {
 	switch typ {
 	case kind.Uint8:
@@ -200,8 +198,7 @@ func decodeScalar(typ string, fields []SchemaField, r json.RawMessage) (any, err
 
 // decodeList decodes every element through decodeScalar, so a list supports
 // exactly the element types a bare field does. The switch below only names the
-// Go slice each element type collects into — it holds no decoding logic, which
-// is why a new scalar cannot be reachable as a field but not as a list element.
+// Go slice each element type collects into; it holds no decoding logic.
 func decodeList(fm *FieldMap, sf SchemaField, elemType string, r json.RawMessage) error {
 	var arr []json.RawMessage
 	if err := json.Unmarshal(r, &arr); err != nil {
@@ -294,10 +291,8 @@ func arrayElemType(typ string) string {
 }
 
 // decodeArray decodes an array<T,N>. An array is a list whose length the schema
-// fixes, so it shares decodeList's storage and element decoding outright; the
-// only thing this adds is the length check. Keeping a second representation for
-// the same data is what let array<T,N> support exactly uint32 while list<T>
-// supported eleven other element types.
+// fixes, so it shares decodeList's storage and element decoding; the only thing
+// this adds is the length check.
 func decodeArray(fm *FieldMap, sf SchemaField, r json.RawMessage) error {
 	elemType := arrayElemType(sf.Type)
 	if err := decodeList(fm, sf, elemType, r); err != nil {
@@ -551,8 +546,6 @@ func encodeOptional(sf SchemaField, elemType string, v any) (any, error) {
 	}
 }
 
-// --- shared value converters -------------------------------------------------
-
 // realNumber is the set of fixed-width integer types decoded from a JSON number.
 // 64/128-bit integers are sent as strings, so they are not included here.
 type realNumber interface {
@@ -594,9 +587,8 @@ func intFromString(r json.RawMessage) (int64, error) {
 }
 
 // Bounds for the 128-bit kinds. Go has no native 128-bit integer, so u128/i128
-// values are carried as *big.Int — the only lossless option. They arrive as
-// decimal strings, and parsing them into uint64/int64 (as this library used to)
-// silently truncates every value above 2^64.
+// arrive as decimal strings and are carried as *big.Int: parsing them into
+// uint64/int64 silently truncates every value above 2^64.
 const (
 	// int128Bits is the width of the 128-bit kinds; int128SignBits is the width of
 	// their magnitude, i.e. one bit less for the sign.

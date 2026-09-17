@@ -19,25 +19,14 @@
  * `CustomerRecord` mirrors examples/appdata/cases/customer.yaml — a store account.
  *
  * `Address` and `Money` mirror the reusable address.yaml and money.yaml it
- * imports; order.php reuses both, as the Go worker does.
- *
- * This is the only type in the suite carrying two formats, and the second one
- * is the point: `binary` is a layout written by hand below, `json` goes through
- * json_encode, so the two fail in completely different ways. Both declare
- * `oracle: semantic`, so what has to match is the decoded value rather than the
- * bytes — Go's encoder HTML-escapes `<`, `>` and `&` and always escapes
- * U+2028/U+2029, and under a byte oracle every worker would have to reproduce
- * that quirk.
+ * imports; order.php reuses both.
  *
  * PHP's int is 64-bit *signed*, so a uint64 does not fit and `$customerId`
- * travels as a decimal string through ext-gmp, as the other models here do. The
- * same limit is what makes the JSON side awkward, since json_encode would then
- * quote it; see the two helpers at the bottom.
+ * travels as a decimal string through ext-gmp, as the other models here do.
  *
- * It is also the first PHP model with nested structs. A property typed with
- * another #[SerifyModel] needs no declaration — its own type says which class
- * it is — but `array` says nothing about what it holds, so the list and map
- * properties name their element class with `elem:`.
+ * A property typed with another #[SerifyModel] needs no declaration, but `array`
+ * says nothing about what it holds, so the list and map properties name their
+ * element class with `elem:`.
  *
  * Go is the --ref language and owns the byte layout; see examples/appdata/go/wire.go.
  */
@@ -188,9 +177,7 @@ class CustomerRecord
             $out .= $a->pack();
         }
 
-        // Entry order is the array's own — deliberately not sorted. A map is
-        // unordered, so customer declares `oracle: semantic` and the decoded
-        // value is what gets compared. See docs/protocol.md.
+        // Entry order is the array's own: customer declares `oracle: semantic`.
         $out .= pack('V', count($this->addressBook));
         foreach ($this->addressBook as $k => $a) {
             $out .= lenPrefixed((string) $k) . $a->pack();

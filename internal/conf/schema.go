@@ -61,16 +61,13 @@ type rawTypeField struct {
 // no type is a unit variant). The section name is the declaration — there is no
 // separate flag, and the two are mutually exclusive by construction.
 //
-// A sum referenced from another type's field is that field's type directly —
-// bare, at the referencing key — so `stream_id: identifier` is a variant at
-// `stream_id`. As the type under test it becomes the `{value: <variant>}` record
-// a standalone sum needs (see sumSchema), because the top level of a schema is a
-// field list and a bare sum is not one.
+// A sum referenced from another type's field is that field's type directly, so
+// `stream_id: identifier` is a variant at `stream_id`. As the type under test it
+// becomes the `{value: <variant>}` record a standalone sum needs (see sumSchema).
 //
 // `transparent: true` is the record-side equivalent for a newtype over a single
-// field: referenced as a field it inlines that field's type instead of nesting as
-// a one-field struct. A sum needs no such flag, so `transparent:` on a
-// `variants:` type is an error.
+// field: referenced as a field it inlines that field's type instead of nesting
+// as a one-field struct. `transparent:` on a `variants:` type is an error.
 type rawType struct {
 	fields      []rawTypeField
 	transparent bool
@@ -93,10 +90,8 @@ func compactFields(items []map[string]string) ([]rawTypeField, error) {
 }
 
 // allowedKeys are the top-level sections a type file may declare. YAML decoding
-// drops keys it does not recognise without a word, so a stale or misspelled one
-// silently changes what the file means — `feilds:` would read as a type with no
-// entries at all. Keys starting with "_" are scratch space (YAML anchors) and are
-// deliberately left alone.
+// drops unrecognised keys silently, so `feilds:` would read as a type with no
+// entries at all. Keys starting with "_" are scratch space (YAML anchors).
 var allowedKeys = []string{"cases", "fields", "formats", "import", "transparent", "variants"}
 
 // checkKeys rejects top-level keys outside allowedKeys.
@@ -176,7 +171,6 @@ func loadImportable(path string, seen map[string]bool) (map[string]rawType, erro
 		return nil, fmt.Errorf(errParseFmt, path, err)
 	}
 
-	// The imported type's name is its filename (without .yaml).
 	name := strings.TrimSuffix(filepath.Base(path), extYAML)
 	entries := hdr.Fields
 	if len(hdr.Variants) > 0 {
@@ -249,8 +243,6 @@ func (r *schemaResolver) namedType(name string) ([]Field, error) {
 
 // typeOf resolves a type expression: scalars (with aliases), named struct types,
 // and the parameterized forms list<T>/array<T,N>/optional<T>/map<K,V>/enum<...>.
-// It is the single implementation of the type grammar; ParseType is the
-// no-named-types entry point.
 //
 //nolint:gocognit,funlen // type-expression parser: one branch per type constructor
 func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
@@ -265,10 +257,9 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 		return FieldType{Base: kind.Struct}, nil
 	}
 	if nt, ok := r.named[expr]; ok {
-		// A sum is its variants: as a field it *is* the sum, so
-		// `stream_id: identifier` is a variant at `stream_id` rather than a struct
-		// wrapping one. (It becomes a `{value: <variant>}` record only when it is
-		// itself the type under test — see sumSchema.)
+		// As a field a sum *is* the sum: `stream_id: identifier` is a variant at
+		// `stream_id`, not a struct wrapping one. It becomes a
+		// `{value: <variant>}` record only as the type under test (see sumSchema).
 		if nt.sum {
 			if r.resolving[expr] {
 				return FieldType{}, fmt.Errorf("recursive type %q", expr)
@@ -277,9 +268,8 @@ func (r *schemaResolver) typeOf(expr string) (FieldType, error) {
 			defer delete(r.resolving, expr)
 			return r.sumType(nt.fields)
 		}
-		// A transparent type is a newtype: as a field it contributes its single
-		// inner field's type directly. (The type resolves as an ordinary struct
-		// only when it is itself the type under test.)
+		// A newtype: as a field it contributes its single inner field's type
+		// directly, and resolves as an ordinary struct only as the type under test.
 		if nt.transparent {
 			return r.typeOf(nt.fields[0].typ)
 		}

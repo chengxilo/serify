@@ -20,14 +20,9 @@ import (
 	"unsafe"
 )
 
-// Frame is the model: an ordinary struct with ordinary methods, which is what a
-// worker author actually writes. serify converts between it and the FieldMap on
-// the way in and out, so none of the codecs below ever names a field twice.
-//
-// Audit sees straight through it: the FieldMap serify extracts shares backing
-// memory with the struct's slices and strings, so a codec that aliases the
-// input buffer or scribbles on its caller is caught here exactly as it would be
-// at the FieldMap boundary.
+// Frame is the model: an ordinary struct with ordinary methods. serify converts
+// between it and the FieldMap on the way in and out, and the extracted FieldMap
+// shares the struct's backing memory, so audit sees straight through it.
 type Frame struct {
 	StreamID uint32   `serify:"stream_id"`
 	Title    string   `serify:"title"`
@@ -35,10 +30,8 @@ type Frame struct {
 	Payload  []byte   `serify:"payload"`
 }
 
-// The three codecs. Every one of them reads and writes the same layout, so for
-// any given case all three produce byte-identical output — `serify run` alone
-// cannot tell them apart. What differs is memory behaviour, and that is what
-// `serify run --audit` inspects.
+// All three codecs read and write the same layout, so they produce identical
+// bytes. What differs is memory behaviour, which only --audit inspects.
 
 // --- shared encoder ---------------------------------------------------------
 
@@ -77,9 +70,8 @@ func unmarshalFast(data []byte) (*Frame, error) {
 	return decode(data, true)
 }
 
-// decode walks the layout once. `alias` picks copying or aliasing for the three
-// fields that can be either; keeping both in one function is what makes it
-// clear that the formats agree about the bytes and disagree about nothing else.
+// decode walks the layout once; `alias` picks copying or aliasing for the three
+// fields that can be either, so the two formats visibly agree about the bytes.
 func decode(data []byte, alias bool) (*Frame, error) {
 	if len(data) < 4 {
 		return nil, errTruncated
@@ -153,13 +145,11 @@ func takeString(data []byte, pos int, alias bool) (string, int, error) {
 // after the call.
 //
 // It reports instability too, and that finding explains the first: serify
-// serializes twice, and the second call reads a payload the first already
-// wiped. One bug seen from both ends.
+// serializes twice, and the second call reads a payload the first already wiped.
 //
-// Scrubbing rather than reassigning `f.Payload = nil` is deliberate. Both are
-// mutations, but only this one also reads as unstable: serify rebuilds the
-// model from the same FieldMap for the repeat call, so a reassigned field is
-// restored while scribbled-on shared bytes are not.
+// Scrubbing rather than reassigning `f.Payload = nil` is deliberate — only the
+// scrub also reads as unstable, because serify rebuilds the model from the same
+// FieldMap for the repeat call.
 func (f *Frame) MarshalHandoff() ([]byte, error) {
 	out, err := f.Marshal()
 	if err != nil {

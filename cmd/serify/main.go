@@ -22,15 +22,12 @@ import (
 	"syscall"
 )
 
-// version is stamped by the release build with
-// -ldflags "-X main.version=<tag>". A hardcoded literal here is the one copy
-// of the version number nothing else updates, so it goes stale by default;
-// resolveVersion recovers the real one instead.
+// version is stamped by the release build with -ldflags "-X main.version=<tag>".
+// It is deliberately empty otherwise: resolveVersion recovers the real one.
 var version = "dev"
 
 // resolveVersion prefers the stamped version, then the module version the Go
-// toolchain records for a `go install`ed binary, which covers the install path
-// the README documents.
+// toolchain records for a `go install`ed binary.
 func resolveVersion() string {
 	if version != "dev" {
 		return version

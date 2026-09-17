@@ -18,8 +18,7 @@
  * `LedgerEntry` mirrors examples/appdata/cases/ledger.yaml.
  *
  * `@Serify.Model()` plus one `@Serify.field()` per property is the entire schema
- * binding — nothing here calls a get/set accessor. Everything else is the byte
- * layout, which is the part a conformance worker exists to exercise.
+ * binding — nothing here calls a get/set accessor. Everything else is the byte layout.
  *
  * JS numbers are IEEE-754 doubles, so every 64/128-bit integer is a BigInt.
  * BigInt is unbounded, so the two int128 fields need no special type — but

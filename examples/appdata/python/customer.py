@@ -17,14 +17,10 @@
 `Address` and `Money` mirror the reusable address.yaml and money.yaml it
 imports; order.py reuses both, as the Go worker does.
 
-This is the only type in the suite carrying two formats, and the second one is
-the point: `binary` is a layout this file writes by hand, while `json` goes
-through the stdlib encoder, so the two exercise completely different failure
-modes. Both declare `oracle: semantic`, so what has to match the reference is
-the decoded value, not the bytes — which is what makes a second format
-affordable at all. Go's encoder HTML-escapes `<`, `>` and `&` and always
-escapes U+2028/U+2029; no other language does, and under a byte oracle every
-worker would have to reproduce that quirk.
+The suite's only type with two formats: `binary` is a layout this file writes
+by hand, `json` goes through the stdlib encoder. Both declare
+`oracle: semantic`, since a byte oracle would make every worker reproduce
+Go's HTML escaping.
 
 `ensure_ascii=True` (the json default) is deliberate here: escaping every
 non-ASCII character to \\uXXXX sidesteps the question of whose escaping rules
@@ -143,9 +139,7 @@ class CustomerRecord:
         for a in self.shipping_addresses:
             buf += a.pack()
 
-        # Entry order is the dict's own — deliberately not sorted. A map is
-        # unordered, so customer declares `oracle: semantic` and the decoded
-        # value is what gets compared. See docs/protocol.md.
+        # Entry order is the collection's own: customer declares `oracle: semantic`.
         buf += struct.pack('<I', len(self.address_book))
         for k, a in self.address_book.items():
             buf += pack_str(k) + a.pack()

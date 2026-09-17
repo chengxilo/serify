@@ -23,14 +23,10 @@ import (
 	"github.com/chengxilo/serify/internal/kind"
 )
 
-// Case data is decoded schema-directed, not type-guessed. Unmarshalling into
-// map[string]any lets yaml.v3 pick Go types on its own, and an integer literal
-// that overflows uint64 silently degrades to float64 (losing precision), while
-// one that overflows int64 but fits uint64 can silently wrap through other
-// paths. Instead the raw yaml.Nodes are kept and each field is decoded into
-// the exact type its schema entry demands: 64/128-bit integers go through
-// big.Int (arbitrary precision, rejects float forms like 1e3) with an explicit
-// range check. Everything else decodes as before.
+// Case data is decoded schema-directed, not type-guessed: letting yaml.v3 pick
+// Go types degrades an integer literal that overflows uint64 to float64. The
+// raw yaml.Nodes are kept instead and each field is decoded into the type its
+// schema entry demands, 64/128-bit integers through big.Int with a range check.
 
 // rawTestCase mirrors TestCase but keeps the data values as yaml.Nodes so they
 // can be decoded schema-directed after the schema is resolved.

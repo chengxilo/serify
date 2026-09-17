@@ -19,10 +19,10 @@
  * SignalCapture mirrors examples/appdata/cases/signals.yaml, which uses every scalar the
  * schema allows as a list element.
  *
- * PHP's `array` type says nothing about its elements, so the binding stores each
- * list as-is and the schema decides the element's wire form. PHP's int is only
- * 64-bit, so the 64/128-bit lists carry decimal strings and go through the GMP
- * helpers in wire.php — the same convention ledger.php uses.
+ * PHP's `array` says nothing about its elements, so the binding stores each list
+ * as-is and the schema decides the element's wire form. PHP's int is only
+ * 64-bit, so the 64/128-bit lists carry decimal strings through the GMP helpers
+ * in wire.php.
  *
  * Go is the --ref language and owns the byte layout; see examples/appdata/go/wire.go.
  */

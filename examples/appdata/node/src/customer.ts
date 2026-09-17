@@ -20,13 +20,9 @@
  * `Address` and `Money` mirror the reusable address.yaml and money.yaml it
  * imports; order.ts reuses both, as the Go worker does.
  *
- * This is the only type in the suite carrying two formats, and the second one
- * is the point: `binary` is a layout written by hand below, `json` goes through
- * `JSON.stringify`, so the two fail in completely different ways. Both declare
- * `oracle: semantic`, so what has to match is the decoded value rather than the
- * bytes — Go's encoder HTML-escapes `<`, `>` and `&` and always escapes
- * U+2028/U+2029, and under a byte oracle every worker would have to reproduce
- * that.
+ * The suite's only type with two formats: `binary` is a layout written by hand
+ * below, `json` goes through `JSON.stringify`. Both declare `oracle: semantic`,
+ * since a byte oracle would make every worker reproduce Go's HTML escaping.
  *
  * It is also the first model here with nested structs, and `model:` on those
  * fields is what the binding needs to hand them back as `Address` and `Money`
@@ -157,9 +153,7 @@ export class CustomerRecord {
     parts.push(count(this.shipping_addresses.length));
     for (const a of this.shipping_addresses) parts.push(a.pack());
 
-    // Entry order is the Map's own — deliberately not sorted. A map is
-    // unordered, so customer declares `oracle: semantic` and the decoded value
-    // is what gets compared. See docs/protocol.md.
+    // Entry order is the collection's own: customer declares `oracle: semantic`.
     parts.push(count(this.address_book.size));
     for (const [k, a] of this.address_book) parts.push(lenPrefixedStr(k), a.pack());
 
@@ -275,14 +269,10 @@ function count(n: number): Buffer {
   return b;
 }
 
-// 64-bit integers in JSON
-//
-// JSON's only number is the double, and customer's boundary case does not fit
-// in one: max uint64 rounds up to 2^64 and comes back out of range. JSON.parse
-// offers no way to see the undamaged token -- Node 22's JSON.rawJSON does, but
-// CI builds on 20 -- so these three fields cross the text boundary as quoted
-// strings, unquoted on the way out and requoted on the way in. They are the
-// only 64-bit fields customer has.
+// 64-bit integers in JSON: JSON's only number is a double, and max uint64 does
+// not survive one. JSON.parse cannot show the undamaged token before Node 22's
+// JSON.rawJSON, and CI builds on 20, so these three fields cross the text
+// boundary as quoted strings.
 //
 // This rewrites the text rather than the parse tree, so a *string value*
 // spelling one of these keys followed by a colon and digits would be lifted

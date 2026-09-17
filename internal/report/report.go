@@ -164,7 +164,6 @@ func (r *Report) printTable() {
 		fmt.Fprintf(os.Stderr, "failed to get records from report: %v\n", err)
 		os.Exit(1)
 	}
-	// The grid is rendered from the canonical records (same data as the CSV).
 	_ = RenderTable(os.Stdout, records)
 
 	if len(r.Failures) > 0 {

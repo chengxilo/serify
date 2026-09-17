@@ -38,8 +38,7 @@ require_once __DIR__ . '/SerifyModelHelper.php';
  *
  * Passing null for $model is the other path, for a type with no natural class
  * (the audit fixtures mutate a FieldMap on purpose): the functions then take
- * and return the FieldMap itself, exactly as the older nested-array
- * registration does.
+ * and return the FieldMap itself.
  */
 class Type
 {
@@ -84,9 +83,8 @@ class Type
 
 /**
  * A model-path serializer that audit can see through: it retains the instance
- * each call used, so Worker's mutation check reads the model live rather than
- * the caller's FieldMap the worker never touched. An invokable object rather
- * than a closure only because a PHP closure cannot carry the state.
+ * each call used, so Worker's mutation check reads the model live. An invokable
+ * object rather than a closure, because a closure cannot carry the state.
  *
  * No deserialize counterpart: PHP strings are copy-on-write values, so a model
  * can never view the input buffer and the zero-copy probe has nothing to find.

@@ -53,12 +53,10 @@ const defaultCasesDir = "cases"
 
 // Every generated schema is self-contained: one file per case file, with the
 // definitions it uses inlined under its own `definitions` and every $ref a
-// same-document `#/definitions/...` pointer. There is no shared defs file to
-// resolve, and a schema can be read, moved or deleted on its own.
+// same-document `#/definitions/...` pointer.
 //
 // defRef is that pointer; defRefs collects the names one file actually reached
-// for, so the file inlines that subset and nothing else — changing a bound then
-// only rewrites the schemas of types that use it.
+// for, so the file inlines that subset and nothing else.
 func defRef(name string) string { return "#/definitions/" + name }
 
 type defRefs map[string]bool
@@ -113,8 +111,6 @@ func object(props J, required []string) J {
 	return obj("type", "object", "additionalProperties", false,
 		"required", required, "properties", props)
 }
-
-// --- CLI ---
 
 func newSchemaCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -210,8 +206,7 @@ func runSchemaGen(casesDir string) error {
 			return err
 		}
 	}
-	// A reusable type has no cases:, so there is no case data to describe — its
-	// schema is the file skeleton alone.
+	// A reusable type has no cases:, so its schema is the file skeleton alone.
 	for name := range reusable {
 		if err := writeSchema(casesDir, schemasDir, name, reusableFileSchema()); err != nil {
 			return err
@@ -229,8 +224,8 @@ func writeTypeSchema(
 	registry []string,
 	allTypes map[string][]conf.Field,
 ) error {
-	// A _config.yaml registry makes the format universe suite-level: every case
-	// file's enum is then the registry, not the formats the file itself uses.
+	// With a _config.yaml registry the format universe is suite-level: the enum
+	// is the registry, not the formats this file happens to use.
 	if registry != nil {
 		formats = registry
 	}
@@ -255,16 +250,12 @@ func writeSchema(casesDir, schemasDir, name string, schema J) error {
 //	  - name: binary
 //	    oracle: bytes
 //
-// A bare name is rejected here even though FormatSpec.UnmarshalYAML accepts
-// one. That leniency exists only so the loader can say *which* format is
-// missing its oracle instead of failing with a YAML type error naming none;
-// the result is still an error every time. Rejecting it in the schema moves
-// that same verdict to save time, which is what these files are for.
+// A bare name is rejected here even though FormatSpec.UnmarshalYAML accepts one
+// (its leniency exists only to produce a better loader error).
 //
 // Names come from the suite registry (_config.yaml) when one exists, else from
-// the file's own declared formats. Format names are worker-defined, so nothing
-// is hard-coded; with no names at all (a reusable type, no registry) any
-// non-empty string is allowed.
+// the file's own declared formats; with no names at all any non-empty string
+// is allowed.
 func formatsSchema(formats []string) J {
 	name := obj("type", "string", "minLength", 1)
 	if len(formats) > 0 {
@@ -290,8 +281,7 @@ func formatsSchema(formats []string) J {
 // they allow, and in what they require.
 //
 // used carries whatever the caller's data schema already reached for; the
-// skeleton adds its own two and the closure is inlined as this file's
-// definitions, so the result refs nothing outside itself.
+// skeleton adds its own and the closure is inlined as this file's definitions.
 func typeFileSchema(title string, used defRefs, extraProps ...any) J {
 	used.add("fieldsSection", "variantsSection")
 	props := []any{
@@ -383,10 +373,6 @@ func fieldToSchema(allTypes map[string][]conf.Field, used defRefs, ft conf.Field
 // must be a single-key mapping {tag: payload}. Writing a payload variant bare
 // ("variant %q needs a payload"), naming an unknown tag, or naming two variants
 // at once are all load errors, so none of them validate here either.
-//
-// Without this case a sum fell through to scalarSchema, which does not know the
-// base and answers String — so every {tag: payload} in a case file failed
-// validation against its own generated schema while loading perfectly well.
 func sumSchema(allTypes map[string][]conf.Field, used defRefs, variants []conf.Variant) J {
 	var units []any
 	tagged := J{}
@@ -412,8 +398,6 @@ func sumSchema(allTypes map[string][]conf.Field, used defRefs, variants []conf.V
 // scalarSchema maps a serify scalar type name to its JSON Schema form, and
 // names the definition that form refs (empty when it is written inline, so the
 // caller can record it without a special case).
-// The mapping derives from kind.Scalars — every integer scalar gets a $ref,
-// floats get a number with description, string/bool get their canonical forms.
 var scalarSchema = func() func(string) (J, string) {
 	m := make(map[string]J, len(kind.Scalars))
 	refs := make(map[string]string, len(kind.Scalars))
@@ -523,9 +507,8 @@ func writeModeline(yamlPath, schemaFile string) error {
 }
 
 // definitions returns the `definitions` block for one file: the subset of the
-// catalogue that file reached for. Filtering rather than emitting all of them
-// keeps the generated schemas to what their own type needs, so a change to one
-// scalar's bounds rewrites only the schemas that spell that scalar.
+// catalogue that file reached for, so a change to one scalar's bounds rewrites
+// only the schemas that spell that scalar.
 func definitions(used defRefs) J {
 	out := J{}
 	for name, def := range allDefinitions {
@@ -541,7 +524,6 @@ func definitions(used defRefs) J {
 var allDefinitions = func() J {
 	defs := J{}
 
-	// Plain integer scalars.
 	for _, s := range []struct {
 		name     string
 		min, max int64

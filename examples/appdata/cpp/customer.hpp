@@ -18,18 +18,10 @@
 // money.hpp, which notification.hpp already needed. order.hpp will reuse both,
 // as the Go worker does.
 //
-// This is the first user anywhere of SERIFY_FIELD_STRUCT,
-// SERIFY_FIELD_LIST_STRUCT and SERIFY_FIELD_MAP_STRUCT, and of their FROM
-// counterparts. All six existed with no caller, which for a macro means they
-// had never been expanded, let alone run — the same state telemetry.hpp found
-// SERIFY_FIELD_MAP_SCALAR in.
-//
-// The `json` format goes through serify::Json, the library's own value type —
-// it already has to parse and write JSON to speak the protocol, so a C++ worker
-// needs no dependency for this. Both formats declare `oracle: semantic`, so
-// what has to match the reference is the decoded value rather than the bytes;
-// Go's encoder HTML-escapes `<`, `>` and `&` and always escapes U+2028/U+2029,
-// and under a byte oracle every worker would have to reproduce that quirk.
+// The `json` format goes through serify::Json, the library's own value type, so
+// a C++ worker needs no JSON dependency. Both formats declare
+// `oracle: semantic`, since a byte oracle would make every worker reproduce
+// Go's HTML escaping.
 //
 // The two 64-bit fields go out as Json::raw_ and come back off the parsed
 // token, because a JSON number is a double and max uint64 does not survive one.
@@ -231,9 +223,7 @@ inline std::vector<uint8_t> customer_marshal(const CustomerRecord& c) {
     put_le<uint32_t>(out, static_cast<uint32_t>(c.shipping_addresses.size()), 4);
     for (const auto& a : c.shipping_addresses) address_pack(out, a);
 
-    // Entry order is the unordered_map's own — deliberately not sorted. A map is
-    // unordered, so customer declares `oracle: semantic` and the decoded value
-    // is what gets compared. See docs/protocol.md.
+    // Entry order is the collection's own: customer declares `oracle: semantic`.
     put_le<uint32_t>(out, static_cast<uint32_t>(c.address_book.size()), 4);
     for (const auto& [k, a] : c.address_book) {
         put_str(out, k);

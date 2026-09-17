@@ -20,14 +20,10 @@
  * `TelemetryFrame` mirrors examples/appdata/cases/telemetry.yaml — one reading from a
  * field device.
  *
- * This is the type that covers the corners the other examples do not: a
- * `uint128` address, two differently shaped fixed arrays, the suite's only
- * `optional<scalar>`, a `map<string,uint64>`, and float cases running through
- * NaN, ±Inf and negative zero. Only `binary` is declared, because NaN and Inf
+ * Only `binary` is declared: the float cases run through NaN and ±Inf, which
  * have no JSON spelling.
  *
- * PHP's int is 64-bit and signed, so it cannot hold a u64 at the top of its
- * range and has no hope of a u128. Both travel as decimal strings and go
+ * PHP's int is 64-bit and signed, so u64 and u128 travel as decimal strings
  * through ext-gmp in wire.php — that is why `$deviceId`, `$ipv6` and the map's
  * values are `string`, while everything 32 bits and under is a plain `int`.
  *
@@ -95,9 +91,7 @@ class TelemetryFrame
             $out .= pack('V', $v);
         }
 
-        // Entry order is the array's own — deliberately not sorted. A map is
-        // unordered, so telemetry declares `oracle: semantic` and the decoded
-        // value is what gets compared. See docs/protocol.md.
+        // Entry order is the array's own: telemetry declares `oracle: semantic`.
         $out .= pack('V', count($this->packetCounts));
         foreach ($this->packetCounts as $k => $v) {
             $out .= lenPrefixed((string) $k) . encodeInt((string) $v, 8);

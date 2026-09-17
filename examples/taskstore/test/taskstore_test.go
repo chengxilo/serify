@@ -70,10 +70,9 @@ func exampleDir() string {
 
 // availableLangs returns the languages whose toolchain is on this machine.
 //
-// SERIFY_REQUIRE names the ones that must be there, as a comma-separated list.
-// Without it a toolchain that failed to install is merely absent: every
-// assertion then passes having compared whatever happened to be present, and
-// the run is green for a parity check that never ran. CI sets it.
+// SERIFY_REQUIRE (set by CI) names the ones that must be there: without it a
+// toolchain that failed to install is merely absent, and the run is green for a
+// parity check that never ran.
 func availableLangs(t *testing.T) []string {
 	t.Helper()
 
@@ -120,9 +119,7 @@ func run(t *testing.T) (testutil.ResultGrid, []string) {
 		dir := exampleDir()
 		csv := filepath.Join(os.TempDir(), "serify-taskstore.csv")
 
-		// No --ref: the suite names go as its leader in cases/_config.yaml,
-		// which is where a reference belongs — it is a property of the cases,
-		// not of whoever types the command.
+		// No --ref: the suite names go as its leader in cases/_config.yaml.
 		args := []string{"run", "--cases", filepath.Join(dir, "cases"), "--csv", csv}
 		for _, lang := range langs {
 			args = append(args, filepath.Join(dir, lang))
@@ -193,10 +190,9 @@ var clients = map[string]clientCmd{
 
 // TestTaskstore_Clients starts the Go server and drives it with every client.
 //
-// This is the assertion the conformance run cannot make. serify compares
-// codecs; it never opens a socket. If the server were rewired to some second,
-// private encoder, every conformance cell would still pass and this test would
-// fail.
+// This is the assertion the conformance run cannot make: serify compares codecs
+// and never opens a socket, so a server rewired to a private encoder would keep
+// every conformance cell green.
 func TestTaskstore_Clients(t *testing.T) {
 	_, langs := run(t) // also guarantees every worker, and most clients, are built
 
@@ -262,7 +258,6 @@ func TestTaskstore_Clients(t *testing.T) {
 		})
 	}
 
-	// Finally, the leader reads back everything the followers wrote.
 	goSpec := clients[lang.Go]
 	all := exec.Command(goSpec.argv[0], "--addr", addr, "list")
 	all.Dir = filepath.Join(dir, lang.Go)

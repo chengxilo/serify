@@ -159,11 +159,9 @@ public final class Client {
     }
 
     /**
-     * Rejects a bad priority here, before anything is encoded. This is the only
-     * place in the project where one can exist: an enum has no wire
+     * Rejects a bad priority before anything is encoded. An enum has no wire
      * representation outside its declared variants, so by the time a request is
-     * bytes the value is already known to be good — which is why the server does
-     * not check it again.
+     * bytes the value is already known to be good.
      */
     private static String parsePriority(String s) {
         if (!Wire.PRIORITIES.contains(s)) {

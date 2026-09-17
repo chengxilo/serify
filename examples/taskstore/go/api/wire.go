@@ -22,10 +22,8 @@ import (
 
 // The byte layout every taskstore client has to reproduce.
 //
-// Go is this suite's leader, and these primitives are the whole reason it can
-// be: the server writes its responses through them, so "the reference layout"
-// and "what the running server puts on the socket" are the same code. There is
-// no second, test-only encoder that could drift from the real one.
+// The server writes its responses through these primitives, so the reference
+// layout and what the running server puts on the socket are the same code.
 //
 // Little-endian throughout:
 //
@@ -39,9 +37,7 @@ import (
 //	             active variant's payload — nothing at all for a unit variant
 //
 // Nothing here holds a map, so every type in this suite declares `oracle: bytes`
-// and the comparison is byte-for-byte. That is the strictest thing serify can
-// assert, and it is the right setting for a format two programs have to agree on
-// well enough to hold a conversation over a socket.
+// and the comparison is byte-for-byte.
 
 // ErrTruncated is returned when a frame ends in the middle of a value. A client
 // reading from a socket sees this constantly and it is not an error worth
@@ -96,9 +92,8 @@ func readU64(b []byte) (uint64, []byte, error) {
 // appendEnum writes an enum as the ordinal of its position in variants.
 //
 // An enum travels through serify as its *name*; the ordinal is this codec's own
-// byte-layout choice, so the variants slice has to list them in the same order
-// as the case file. That coupling is real, and it is exactly the kind of thing a
-// conformance run catches when a follower gets it wrong.
+// byte-layout choice, so the variants slice must list them in the same order as
+// the case file.
 func appendEnum(buf []byte, variants []string, name string) ([]byte, error) {
 	for i, v := range variants {
 		if v == name {

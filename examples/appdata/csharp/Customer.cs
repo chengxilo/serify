@@ -17,13 +17,10 @@
 // `Address` and `Money` mirror the reusable address.yaml and money.yaml it
 // imports; Order.cs reuses both, as the Go worker does.
 //
-// This is the only type in the suite carrying two formats, and the second one
-// is the point: `binary` is a layout written by hand below, `json` goes through
-// System.Text.Json, so the two fail in completely different ways. Both declare
-// `oracle: semantic`, so what has to match the reference is the decoded value
-// rather than the bytes — Go's encoder HTML-escapes `<`, `>` and `&` and always
-// escapes U+2028/U+2029, and under a byte oracle every worker would have to
-// reproduce that quirk.
+// The suite's only type with two formats: `binary` is a layout written
+// by hand below, `json` goes through System.Text.Json. Both declare
+// `oracle: semantic`, since a byte oracle would make every worker
+// reproduce Go's HTML escaping.
 //
 // It is also the first C# model with nested structs. Nothing here says so: a
 // property typed with another [SerifyModel] is a struct, an array of them a
@@ -175,9 +172,7 @@ internal sealed class CustomerRecord
         WriteCount(ms, ShippingAddresses.Length);
         foreach (var a in ShippingAddresses) a.Pack(ms);
 
-        // Entry order is the dictionary's own — deliberately not sorted. A map
-        // is unordered, so customer declares `oracle: semantic` and the decoded
-        // value is what gets compared. See docs/protocol.md.
+        // Entry order is the collection's own: customer declares `oracle: semantic`.
         WriteCount(ms, AddressBook.Count);
         foreach (var (k, a) in AddressBook) { Wire.WriteLenPrefixed(ms, k); a.Pack(ms); }
 

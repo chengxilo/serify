@@ -290,9 +290,8 @@ func TestOracleIsPerTypeNotPerFormat(t *testing.T) {
 		"the map-free type must keep binary on bytes, sharing the name changes nothing")
 }
 
-// Declaring the oracle is mandatory. A bare name used to mean "bytes", which
-// chose the verdict for the author silently; it is now a load error naming the
-// format and showing the fix.
+// Declaring the oracle is mandatory: a bare name is a load error naming the
+// format and showing the fix, rather than a verdict chosen silently.
 func TestOracleMustBeDeclared(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "t.yaml"),

@@ -18,10 +18,9 @@
 // its output disagrees with the other workers. The worker test then verifies serify
 // detects and reports that disagreement.
 //
-// Every language's worker drops only itself, so a future multi-language run will
-// surface exactly which languages diverged and how serify renders the mismatch.
-// When no fault is injected the worker round-trips all five fields faithfully and
-// byte-for-byte identically to the other reference workers.
+// Every language's worker drops only itself, so a multi-language run surfaces
+// exactly which languages diverged. With no fault injected it round-trips all
+// five fields byte-for-byte identically to the other reference workers.
 package main
 
 import (

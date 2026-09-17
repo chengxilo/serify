@@ -92,9 +92,7 @@ impl OrderRecord {
 
         append_money(&mut buf, &self.subtotal);
 
-        // Entry order is the HashMap's own — deliberately not sorted. A map is
-        // unordered, so order declares `oracle: semantic` and the decoded value
-        // is what gets compared. See docs/protocol.md.
+        // Entry order is the collection's own: order declares `oracle: semantic`.
         buf.extend_from_slice(&(self.adjustments.len() as u32).to_le_bytes());
         for (k, m) in &self.adjustments {
             append_len_str(&mut buf, k);

@@ -102,9 +102,7 @@ internal sealed class TelemetryFrame
         ms.Write(buf[..4]);
         foreach (var v in VisibleCells) { BinaryPrimitives.WriteUInt32LittleEndian(buf, v); ms.Write(buf[..4]); }
 
-        // Entry order is the dictionary's own — deliberately not sorted. A map
-        // is unordered, so telemetry declares `oracle: semantic` and the decoded
-        // value is what gets compared. See docs/protocol.md.
+        // Entry order is the collection's own: telemetry declares `oracle: semantic`.
         BinaryPrimitives.WriteUInt32LittleEndian(buf, (uint)PacketCounts.Count);
         ms.Write(buf[..4]);
         foreach (var (k, v) in PacketCounts)

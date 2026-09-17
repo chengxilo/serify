@@ -88,8 +88,7 @@ class Request
     public function marshal(): string
     {
         // The tag ordinal is the arm's position in the case file's sum, which is
-        // the declaration order above. The schema tag *names* are the binding's
-        // business and never appear here.
+        // the declaration order above.
         return pack('V', $this->requestId) . match (true) {
             $this->op instanceof ListAll => pack('C', 0),  // a unit variant is nothing but its tag
             $this->op instanceof Create  => pack('C', 1) . $this->op->value->pack(),

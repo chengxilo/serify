@@ -61,8 +61,7 @@ internal sealed class Request
         Wire.PutU32(ms, RequestId);
 
         // The tag ordinal is the arm's position in the case file's sum, which is
-        // the declaration order above. The schema tag *names* are the binding's
-        // business and never appear here.
+        // the declaration order above.
         switch (Op)
         {
             case Op.ListAll:

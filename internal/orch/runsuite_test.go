@@ -229,8 +229,8 @@ func TestRunSuite_DeclaredSkipIsNotAFailure(t *testing.T) {
 	assert.True(t, rep.Success(), "a declared skip must not fail the run")
 }
 
-// A worker that dies during Bind must not be reported as SKIP. Skip and death
-// used to be indistinguishable, so a crashed worker produced an all-green run.
+// A worker that dies during Bind must not be reported as SKIP: that would make
+// a crashed worker produce an all-green run.
 func TestRunSuite_DeadWorkerIsErrorNotSkip(t *testing.T) {
 	workers := map[string]*worker.Worker{
 		"ref":  startStubWorker(t, "ref", stubWorkerScript),

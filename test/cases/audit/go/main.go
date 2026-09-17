@@ -302,9 +302,8 @@ func main() {
 			},
 
 			// audit_model: the same faults over the same layout, through the
-			// model path. Go's `audit` type above already registers this way, so
-			// this entry is a near-duplicate — it is the reference row the other
-			// eight bindings are checked against.
+			// model path — the reference row the other eight bindings are
+			// checked against.
 			"audit_model": {
 				Model: &Audit{},
 				Formats: map[string]serify.Format{

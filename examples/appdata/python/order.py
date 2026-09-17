@@ -95,9 +95,7 @@ class OrderRecord:
 
         buf += self.subtotal.pack()
 
-        # Entry order is the dict's own — deliberately not sorted. A map is
-        # unordered, so order declares `oracle: semantic` and the decoded value
-        # is what gets compared. See docs/protocol.md.
+        # Entry order is the collection's own: order declares `oracle: semantic`.
         buf += struct.pack('<I', len(self.adjustments))
         for k, m in self.adjustments.items():
             buf += pack_str(k) + m.pack()

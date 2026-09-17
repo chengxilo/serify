@@ -49,10 +49,8 @@ const (
 	Array    = "array"
 	Map      = "map"
 	Enum     = "enum"
-	// Sum is a native sum type (a.k.a. tagged union / coproduct): sum<name: T, …>.
-	// A value is exactly one variant (its tag + typed payload), so there are no
-	// inactive fields to default — unlike an enum tag plus separate flat fields.
-	// "sum" is the whole type; each of its arms is a variant (see conf.Variant).
+	// Sum is a native sum type (tagged union): sum<name: T, …>. A value is
+	// exactly one variant — its tag plus typed payload (see conf.Variant).
 	Sum = "sum"
 )
 
@@ -72,10 +70,6 @@ var AllBases = slices.Concat(Scalars, []string{Struct, Optional, List, Array, Ma
 // leaving each part untrimmed. A parameterized type's arguments may themselves
 // be parameterized — map<string, map<uint8,uint8>>, sum<a: map<K,V>, b> — so
 // the split has to track depth rather than scan for a plain comma.
-//
-// The runner (which parses type strings out of case files) and the worker
-// library (which parses them out of the schema the runner sends) both need this,
-// which is why it lives beside the names themselves.
 func SplitTopLevel(s string) []string {
 	var parts []string
 	depth, start := 0, 0

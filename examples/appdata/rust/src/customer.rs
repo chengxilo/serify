@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! `CustomerRecord` mirrors examples/appdata/cases/customer.yaml — the widest type in
-//! the suite, and the only one carrying two formats.
+//! `CustomerRecord` mirrors examples/appdata/cases/customer.yaml — the only type
+//! in the suite carrying two formats.
 //!
-//! `#[derive(SerifyModel)]` covers the whole shape, nested struct, list<struct>,
-//! map<string,struct>, map<string,string>, optional and array included. Both
-//! layouts below are hand-written, which is the part a conformance worker exists
-//! to exercise.
+//! `#[derive(SerifyModel)]` covers the whole shape; both layouts below are
+//! hand-written.
 
 use std::collections::HashMap;
 

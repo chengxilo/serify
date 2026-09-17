@@ -25,13 +25,10 @@
 // std::monostate is the unit variant, uint64_t is the scalar payload, and Draft
 // and Task are struct payloads.
 //
-// Note that Op holds uint64_t twice — `read` and `delete` both carry an id and
-// nothing else. A std::variant may repeat an alternative type; what it may not
-// do is let you reach one by type, so this file uses std::get<I> throughout.
-// That reads awkwardly at first and is then exactly right: the index *is* the
-// tag ordinal, so the codec below needs no lookup table at all, and the two ids
-// are told apart by position in precisely the way the schema tells them apart
-// by tag.
+// Op holds uint64_t twice — `read` and `delete` both carry an id and nothing
+// else. A std::variant may repeat an alternative type but not let you reach one
+// by type, so this file uses std::get<I> throughout; the index *is* the tag
+// ordinal, so the codec below needs no lookup table.
 
 #pragma once
 

@@ -130,10 +130,9 @@ function parseOp(array $args): ListAll|Create|Read|Update|Delete
 }
 
 /**
- * Rejects a bad priority here, before anything is encoded. This is the only
- * place in the project where one can exist: an enum has no wire representation
- * outside its declared variants, so by the time a request is bytes the value is
- * already known to be good — which is why the server does not check it again.
+ * Rejects a bad priority before anything is encoded. An enum has no wire
+ * representation outside its declared variants, so by the time a request is
+ * bytes the value is already known to be good.
  */
 function parsePriority(string $s): string
 {
@@ -174,8 +173,7 @@ function render(Accepted|Found|Listing|Failed $result): string
 function renderTask(Task $t): string
 {
     // mb_str_pad is PHP 8.3; str_pad counts bytes, so a non-ASCII title lines up
-    // differently from the Go and Python clients. Display only — the wire has
-    // always counted bytes.
+    // differently from the Go and Python clients. Display only.
     $line = sprintf('[%s] %s  %s  %s',
         $t->done ? 'x' : ' ', $t->id, str_pad($t->title, 30), $t->priority);
     if ($t->tags !== []) {

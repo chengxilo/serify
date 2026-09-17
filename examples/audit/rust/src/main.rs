@@ -20,11 +20,9 @@
 //! suite's three formats — see the note on `handoff` at the bottom of this file
 //! for the third, and README.md for the walkthrough.
 //!
-//! The codecs speak the `Frame` model and never see a `FieldMap`, which is what
-//! a worker author actually writes. Audit sees through it: `ModelFormat` keeps
-//! the model instance each call used and re-derives its state at every probe
-//! point, so a decoder that views the input buffer is caught here exactly as it
-//! would be at the raw boundary.
+//! The codecs speak the `Frame` model and never see a `FieldMap`. Audit sees
+//! through it: `ModelFormat` keeps the model instance each call used and
+//! re-derives its state at every probe point.
 
 use serify::{run_suite, Format, SerifyModel, Suite, Type};
 
@@ -93,14 +91,12 @@ fn unmarshal_fast(data: &[u8]) -> Result<Frame, String> {
     decode(data, true)
 }
 
-/// Walks the layout once. `alias` picks copying or aliasing for the three
-/// fields that can be either; keeping both in one function is what makes it
-/// clear that the formats agree about the bytes and disagree about nothing else.
+/// Walks the layout once; `alias` picks copying or aliasing for the three fields
+/// that can be either, so the two formats visibly agree about the bytes.
 ///
 /// The aliasing arms build a `String`/`Vec` over memory they do not own, with
-/// capacity 0 so that dropping them frees nothing. That is exactly the unsafety
-/// the audit flag is for: it compiles, it is fast, and it is only correct while
-/// the caller keeps its promise about the buffer.
+/// capacity 0 so that dropping them frees nothing — correct only while the
+/// caller keeps its promise about the buffer.
 fn decode(data: &[u8], alias: bool) -> Result<Frame, String> {
     if data.len() < 4 {
         return Err("truncated".into());
@@ -158,23 +154,13 @@ fn take_string(data: &[u8], pos: &mut usize, alias: bool) -> Result<String, Stri
 // payload buffer it was handed — a plausible "the bytes are out, release the
 // buffer" optimization that silently edits the caller's data.
 //
-// It cannot be written here, and that is the interesting part. A serify
-// serializer in Rust receives `&Frame`: a shared reference, with no way to write
-// through it. Writing this bug takes an `unsafe` cast from `&` to `&mut`
-// and an `#[allow(invalid_reference_casting)]` to silence the compiler — which
-// is what the meta-fixture in test/cases/audit/rust does, because its whole job
-// is to be broken.
+// It cannot be written here: a serify serializer in Rust receives `&Frame`, so
+// the bug needs an `unsafe` `&`→`&mut` cast (which is what the meta-fixture in
+// test/cases/audit/rust does). This worker declines the format instead, and
+// serify reports SKIPPED for `handoff`/rust. The test in ../test asserts that
+// exact cell, so the skip cannot spread to a format this worker does implement.
 //
-// An honest worker will not do that, so this one declines the format instead.
-// serify reports SKIPPED for `handoff`/rust and carries on: a skip is a
-// declaration about coverage, not a failure, and it does not change the exit
-// code. The test in ../test asserts that exact cell, so the skip cannot quietly
-// spread to a format this worker is supposed to implement.
-//
-// The contrast with Go is the point. Go hands the serializer a `*Frame`, so the
-// same bug is one line that the compiler accepts without comment. Neither
-// language can stop you from aliasing the input buffer under `fast` — both did
-// it above — but only one of them lets you scribble on your caller by accident.
+// Go hands the serializer a `*Frame`, so the same bug is one accepted line.
 
 fn main() {
     run_suite(

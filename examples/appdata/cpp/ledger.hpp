@@ -15,8 +15,7 @@
 // LedgerEntry mirrors examples/appdata/cases/ledger.yaml.
 //
 // The SERIFY_* macros are the entire schema binding — nothing here calls a
-// get_*/set_* accessor. Everything else is the byte layout, which is the part a
-// conformance worker exists to exercise.
+// get_*/set_* accessor. Everything else is the byte layout.
 //
 // __int128 is a GCC/Clang extension, but it shifts like any other integer, so
 // the two int128 fields need no special handling.

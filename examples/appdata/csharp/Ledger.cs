@@ -15,8 +15,7 @@
 // LedgerEntry mirrors examples/appdata/cases/ledger.yaml.
 //
 // [SerifyModel] plus one [SerifyField] per property is the entire schema binding
-// — nothing here calls a Get*/Set* accessor. Everything else is the byte layout,
-// which is the part a conformance worker exists to exercise.
+// — nothing here calls a Get*/Set* accessor. Everything else is the byte layout.
 //
 // .NET has native Int128 and BinaryPrimitives can write it directly, so the two
 // int128 fields need no big-integer library — unlike Go (math/big) or Java

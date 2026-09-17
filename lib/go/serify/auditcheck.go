@@ -37,19 +37,12 @@ type fieldSnap struct {
 	orig any
 }
 
-// The functions in this file are low-level audit helpers used only by Run
-// (run.go) and buildSerializer/buildFieldMapSerializer (suite.go) when
-// --audit is passed. A worker driven by the serify runner never calls them
-// directly: register serialize/deserialize in a Suite and Run handles audit
-// itself. They are unexported deliberately — detectZeroCopy mutates its
-// buffer argument in place (via xorFlip) for the duration of the call with no
-// synchronization, which is only safe because the NDJSON loop that calls it
-// is strictly sequential; exporting it would invite a caller to run it
-// against a buffer shared with concurrent code.
+// These helpers stay unexported: detectZeroCopy mutates its buffer argument in
+// place (via xorFlip) with no synchronization, which is safe only because the
+// NDJSON loop that calls it is strictly sequential.
 
 // snapshotFieldMap deep-copies a FieldMap, cloning []byte values so in-place
-// mutations to the original are visible as diffs. Recurses into nested
-// *FieldMap, []*FieldMap, and map[string]any containing *FieldMap.
+// mutations to the original are visible as diffs.
 func snapshotFieldMap(src *FieldMap) *FieldMap {
 	if src == nil {
 		return nil
@@ -61,15 +54,12 @@ func snapshotFieldMap(src *FieldMap) *FieldMap {
 	return dst
 }
 
-// cloneValue deep-copies a single field value, cloning []byte slices, strings,
-// []string slices, []any slices, and recursing into *FieldMap, []*FieldMap,
-// and map[string]any.
+// cloneValue deep-copies a single field value.
 //
-// A nil slice, map or variant is returned as itself rather than as a bare
-// `nil`: `return nil` yields an interface with no type in it, so valuesEqual's
-// typed branches fail to match and the comparison falls through to
-// reflect.DeepEqual(nil, []byte(nil)) — false. Every field holding a nil slice
-// would then read as mutated.
+// A nil slice, map or variant is returned as itself rather than as a bare `nil`:
+// an untyped nil misses valuesEqual's typed branches and falls through to
+// reflect.DeepEqual(nil, []byte(nil)) — false — so every field holding a nil
+// slice would read as mutated.
 //
 //nolint:gocognit // deep clone must enumerate every FieldMap value kind
 func cloneValue(v any) any {
@@ -132,8 +122,6 @@ func cloneValue(v any) any {
 }
 
 // compareFieldMaps returns field names that differ between before and after.
-// Uses bytes.Equal for []byte, recursive comparison for nested *FieldMap,
-// and reflect.DeepEqual for everything else.
 func compareFieldMaps(before, after *FieldMap) []string {
 	if before == nil && after == nil {
 		return nil
@@ -169,10 +157,8 @@ func valuesEqual(a, b any) bool {
 	if aIsBytes && bIsBytes {
 		return bytes.Equal(ab, bb)
 	}
-	// Compare floats by bit pattern, not value: a NaN is never == itself, so
-	// reflect.DeepEqual(NaN, NaN) is false. Without this a field holding NaN
-	// makes a perfectly deterministic worker look like it mutated, aliased and
-	// deserialized unstably — three false audit warnings from one corner.
+	// Compare floats by bit pattern, not value: reflect.DeepEqual(NaN, NaN) is
+	// false, so a field holding NaN would raise three false audit warnings.
 	if af, ok := a.(float64); ok {
 		if bf, ok := b.(float64); ok {
 			return math.Float64bits(af) == math.Float64bits(bf)
@@ -236,14 +222,11 @@ func detectZeroCopy(fm *FieldMap, buf []byte) []string {
 		return nil
 	}
 
-	// 1. Walk recursively and snapshot all aliasing-capable fields
 	var snaps []fieldSnap
 	collectFieldSnaps(fm, &snaps)
 
-	// 2. XOR-flip every byte in buf
 	xorFlip(buf)
 
-	// 3. Check which fields changed
 	var aliased []string
 	for _, s := range snaps {
 		current := s.fm.fields[s.key]
@@ -252,7 +235,6 @@ func detectZeroCopy(fm *FieldMap, buf []byte) []string {
 		}
 	}
 
-	// 4. Restore original values
 	for _, s := range snaps {
 		s.fm.fields[s.key] = s.orig
 	}
@@ -260,12 +242,9 @@ func detectZeroCopy(fm *FieldMap, buf []byte) []string {
 	return aliased
 }
 
-// collectFieldSnaps recursively walks a FieldMap and appends snapshots of all
-// aliasing-capable fields. For scalar bytes/string fields, snapshots the
-// individual value. For containers with aliasing-capable leaves ([]string,
-// []any with strings, map[string]any with bytes/string values), snapshots
-// the whole field value. Recurse into struct-shaped values. Scalar-only
-// containers are skipped.
+// collectFieldSnaps recursively walks a FieldMap and appends snapshots of every
+// aliasing-capable field: the value itself for bytes/string, the whole field for
+// a container with aliasing-capable leaves. Scalar-only containers are skipped.
 //
 //nolint:gocognit // snapshots every FieldMap value kind for the audit diff
 func collectFieldSnaps(fm *FieldMap, snaps *[]fieldSnap) {

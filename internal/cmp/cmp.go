@@ -51,11 +51,10 @@ func HexDiff(expected, got string) string {
 // DataDiff compares two decoded data maps field by field.
 // Returns a description of differences, or "" if equal.
 //
-// Fields named in floatFields hold a float32/float64 value in its wire form —
-// IEEE-754 little-endian hex. For those, two values that both decode to NaN are
-// treated as equal: all NaNs are the same value, so the bit pattern is not
-// significant under a value (semantic) comparison. Pass nil to compare every
-// field verbatim (byte-exact), which is what the bytes oracle's other rounds do.
+// Fields named in floatFields hold a float32/float64 value in its IEEE-754
+// little-endian wire hex. For those, two values that both decode to NaN compare
+// equal — the bit pattern is not significant under a semantic comparison. Pass
+// nil to compare every field verbatim.
 func DataDiff(expected, got map[string]any, fieldOrder []string, floatFields map[string]bool) string {
 	if len(fieldOrder) == 0 {
 		// fallback: compare all keys in expected (sorted for stable output)
@@ -71,13 +70,10 @@ func DataDiff(expected, got map[string]any, fieldOrder []string, floatFields map
 			continue // both NaN → equal by value, whatever the bit pattern
 		}
 
-		// cmp.Diff output is plain text (no ANSI codes); callers that render
-		// to a terminal can colorize lines by their - / + prefix.
 		if diff := cmp.Diff(ev, gv); diff != "" {
 			diffs = append(diffs, fmt.Sprintf("  field %q:\n%s", k, diff))
 		}
 	}
-	// Check for unexpected fields in got.
 	for k := range got {
 		if _, ok := expected[k]; !ok {
 			diffs = append(diffs, fmt.Sprintf("  field %q: unexpected (not in expected)", k))
@@ -132,7 +128,6 @@ func hexOffsetDiff(a, b []byte) string {
 
 	fmt.Fprintf(&sb, "length: expected %d, got %d\n", len(a), len(b))
 
-	// Find the first divergent byte.
 	firstDiv := -1
 	minLen := min(len(a), len(b))
 	for i := range minLen {
@@ -151,7 +146,6 @@ func hexOffsetDiff(a, b []byte) string {
 
 	fmt.Fprintf(&sb, "first divergence at offset %d (0x%x)\n", firstDiv, firstDiv)
 
-	// Compute context window boundaries.
 	start, end := contextBounds(firstDiv, len(a), len(b))
 
 	sb.WriteString("\n--- expected\n")
@@ -187,10 +181,8 @@ func hexRows(data []byte, start, end, div int) string {
 		}
 		rowEnd := min(rowStart+rowWidth, len(data))
 
-		// Offset column.
 		fmt.Fprintf(&sb, "%08x  ", rowStart)
 
-		// Hex column.
 		hexParts := make([]string, 0, rowEnd-rowStart)
 		for i := rowStart; i < rowEnd; i++ {
 			h := fmt.Sprintf("%02x", data[i])
@@ -202,13 +194,11 @@ func hexRows(data []byte, start, end, div int) string {
 		hexLine := strings.Join(hexParts, " ")
 		sb.WriteString(hexLine)
 
-		// Pad hex column if this row is short.
 		if rowEnd-rowStart < hexRowSize {
 			pad := (hexRowSize - (rowEnd - rowStart)) * hexColPad
 			sb.WriteString(strings.Repeat(" ", pad))
 		}
 
-		// ASCII gutter.
 		sb.WriteString("  |")
 		for i := rowStart; i < rowEnd; i++ {
 			b := data[i]
@@ -224,8 +214,7 @@ func hexRows(data []byte, start, end, div int) string {
 }
 
 // ColorizeDiff applies terminal color to - / + prefixed lines in a plain-text
-// diff string. Use this at render time to get colored output without baking
-// ANSI codes into the data layer.
+// diff string, at render time, so no ANSI codes are baked into the data layer.
 func ColorizeDiff(plain, minusColor, plusColor string) string {
 	var sb strings.Builder
 	for line := range strings.SplitSeq(plain, "\n") {

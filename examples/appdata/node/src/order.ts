@@ -107,9 +107,7 @@ export class OrderRecord {
 
     parts.push(this.subtotal.pack());
 
-    // Entry order is the Map's own — deliberately not sorted. A map is
-    // unordered, so order declares `oracle: semantic` and the decoded value is
-    // what gets compared. See docs/protocol.md.
+    // Entry order is the collection's own: order declares `oracle: semantic`.
     parts.push(count(this.adjustments.size));
     for (const [k, m] of this.adjustments) parts.push(lenPrefixedStr(k), m.pack());
 

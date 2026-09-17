@@ -114,9 +114,7 @@ export class TelemetryFrame {
     this.visibleCells.forEach((v, i) => cells.writeUInt32LE(v, 4 + i * 4));
     parts.push(cells);
 
-    // Entry order is the Map's own — deliberately not sorted. A map is
-    // unordered, so telemetry declares `oracle: semantic` and the decoded value
-    // is what gets compared. See docs/protocol.md.
+    // Entry order is the collection's own: telemetry declares `oracle: semantic`.
     const count = Buffer.alloc(4);
     count.writeUInt32LE(this.packetCounts.size, 0);
     parts.push(count);

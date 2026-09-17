@@ -86,8 +86,8 @@ static void run_tests() {
     check(back.get_u32("n") == 9, "model deserializer's result is mapped back to a FieldMap");
     check(back.get_string("label") == "from-bytes", "every bound field comes back, not just the first");
 
-    // The serialize-only overload. Naming it here is the point: it is a
-    // template, so without this line nothing in the repo ever compiles it.
+    // The serialize-only overload is a template, so without this line nothing
+    // in the repo ever compiles it.
     FormatPair ser_only = model_format<Rec>(rec_marshal);
     check(ser_only.serialize(fm) == std::vector<uint8_t>({7, 0, 0, 0}),
           "the serialize-only overload serializes");

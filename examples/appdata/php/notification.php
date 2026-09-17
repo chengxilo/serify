@@ -70,8 +70,7 @@ class NotificationRecord
         $out = pack('V', $this->notificationId);
 
         // The tag ordinal is the variant's position in the case file's sum,
-        // which is the declaration order of the four arms above. The schema tag
-        // *names* are the binding's business, and never appear here.
+        // which is the declaration order of the four arms above.
         $out .= match (true) {
             $this->channel instanceof Silent  => pack('C', 0), // a unit variant is nothing but its tag
             $this->channel instanceof Sms     => pack('C', 1) . lenPrefixed($this->channel->value),

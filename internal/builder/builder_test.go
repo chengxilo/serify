@@ -59,12 +59,9 @@ func TestBuild_RunsCommand(t *testing.T) {
 	require.NoError(t, err, "build command did not run: %v", err)
 }
 
-// TestBuild_AlwaysRuns is the property this package exists to guarantee. serify
-// used to skip the build when a marker file was newer than everything in the
-// worker directory. That cache could not see a worker's dependencies outside its
-// own directory (a library it compiles against), so editing them left the marker
-// valid and the run silently exercised a stale binary. Build now always shells
-// out and lets the language's own build tool decide what to recompile.
+// TestBuild_AlwaysRuns pins that serify never caches the build itself: a marker
+// file cannot see a worker's dependencies outside its own directory, so editing
+// them would leave a stale binary running. The language's build tool decides.
 func TestBuild_AlwaysRuns(t *testing.T) {
 	dir := t.TempDir()
 	info := &WorkerInfo{

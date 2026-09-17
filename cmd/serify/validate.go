@@ -53,10 +53,8 @@ Examples:
 }
 
 func runValidate(casesDir string, workerDirs []string) error {
-	// Check the worker directories before loading the cases. Doing it the other
-	// way round meant a bad positional argument still printed a full, successful
-	// suite report for whatever --cases defaulted to — a wall of green output for
-	// a directory the user never named, followed by an unrelated-looking error.
+	// Before the cases: the other order prints a full, successful suite report
+	// for whatever --cases defaulted to before reporting the bad argument.
 	infos := make([]*builder.WorkerInfo, 0, len(workerDirs))
 	for _, dir := range workerDirs {
 		info, err := builder.Detect(dir)
@@ -70,7 +68,6 @@ func runValidate(casesDir string, workerDirs []string) error {
 		infos = append(infos, info)
 	}
 
-	// Validate case files.
 	set, err := conf.LoadSuite(casesDir)
 	if err != nil {
 		return fmt.Errorf("load cases: %w", err)

@@ -70,8 +70,8 @@ public sealed class FieldMap
     public void SetU16(string key, ushort v)  => _fields[key] = v;
     public void SetU32(string key, uint v)    => _fields[key] = v;
     public void SetU64(string key, ulong v)   => _fields[key] = v;
-    // 128-bit values use .NET's native UInt128/Int128. Parsing them as ulong/long
-    // (as this library used to) silently truncates everything above 2^64.
+    // 128-bit values use .NET's native UInt128/Int128: ulong/long truncates
+    // everything above 2^64.
     public void SetU128(string key, UInt128 v) => _fields[key] = v;
     public void SetI8(string key, sbyte v)    => _fields[key] = v;
     public void SetI16(string key, short v)   => _fields[key] = v;
@@ -249,12 +249,10 @@ public sealed class ModelAuditHook
 /// (the audit fixtures mutate a FieldMap on purpose): the functions take and
 /// return the FieldMap itself.
 ///
-/// Unlike the dynamically-typed libraries, telling the two apart here is the
-/// compiler's job, not a shape test at run time — <c>Model</c> and
-/// <c>Formats</c> are separate factories returning separate subclasses, so a
-/// registration serify cannot resolve does not compile. That matters because an
-/// unresolved (type, format) is reported SKIPPED: a lookup that quietly
-/// understands neither shape would yield a green run made entirely of SKIPs.
+/// Telling the two apart is the compiler's job: they are separate factories
+/// returning separate subclasses, so a registration serify cannot resolve does
+/// not compile. An unresolved (type, format) would otherwise be reported
+/// SKIPPED, yielding a green run made entirely of SKIPs.
 /// </summary>
 public abstract class TypeEntry
 {
@@ -330,15 +328,9 @@ public static class Worker
     /// </summary>
     private const int ProtocolVersion = 2;
 
-    // --- audit helpers --------------------------------------------------------
-    //
-    // The methods below are low-level audit helpers used only by Run (below) when
-    // --audit is passed. A worker driven by the serify runner never calls them
-    // directly: register serialize/deserialize in a Suite and Run handles audit
-    // itself. They are private, not public — DetectZeroCopy mutates its buffer
-    // argument in place with no synchronization, which is only safe because the
-    // NDJSON loop that calls it is strictly sequential; a public method would
-    // invite a caller to run it against a buffer shared with concurrent code.
+    // Audit helpers. They stay private: DetectZeroCopy mutates its buffer
+    // argument in place with no synchronization, which is safe only because the
+    // NDJSON loop that calls it is strictly sequential.
 
     /// <summary>
     /// Recursively walks a FieldMap and collects snapshots of every byte[] value.
@@ -406,10 +398,9 @@ public static class Worker
     /// </summary>
     /// <remarks>
     /// object.Equals is value equality for the boxed scalars but reference
-    /// equality for arrays, lists and dictionaries. Encoding the same FieldMap
-    /// twice yields fresh collection instances, so a list or map field would
-    /// never compare equal and a perfectly clean worker got reported as
-    /// mutating, unstable and output-aliasing at once.
+    /// equality for arrays, lists and dictionaries, and encoding the same
+    /// FieldMap twice yields fresh collection instances — so a clean worker
+    /// would be reported as mutating, unstable and output-aliasing at once.
     /// </remarks>
     private static bool ValuesEqual(object? a, object? b)
     {
@@ -457,7 +448,6 @@ public static class Worker
         var snaps = new List<(FieldMap fm, string key, object orig)>();
         CollectByteSnaps(fm, snaps);
 
-        // XOR-flip
         for (int i = 0; i < buf.Length; i++) buf[i] ^= 0xFF;
 
         var aliased = new List<string>();
@@ -479,7 +469,6 @@ public static class Worker
             }
         }
 
-        // Restore
         foreach (var (targetFm, key, orig) in snaps)
             targetFm.Fields[key] = orig;
 
@@ -533,8 +522,6 @@ public static class Worker
             switch (op)
             {
                 case "ping":
-                    // Health check: report liveness and the protocol revision this
-                    // library speaks. Binds nothing.
                     Emit(new { op = "ping", status = "OK", protocol_version = ProtocolVersion });
                     break;
 
@@ -739,8 +726,7 @@ public static class Worker
                 if (type.StartsWith("array<"))
                 {
                     // An array<T,N> is a list whose length the schema fixes, so it
-                    // shares DecodeList outright and adds only the length check. A
-                    // separate representation is what pinned array<T,N> to uint.
+                    // shares DecodeList outright and adds only the length check.
                     var (aElem, aLen) = SplitArrayType(type);
                     DecodeList(fm, sf, aElem, el);
                     var got = ((System.Collections.IEnumerable)fm.Fields[name]!).Cast<object?>().Count();
@@ -757,9 +743,8 @@ public static class Worker
                     fm.SetMap(name, DecodeMap(valType, sf.Fields, el));
                     break;
                 }
-                // Breaking out silently left the field absent from the FieldMap,
-                // which surfaces far downstream as a missing value rather than as
-                // "this library does not know that type".
+                // Breaking out would leave the field absent from the FieldMap,
+                // surfacing far downstream as a missing value.
                 throw new InvalidOperationException($"unknown type \"{type}\"");
         }
     }
@@ -800,10 +785,8 @@ public static class Worker
 
     /// <summary>
     /// Decodes every element through DecodeField, so a list supports exactly the
-    /// element types a bare field does. This used to carry its own switch, which
-    /// is why uint16/int8/int16/float64/bytes were declarable in a case file and
-    /// accepted by `serify validate`, but threw once a worker actually ran. The
-    /// switch below only names the array each element type packs into.
+    /// element types a bare field does. The switch below only names the array
+    /// each element type packs into.
     /// </summary>
     private static void DecodeList(FieldMap fm, SchemaField sf, string elem, JsonElement el)
     {
@@ -927,8 +910,7 @@ public static class Worker
 
     /// <summary>
     /// Inverse of DecodeList: every element goes back out through EncodeField, so
-    /// the two directions cannot cover different element types. The old version
-    /// fell through to returning the value untouched for anything it did not name.
+    /// the two directions cannot cover different element types.
     /// </summary>
     private static object? EncodeList(SchemaField sf, string elem, object? v)
     {
@@ -1190,8 +1172,6 @@ public static class SerifyModel
         {
             var payload1 = ArmValue(arm, val, ps[0]);
             // A single payload that is itself a model travels as a struct.
-            // FromVariant already had the way back, in ConvertValue's
-            // FieldMap-to-model branch; only this direction was missing.
             if (payload1 is { } m && IsModel(m.GetType())) payload1 = ToFieldMapOf(m.GetType(), m);
             return new Variant(ArmTag(arm), payload1);
         }
@@ -1259,13 +1239,9 @@ public static class SerifyModel
             case byte[] v: fm.SetBytes(key, v); break;
             case FieldMap v: fm.SetStruct(key, v); break;
             case FieldMap[] v: fm.SetListStruct(key, v); break;
-            // Every other array: store it as-is, since the schema — not the
-            // runtime element type — decides the wire form. Naming the array
-            // types individually is what left ushort[], sbyte[], short[], int[],
-            // long[], UInt128[], Int128[], double[], bool[] and byte[][] falling
-            // through to the ToString() default below.
-            // A list<struct> arrives as an array of models; convert the
-            // elements. Any other array is stored as-is.
+            // A list<struct> arrives as an array of models; convert the elements.
+            // Every other array is stored as-is, since the schema — not the
+            // runtime element type — decides the wire form.
             case System.Array v when v.GetType().GetElementType() is { } et && IsModel(et):
                 fm.SetListStruct(key, v.Cast<object>().Select(x => ToFieldMapOf(x.GetType(), x)).ToArray());
                 break;
@@ -1273,10 +1249,7 @@ public static class SerifyModel
             case Dictionary<string, object?> v: fm.SetMap(key, v); break;
             // Every other string-keyed dictionary, for the same reason as the
             // array above: the schema decides a map<K,V>'s wire form, not the
-            // runtime value type. Naming only Dictionary<string, object?> left
-            // a model declaring Dictionary<string, ulong> — the natural way to
-            // write map<string,uint64> — falling through to the ToString()
-            // default, so the map reached the wire as its own type name.
+            // runtime value type.
             case System.Collections.IDictionary v:
             {
                 var m = new Dictionary<string, object?>(v.Count);
@@ -1292,9 +1265,8 @@ public static class SerifyModel
                 break;
             }
             case Variant v: fm.Fields[key] = v; break;
-            // A nested [SerifyModel] is a struct. Without this it reached the
-            // ToString() default below and went out as its own type name; no
-            // example had a nested struct until customer, so nothing caught it.
+            // A nested [SerifyModel] is a struct. Without this it reaches the
+            // ToString() default below and goes out as its own type name.
             case { } v when IsModel(v.GetType()): fm.SetStruct(key, ToFieldMapOf(v.GetType(), v)); break;
             default: fm.SetString(key, val.ToString() ?? ""); break;
         }

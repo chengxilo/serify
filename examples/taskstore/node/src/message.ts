@@ -19,15 +19,9 @@
  * The two types that cross the socket, and the only two the suite tests, plus
  * the two sums they carry.
  *
- * TypeScript's union type is erased before the code runs, so unlike Rust,
- * Python, Java, PHP, C# and Elixir — where the binding reads the arms off the
- * language's own sum type — the arms have to be named at runtime. That is what
- * `@Serify.sum([...])` is, and it is the only extra line: each arm is a plain
- * class whose own properties are its payload.
- *
- * Node sits between the two extremes here. Go has to write a full converter
- * because an interface's implementations cannot be enumerated; Rust writes
- * nothing at all. Node writes the list and no more.
+ * TypeScript's union type is erased before the code runs, so the arms have to be
+ * named at runtime — that is what `@Serify.sum([...])` is, and it is the only
+ * extra line: each arm is a plain class whose own properties are its payload.
  */
 
 import { Serify } from '@chengxilo/serify';

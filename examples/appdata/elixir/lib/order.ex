@@ -118,9 +118,7 @@ defmodule OrderRecord do
         i -> i
       end
 
-    # Entry order is the map's own — deliberately not sorted. A map is
-    # unordered, so order declares `oracle: semantic` and the decoded value is
-    # what gets compared. See docs/protocol.md.
+    # Entry order is the collection's own: order declares `oracle: semantic`.
     adjustments =
       Enum.map_join(o.adjustments, fn {k, m} -> Wire.str(k) <> Money.pack(m) end)
 
