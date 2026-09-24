@@ -146,7 +146,7 @@ func TestCLI_ExpectSkips(t *testing.T) {
 			// python's real gaps, so the only thing left for the run to
 			// complain about is go's entry.
 			coverageSkipper: {coverageType, coverageModelType},
-			lang.Go:     {coverageType},
+			lang.Go:         {coverageType},
 		})
 		out, code, _ := run(t, "--expect-skips", dir)
 		require.Equal(t, 0, code, "serify exit = %d, want 0 (a stale entry is advisory)\n%s", code, out)
