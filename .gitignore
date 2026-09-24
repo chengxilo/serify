@@ -5,7 +5,10 @@ runner
 runner.exe
 **/worker
 **/worker.exe
-!/worker/
+# ...but `**/worker` also matches a *directory* named worker, which silently
+# excluded the internal/worker package. The trailing slash re-includes only
+# directories, so a `worker` binary sitting inside one stays ignored.
+!**/worker/
 # taskstore example: client and server binaries sit beside the worker and,
 # unlike it, are not named `worker`. Spelled out per language rather than
 # globbed: core.ignorecase is true on a case-insensitive checkout, where
