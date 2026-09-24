@@ -231,7 +231,7 @@ fn marshal_output_zero_copy(fm: &FieldMap) -> Result<Vec<u8>, String> {
     let mut buf = marshal_inner(fm)?;
     // Make fm's internal "payload" field alias a sub-slice of buf.
     // When audit XOR-flips buf, the payload field changes and
-    // detect_output_zero_copy reports it.
+    // the output-zero-copy check in run() reports it.
     let tag = fm.get_string("tag").ok_or("missing tag")?;
     let payload_off = 4 + 1 + tag.len() + 4; // value + tagLen + tag + payloadLen
     let payload_len = fm.get_bytes("payload").ok_or("missing payload")?.len();
