@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chengxilo/serify/internal/config"
-	"github.com/chengxilo/serify/internal/protocol"
+	"github.com/chengxilo/serify/internal/conf"
+	"github.com/chengxilo/serify/internal/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -134,9 +134,9 @@ func TestSend_SerializeOK(t *testing.T) {
 	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
-	resp, err := w.Send(context.Background(), protocol.NewSerializeRequest("t1", map[string]any{"x": 1}), 3)
+	resp, err := w.Send(context.Background(), proto.NewSerializeRequest("t1", map[string]any{"x": 1}), 3)
 	require.NoError(t, err, "Send failed: %v", err)
-	assert.Equal(t, protocol.StatusOK, resp.Status, "Status = %q, want OK", resp.Status)
+	assert.Equal(t, proto.StatusOK, resp.Status, "Status = %q, want OK", resp.Status)
 	assert.NotEmpty(t, resp.Hex, "expected non-empty hex")
 }
 
@@ -165,11 +165,11 @@ func TestSend_ResponseIDMismatch(t *testing.T) {
 		Language: "test",
 		cmd:      cmd,
 		stdin:    stdin,
-		writer:   protocol.NewWriter(stdin),
-		reader:   protocol.NewReader(stdout),
+		writer:   proto.NewWriter(stdin),
+		reader:   proto.NewReader(stdout),
 	}
 
-	_, err = w.Send(context.Background(), protocol.NewSerializeRequest("correct", map[string]any{}), 2)
+	_, err = w.Send(context.Background(), proto.NewSerializeRequest("correct", map[string]any{}), 2)
 	assert.Error(t, err, "expected error for response ID mismatch")
 	if err != nil {
 		assert.Contains(t, strings.ToLower(err.Error()), "id mismatch", "error should mention id mismatch: %v", err)
@@ -196,12 +196,12 @@ func TestSend_WrongOpSameID(t *testing.T) {
 		Language: "test",
 		cmd:      cmd,
 		stdin:    stdin,
-		writer:   protocol.NewWriter(stdin),
-		reader:   protocol.NewReader(stdout),
+		writer:   proto.NewWriter(stdin),
+		reader:   proto.NewReader(stdout),
 	}
 
 	_, err := w.Send(context.Background(),
-		protocol.NewDeserializeRequest("c1", "aa"), 2)
+		proto.NewDeserializeRequest("c1", "aa"), 2)
 	require.Error(t, err, "expected an error for a serialize response to a deserialize request")
 	assert.Contains(t, strings.ToLower(err.Error()), "op mismatch", "error should mention op mismatch: %v", err)
 	assert.True(t, w.dead, "worker should be marked dead: the stream is desynced")
@@ -218,11 +218,11 @@ func TestSend_Timeout(t *testing.T) {
 		Language: "test",
 		cmd:      cmd,
 		stdin:    stdin,
-		writer:   protocol.NewWriter(stdin),
-		reader:   protocol.NewReader(stdout),
+		writer:   proto.NewWriter(stdin),
+		reader:   proto.NewReader(stdout),
 	}
 
-	_, err := w.Send(context.Background(), protocol.NewSerializeRequest("t1", map[string]any{}), 1)
+	_, err := w.Send(context.Background(), proto.NewSerializeRequest("t1", map[string]any{}), 1)
 	assert.Error(t, err, "expected timeout error")
 	assert.True(t, w.dead, "worker should be marked dead after timeout")
 }
@@ -237,11 +237,11 @@ func TestSend_CrashMidRequest(t *testing.T) {
 		Language: "test",
 		cmd:      cmd,
 		stdin:    stdin,
-		writer:   protocol.NewWriter(stdin),
-		reader:   protocol.NewReader(stdout),
+		writer:   proto.NewWriter(stdin),
+		reader:   proto.NewReader(stdout),
 	}
 
-	_, err := w.Send(context.Background(), protocol.NewSerializeRequest("t1", map[string]any{}), 2)
+	_, err := w.Send(context.Background(), proto.NewSerializeRequest("t1", map[string]any{}), 2)
 	assert.Error(t, err, "expected error from crashed worker")
 }
 
@@ -262,12 +262,12 @@ func TestBind_TimeoutMarksWorkerDead(t *testing.T) {
 	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
-	err = w.Bind(context.Background(), []config.Field{{Name: "y", Type: config.FieldType{Base: "string"}}}, "order", "binary", 1, false)
+	err = w.Bind(context.Background(), []conf.Field{{Name: "y", Type: conf.FieldType{Base: "string"}}}, "order", "binary", 1, false)
 	require.Error(t, err, "expected timeout error from hung bind")
 	assert.True(t, w.dead, "worker should be marked dead after bind timeout")
 	// A subsequent Bind must refuse immediately instead of racing the
 	// abandoned reader.
-	err = w.Bind(context.Background(), []config.Field{{Name: "y", Type: config.FieldType{Base: "string"}}}, "order", "binary", 1, false)
+	err = w.Bind(context.Background(), []conf.Field{{Name: "y", Type: conf.FieldType{Base: "string"}}}, "order", "binary", 1, false)
 	assert.ErrorContains(t, err, "dead", "second bind should fail fast with a dead-worker error, got: %v", err)
 }
 
@@ -282,8 +282,8 @@ func TestSend_ContextCancelInterruptsWait(t *testing.T) {
 		Language: "test",
 		cmd:      cmd,
 		stdin:    stdin,
-		writer:   protocol.NewWriter(stdin),
-		reader:   protocol.NewReader(stdout),
+		writer:   proto.NewWriter(stdin),
+		reader:   proto.NewReader(stdout),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -293,7 +293,7 @@ func TestSend_ContextCancelInterruptsWait(t *testing.T) {
 	}()
 
 	start := time.Now()
-	_, err := w.Send(ctx, protocol.NewSerializeRequest("t1", map[string]any{}), 30)
+	_, err := w.Send(ctx, proto.NewSerializeRequest("t1", map[string]any{}), 30)
 	require.Error(t, err, "expected error from cancelled context")
 	elapsed := time.Since(start)
 	assert.Less(t, elapsed, 5*time.Second, "Send took %v; cancellation should interrupt the wait well before the 30s timeout", elapsed)
@@ -306,7 +306,7 @@ func TestBind_Success(t *testing.T) {
 	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
-	err = w.Bind(context.Background(), []config.Field{{Name: "y", Type: config.FieldType{Base: "string"}}}, "order", "binary", 3, false)
+	err = w.Bind(context.Background(), []conf.Field{{Name: "y", Type: conf.FieldType{Base: "string"}}}, "order", "binary", 3, false)
 	require.NoError(t, err, "Bind failed: %v", err)
 }
 
@@ -317,7 +317,7 @@ func TestBind_WorkerDead(t *testing.T) {
 	err = w.Stop()
 	require.NoError(t, err, "Stop failed: %v", err)
 
-	err = w.Bind(context.Background(), []config.Field{}, "order", "binary", 3, false)
+	err = w.Bind(context.Background(), []conf.Field{}, "order", "binary", 3, false)
 	assert.Error(t, err, "expected error from dead worker")
 }
 
@@ -377,9 +377,9 @@ func TestSend_DeserializeOK(t *testing.T) {
 	require.NoError(t, err, "Start failed: %v", err)
 	defer func() { _ = w.Stop() }()
 
-	resp, err := w.Send(context.Background(), protocol.NewDeserializeRequest("t2", "aabb"), 3)
+	resp, err := w.Send(context.Background(), proto.NewDeserializeRequest("t2", "aabb"), 3)
 	require.NoError(t, err, "Send failed: %v", err)
-	assert.Equal(t, protocol.StatusOK, resp.Status, "Status = %q, want OK", resp.Status)
+	assert.Equal(t, proto.StatusOK, resp.Status, "Status = %q, want OK", resp.Status)
 	assert.NotNil(t, resp.Data, "expected non-nil data")
 }
 
@@ -390,7 +390,7 @@ func TestSend_DeadWorker(t *testing.T) {
 	err = w.Stop()
 	require.NoError(t, err, "Stop failed: %v", err)
 
-	_, err = w.Send(context.Background(), protocol.NewSerializeRequest("t1", map[string]any{}), 2)
+	_, err = w.Send(context.Background(), proto.NewSerializeRequest("t1", map[string]any{}), 2)
 	assert.Error(t, err, "expected error from dead worker")
 }
 
@@ -418,7 +418,7 @@ func TestPing_VersionMismatch(t *testing.T) {
 	assert.ErrorContains(t, err, "protocol version mismatch", "error should name the mismatch: %v", err)
 	// Both numbers belong in the message: neither alone tells you what to rebuild.
 	assert.Contains(t, err.Error(), "99", "error should report both versions: %v", err)
-	assert.Contains(t, err.Error(), strconv.Itoa(protocol.ProtocolVersion), "error should report both versions: %v", err)
+	assert.Contains(t, err.Error(), strconv.Itoa(proto.ProtocolVersion), "error should report both versions: %v", err)
 }
 
 func TestPing_MissingVersion(t *testing.T) {

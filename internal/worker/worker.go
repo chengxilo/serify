@@ -29,8 +29,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chengxilo/serify/internal/config"
-	"github.com/chengxilo/serify/internal/protocol"
+	"github.com/chengxilo/serify/internal/conf"
+	"github.com/chengxilo/serify/internal/proto"
 )
 
 // shutdownGrace is how long Close waits for a worker to exit after the "exit"
@@ -58,8 +58,8 @@ type Worker struct {
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
 
-	writer *protocol.Writer
-	reader *protocol.Reader
+	writer *proto.Writer
+	reader *proto.Reader
 
 	mu          sync.Mutex
 	stderrLines []string
@@ -123,8 +123,8 @@ func Start(ctx context.Context, info StartInfo, timeoutSec int) (*Worker, error)
 		Dir:      dir,
 		cmd:      cmd,
 		stdin:    stdin,
-		writer:   protocol.NewWriter(stdin),
-		reader:   protocol.NewReader(stdout),
+		writer:   proto.NewWriter(stdin),
+		reader:   proto.NewReader(stdout),
 	}
 
 	go func() {
@@ -147,29 +147,29 @@ func Start(ctx context.Context, info StartInfo, timeoutSec int) (*Worker, error)
 // ping is the startup handshake: it confirms the process came up and speaks the
 // same protocol revision as this runner.
 func (w *Worker) ping(ctx context.Context, timeoutSec int) error {
-	if err := w.writer.Write(protocol.NewPingRequest()); err != nil {
+	if err := w.writer.Write(proto.NewPingRequest()); err != nil {
 		return err
 	}
 
-	resp, err := w.readWithTimeout(ctx, protocol.OpPing, "", timeoutSec)
+	resp, err := w.readWithTimeout(ctx, proto.OpPing, "", timeoutSec)
 	if err != nil {
 		w.markFatal(err)
 		return err
 	}
-	if resp.Status == protocol.StatusError {
+	if resp.Status == proto.StatusError {
 		return fmt.Errorf("%s", resp.Error)
 	}
-	if resp.Status != protocol.StatusOK {
+	if resp.Status != proto.StatusOK {
 		return fmt.Errorf("ping answered with status %q; only %q is valid",
-			resp.Status, protocol.StatusOK)
+			resp.Status, proto.StatusOK)
 	}
 	if resp.ProtocolVersion == nil {
 		return errors.New("worker reported no protocol_version in its ping response")
 	}
-	if *resp.ProtocolVersion != protocol.ProtocolVersion {
+	if *resp.ProtocolVersion != proto.ProtocolVersion {
 		return fmt.Errorf("protocol version mismatch: worker library speaks %d, "+
 			"this serify needs %d — rebuild the worker against the appropriate library",
-			*resp.ProtocolVersion, protocol.ProtocolVersion)
+			*resp.ProtocolVersion, proto.ProtocolVersion)
 	}
 	return nil
 }
@@ -184,7 +184,7 @@ func (w *Worker) ping(ctx context.Context, timeoutSec int) error {
 // ErrTypeNotSupported — a declaration, not a failure.
 func (w *Worker) Bind(
 	ctx context.Context,
-	schema []config.Field,
+	schema []conf.Field,
 	typ string,
 	format string,
 	timeoutSec int,
@@ -202,20 +202,20 @@ func (w *Worker) Bind(
 		return errors.New("bind requires a format")
 	}
 
-	req := protocol.NewBindRequest(protocol.SchemaFields(schema), typ, format, audit)
+	req := proto.NewBindRequest(proto.SchemaFields(schema), typ, format, audit)
 	if err := w.writer.Write(req); err != nil {
 		return err
 	}
 
-	resp, err := w.readWithTimeout(ctx, protocol.OpBind, "", timeoutSec)
+	resp, err := w.readWithTimeout(ctx, proto.OpBind, "", timeoutSec)
 	if err != nil {
 		w.markFatal(err)
 		return err
 	}
-	if resp.Status == protocol.StatusError {
+	if resp.Status == proto.StatusError {
 		return fmt.Errorf("%s", resp.Error)
 	}
-	if resp.Status == protocol.StatusSkipped {
+	if resp.Status == proto.StatusSkipped {
 		// The worker is healthy, it just doesn't implement this (type, format).
 		if resp.Reason == "" {
 			return ErrTypeNotSupported
@@ -227,7 +227,7 @@ func (w *Worker) Bind(
 
 // Send sends a request and waits for a response. Cancelling ctx interrupts the
 // wait for the worker's response.
-func (w *Worker) Send(ctx context.Context, req any, timeoutSec int) (*protocol.Response, error) {
+func (w *Worker) Send(ctx context.Context, req any, timeoutSec int) (*proto.Response, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -263,11 +263,11 @@ func (w *Worker) markFatal(err error) {
 
 // extractOp returns the op of a request value, or "" if it is not one the
 // runner correlates by op.
-func extractOp(req any) protocol.Op {
+func extractOp(req any) proto.Op {
 	switch r := req.(type) {
-	case protocol.SerializeRequest:
+	case proto.SerializeRequest:
 		return r.Op
-	case protocol.DeserializeRequest:
+	case proto.DeserializeRequest:
 		return r.Op
 	default:
 		return ""
@@ -277,9 +277,9 @@ func extractOp(req any) protocol.Op {
 // extractID returns the ID field from a request value, or "" if none.
 func extractID(req any) string {
 	switch r := req.(type) {
-	case protocol.SerializeRequest:
+	case proto.SerializeRequest:
 		return r.ID
-	case protocol.DeserializeRequest:
+	case proto.DeserializeRequest:
 		return r.ID
 	default:
 		return ""
@@ -288,11 +288,11 @@ func extractID(req any) string {
 
 func (w *Worker) readWithTimeout(
 	ctx context.Context,
-	expectOp protocol.Op, expectID string,
+	expectOp proto.Op, expectID string,
 	timeoutSec int,
-) (*protocol.Response, error) {
+) (*proto.Response, error) {
 	type result struct {
-		resp *protocol.Response
+		resp *proto.Response
 		err  error
 	}
 	ch := make(chan result, 1)
@@ -347,7 +347,7 @@ func (w *Worker) Stop() error {
 	w.deadReason = "stopped"
 	w.mu.Unlock()
 
-	_ = w.writer.Write(protocol.NewExitRequest())
+	_ = w.writer.Write(proto.NewExitRequest())
 	_ = w.stdin.Close()
 
 	if w.cmd == nil || w.cmd.Process == nil {
